@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from .model import Diagram, Element, Layout
+from .model import Diagram, Element, Layout, Link
 from .registry import Registry
 
 LABEL_RESERVE = 22  # vertical space reserved for a node's below/above label
@@ -203,6 +203,149 @@ def overlap_warnings(root_box: Box) -> list[str]:
             check(child)
 
     check(root_box)
+    return messages
+
+
+def choose_connection_indices(from_box: Box, to_box: Box) -> tuple[int, int]:
+    """sec8.2: idx 0=top, 1=left, 2=bottom, 3=right. Pick the edge facing the other shape."""
+    fcx, fcy = from_box.abs_x + from_box.width / 2, from_box.abs_y + from_box.height / 2
+    tcx, tcy = to_box.abs_x + to_box.width / 2, to_box.abs_y + to_box.height / 2
+    dx, dy = tcx - fcx, tcy - fcy
+    if abs(dx) >= abs(dy):
+        return (3, 1) if dx >= 0 else (1, 3)
+    return (2, 0) if dy >= 0 else (0, 2)
+
+
+def connection_point(box: Box, idx: int) -> tuple[float, float]:
+    """Exact reproduction of python-pptx's Connector._move_begin_to_cxn/
+    _move_end_to_cxn formula (pptx/shapes/connector.py), so a predicted
+    endpoint here always matches what python-pptx will actually draw."""
+    x, y, cx, cy = box.abs_x, box.abs_y, box.width, box.height
+    return {
+        0: (x + cx / 2, y),
+        1: (x, y + cy / 2),
+        2: (x + cx / 2, y + cy),
+        3: (x + cx, y + cy / 2),
+    }[idx]
+
+
+def _build_indices(root_box: Box) -> tuple[dict[str, Box], dict[str, str]]:
+    by_id: dict[str, Box] = {}
+    parent_of: dict[str, str] = {}
+
+    def walk(box: Box, parent: Box | None) -> None:
+        by_id[box.element.id] = box
+        if parent is not None:
+            parent_of[box.element.id] = parent.element.id
+        for child in box.children:
+            walk(child, box)
+
+    walk(root_box, None)
+    return by_id, parent_of
+
+
+def _segments_intersect(
+    p1: tuple[float, float], p2: tuple[float, float], p3: tuple[float, float], p4: tuple[float, float]
+) -> bool:
+    def ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+    return ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4)
+
+
+def _segment_intersects_rect(
+    p1: tuple[float, float], p2: tuple[float, float], rect: tuple[float, float, float, float]
+) -> bool:
+    rx, ry, rw, rh = rect
+    if rx <= p1[0] <= rx + rw and ry <= p1[1] <= ry + rh:
+        return True
+    if rx <= p2[0] <= rx + rw and ry <= p2[1] <= ry + rh:
+        return True
+    corners = [(rx, ry), (rx + rw, ry), (rx + rw, ry + rh), (rx, ry + rh)]
+    edges = list(zip(corners, corners[1:] + corners[:1]))
+    return any(_segments_intersect(p1, p2, a, b) for a, b in edges)
+
+
+LINK_LABEL_SIZE = (60, 18)  # logical units; matches render.py's midpoint label textbox
+
+
+def link_crossing_warnings(root_box: Box, links: list[Link]) -> list[str]:
+    """Mechanically detect a link's straight-line path running through an
+    unrelated element or another link's label, using the exact same
+    connection-point geometry python-pptx will render (connection_point()
+    above). Ancestors/descendants of either endpoint are excluded, since a
+    link legitimately touches its own endpoint's containers on the way in.
+
+    Exact for `style: straight` (the default and by far the most common).
+    For `elbow`/`curved` links the real path may bend away from this
+    straight-line approximation, so a clean result here is not a full
+    guarantee for those styles - documented in docs-site/limitations.md.
+    """
+    by_id, parent_of = _build_indices(root_box)
+
+    def ancestors(element_id: str) -> set[str]:
+        result: set[str] = set()
+        cur = parent_of.get(element_id)
+        while cur is not None:
+            result.add(cur)
+            cur = parent_of.get(cur)
+        return result
+
+    def descendants(element_id: str) -> set[str]:
+        box = by_id.get(element_id)
+        return {b.element.id for b in iter_boxes(box)} if box else set()
+
+    obstacles = [(eid, _footprint_rect(b)) for eid, b in by_id.items() if eid != "__root__"]
+
+    endpoints: dict[int, tuple[tuple[float, float], tuple[float, float]] | None] = {}
+    for i, link in enumerate(links):
+        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
+        if from_box is None or to_box is None:
+            endpoints[i] = None  # dangling refs are Fatal elsewhere; defensive only
+            continue
+        s_idx, e_idx = choose_connection_indices(from_box, to_box)
+        endpoints[i] = (connection_point(from_box, s_idx), connection_point(to_box, e_idx))
+
+    label_rects: dict[int, tuple[float, float, float, float]] = {}
+    lw, lh = LINK_LABEL_SIZE
+    for i, link in enumerate(links):
+        pts = endpoints[i]
+        if not link.label or pts is None:
+            continue
+        p1, p2 = pts
+        mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+        label_rects[i] = (mx - lw / 2, my - lh / 2, lw, lh)
+
+    messages: list[str] = []
+    for i, link in enumerate(links):
+        pts = endpoints[i]
+        if pts is None:
+            continue
+        p1, p2 = pts
+        exclude = (
+            {link.from_id, link.to_id}
+            | ancestors(link.from_id)
+            | ancestors(link.to_id)
+            | descendants(link.from_id)
+            | descendants(link.to_id)
+        )
+
+        for eid, rect in obstacles:
+            if eid in exclude:
+                continue
+            if _segment_intersects_rect(p1, p2, rect):
+                messages.append(f"link {link.from_id!r} -> {link.to_id!r} passes through element {eid!r}")
+
+        for j, rect in label_rects.items():
+            if j == i:
+                continue
+            if _segment_intersects_rect(p1, p2, rect):
+                other = links[j]
+                messages.append(
+                    f"link {link.from_id!r} -> {link.to_id!r} passes through the label of link "
+                    f"{other.from_id!r} -> {other.to_id!r}"
+                )
+
     return messages
 
 

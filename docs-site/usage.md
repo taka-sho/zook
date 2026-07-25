@@ -45,11 +45,13 @@ $ echo $?
 - `type` がレジストリで解決できない(未知のサービス名) → プレースホルダーアイコンで描画
 - 要素の座標がキャンバス範囲外 → クリップせずそのまま配置
 - 要素同士が座標上で重なっている(兄弟要素間) → 計算済みの座標から機械的に矩形の重なりを検出して警告(自動修正はしない)。明示座標・自動配置のどちらで決まった位置でも同じロジックで検出される
+- リンク(矢印)の経路が、接続先以外の要素や他リンクのラベルを横切っている → 接続点の座標から線分と矩形の交差を機械的に判定して警告(`style: straight` は正確、`elbow`/`curved` は直線近似のため参考値)
 
 ```bash
 $ archdiagram diagram.yaml -o out.pptx
 Warning: unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon
 Warning: element 'web' overlaps element 'cache'
+Warning: link 'web' -> 'db' passes through element 'cache'
 Wrote out.pptx
 ```
 

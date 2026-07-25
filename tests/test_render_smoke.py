@@ -140,3 +140,41 @@ elements:
     result = runner.invoke(main, [str(overlapping_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
     assert "overlaps" in (result.output + result.stderr)
+
+
+def test_cli_reports_link_crossing_as_warning_not_error(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    crossing_yaml = tmp_path / "crossing.yaml"
+    crossing_yaml.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: a
+    type: EC2
+    x: 0
+    y: 100
+  - kind: node
+    id: b
+    type: EC2
+    x: 150
+    y: 100
+  - kind: node
+    id: c
+    type: EC2
+    x: 300
+    y: 100
+links:
+  - from: a
+    to: c
+"""
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, [str(crossing_yaml), "-o", str(tmp_path / "out.pptx")])
+    assert result.exit_code == 0
+    assert "passes through element 'b'" in (result.output + result.stderr)

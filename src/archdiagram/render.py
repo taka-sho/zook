@@ -26,7 +26,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from .errors import Warnings
-from .layout import LABEL_RESERVE, Box, content_offset
+from .layout import LABEL_RESERVE, Box, choose_connection_indices, content_offset
 from .model import Diagram, Link
 from .registry import Registry
 
@@ -162,16 +162,6 @@ def _render_element(shapes, box: Box, registry: Registry, warnings: Warnings, sh
         shape_index[element.id] = (pic, box)
 
 
-def _choose_connection_indices(from_box: Box, to_box: Box) -> tuple[int, int]:
-    """sec8.2: idx 0=top, 1=left, 2=bottom, 3=right. Pick the edge facing the other shape."""
-    fcx, fcy = from_box.abs_x + from_box.width / 2, from_box.abs_y + from_box.height / 2
-    tcx, tcy = to_box.abs_x + to_box.width / 2, to_box.abs_y + to_box.height / 2
-    dx, dy = tcx - fcx, tcy - fcy
-    if abs(dx) >= abs(dy):
-        return (3, 1) if dx >= 0 else (1, 3)
-    return (2, 0) if dy >= 0 else (0, 2)
-
-
 def _add_link_label(shapes, conn, text: str) -> None:
     """sec8.3: p:cxnSp cannot carry txBody; use a separate midpoint textbox."""
     mx, my = (conn.begin_x + conn.end_x) / 2, (conn.begin_y + conn.end_y) / 2
@@ -193,7 +183,7 @@ _CONNECTOR_TYPES = {"straight": MSO_CONNECTOR.STRAIGHT, "elbow": MSO_CONNECTOR.E
 def _render_link(shapes, link: Link, shape_index: dict) -> None:
     from_shape, from_box = shape_index[link.from_id]
     to_shape, to_box = shape_index[link.to_id]
-    start_idx, end_idx = _choose_connection_indices(from_box, to_box)
+    start_idx, end_idx = choose_connection_indices(from_box, to_box)
 
     conn = shapes.add_connector(_CONNECTOR_TYPES[link.style], E(0), E(0), E(1), E(1))
     conn.begin_connect(from_shape, start_idx)

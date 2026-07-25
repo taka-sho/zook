@@ -1,5 +1,5 @@
-from archdiagram.layout import build_layout, out_of_canvas_warnings, overlap_warnings
-from archdiagram.model import Canvas, Diagram, Element, Layout
+from archdiagram.layout import build_layout, link_crossing_warnings, out_of_canvas_warnings, overlap_warnings
+from archdiagram.model import Canvas, Diagram, Element, Layout, Link
 from archdiagram.registry import load_registry
 
 REGISTRY = load_registry("aws")
@@ -151,3 +151,62 @@ def test_overlap_check_applies_within_nested_containers_too():
     root = build_layout(diagram, REGISTRY)
     warnings = overlap_warnings(root)
     assert len(warnings) == 1
+
+
+def test_straight_link_crossing_an_unrelated_box_is_flagged():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=150, y=100)  # sits between a and c
+    c = Element(kind="node", id="c", type="EC2", provider="aws", x=300, y=100)
+    diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
+    root = build_layout(diagram, REGISTRY)
+    warnings = link_crossing_warnings(root, diagram.links)
+    assert len(warnings) == 1
+    assert "'a'" in warnings[0] and "'c'" in warnings[0] and "'b'" in warnings[0]
+
+
+def test_straight_link_with_clear_path_is_not_flagged():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    c = Element(kind="node", id="c", type="EC2", provider="aws", x=300, y=0)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=150, y=400)  # well clear of the a->c line
+    diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
+    root = build_layout(diagram, REGISTRY)
+    assert link_crossing_warnings(root, diagram.links) == []
+
+
+def test_link_between_container_siblings_does_not_flag_shared_parent():
+    a = Element(kind="node", id="a", type="EC2", provider="aws")
+    b = Element(kind="node", id="b", type="EC2", provider="aws")
+    parent = Element(kind="container", id="parent", type="vpc", provider="aws", children=[a, b])
+    diagram = _diagram([parent], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+    assert link_crossing_warnings(root, diagram.links) == []
+
+
+def test_link_to_a_container_does_not_flag_its_own_descendants():
+    inner_node = Element(kind="node", id="inner_node", type="EC2", provider="aws")
+    cloud = Element(
+        kind="container", id="cloud", type="cloud", provider="generic", x=200, y=0, children=[inner_node]
+    )
+    actor = Element(kind="node", id="actor", type="User", provider="aws", x=0, y=0)
+    diagram = _diagram([actor, cloud], links=[Link(from_id="actor", to_id="cloud")])
+    root = build_layout(diagram, REGISTRY)
+    assert link_crossing_warnings(root, diagram.links) == []
+
+
+def test_link_crossing_another_links_label_is_flagged():
+    # Two horizontal links stacked closely enough that the top one's straight
+    # path runs right through the bottom one's midpoint label box.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=100)
+    c = Element(kind="node", id="c", type="EC2", provider="aws", x=0, y=105)
+    d = Element(kind="node", id="d", type="EC2", provider="aws", x=300, y=105)
+    diagram = _diagram(
+        [a, b, c, d],
+        links=[
+            Link(from_id="c", to_id="d", label="labeled"),
+            Link(from_id="a", to_id="b"),
+        ],
+    )
+    root = build_layout(diagram, REGISTRY)
+    warnings = link_crossing_warnings(root, diagram.links)
+    assert any("label of link" in w for w in warnings)
