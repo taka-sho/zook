@@ -45,7 +45,8 @@ $ echo $?
 - `type` がレジストリで解決できない(未知のサービス名) → プレースホルダーアイコンで描画
 - 要素の座標がキャンバス範囲外 → クリップせずそのまま配置
 - 要素同士が座標上で重なっている(兄弟要素間) → 計算済みの座標から機械的に矩形の重なりを検出して警告(自動修正はしない)。明示座標・自動配置のどちらで決まった位置でも同じロジックで検出される
-- リンク(矢印)の経路が、接続先以外の要素や他リンクのラベルを横切っている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告
+- 子要素がコンテナ自身のラベル文字の領域と重なっている(自動配置の子はこの領域を避けて配置されるため引っかからないが、明示座標の子は避けない)
+- リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告。コンテナのラベルとの重なりは祖先コンテナであっても除外されない(本体を通り抜けるのは正常だが、ラベル文字を貫通するのは見た目上おかしいため)
 
 いずれも `canvas.overlapMargin`([YAML入力仕様](yaml-guide.md#canvas)参照)を設定すると、文字通りの重なりだけでなく「近すぎる」状態も検知対象にできます。
 
@@ -53,7 +54,10 @@ $ echo $?
 $ archdiagram diagram.yaml -o out.pptx
 Warning: unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon
 Warning: element 'web' overlaps element 'cache'
+Warning: element 'web' overlaps the label of container 'vpc-main'
 Warning: link 'web' -> 'db' passes through element 'cache'
+Warning: link 'web' -> 'db' passes through the label of container 'vpc-main'
+Warning: the label of link 'web' -> 'db' overlaps element 'cache'
 Wrote out.pptx
 ```
 

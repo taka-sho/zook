@@ -123,7 +123,7 @@ def test_overlapping_explicit_siblings_are_flagged():
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=105, y=105)  # near-identical position
     diagram = _diagram([a, b])
     root = build_layout(diagram, REGISTRY)
-    warnings = overlap_warnings(root)
+    warnings = overlap_warnings(root, REGISTRY)
     assert len(warnings) == 1
     assert "'a'" in warnings[0] and "'b'" in warnings[0]
 
@@ -133,7 +133,7 @@ def test_non_overlapping_explicit_siblings_are_not_flagged():
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=400, y=400)
     diagram = _diagram([a, b])
     root = build_layout(diagram, REGISTRY)
-    assert overlap_warnings(root) == []
+    assert overlap_warnings(root, REGISTRY) == []
 
 
 def test_auto_placed_siblings_never_overlap():
@@ -143,7 +143,7 @@ def test_auto_placed_siblings_never_overlap():
     container = Element(kind="container", id="c", type="vpc", provider="aws", children=children)
     diagram = _diagram([container])
     root = build_layout(diagram, REGISTRY)
-    assert overlap_warnings(root) == []
+    assert overlap_warnings(root, REGISTRY) == []
 
 
 def test_parent_and_child_are_not_falsely_flagged_as_overlapping():
@@ -151,7 +151,7 @@ def test_parent_and_child_are_not_falsely_flagged_as_overlapping():
     parent = Element(kind="container", id="parent", type="vpc", provider="aws", children=[child])
     diagram = _diagram([parent])
     root = build_layout(diagram, REGISTRY)
-    assert overlap_warnings(root) == []
+    assert overlap_warnings(root, REGISTRY) == []
 
 
 def test_overlap_check_applies_within_nested_containers_too():
@@ -160,7 +160,7 @@ def test_overlap_check_applies_within_nested_containers_too():
     inner = Element(kind="container", id="inner", type="az", provider="aws", children=[a, b])
     diagram = _diagram([inner])
     root = build_layout(diagram, REGISTRY)
-    warnings = overlap_warnings(root)
+    warnings = overlap_warnings(root, REGISTRY)
     assert len(warnings) == 1
 
 
@@ -170,7 +170,7 @@ def test_straight_link_crossing_an_unrelated_box_is_flagged():
     c = Element(kind="node", id="c", type="EC2", provider="aws", x=300, y=100)
     diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
     root = build_layout(diagram, REGISTRY)
-    warnings = link_crossing_warnings(root, diagram.links)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert len(warnings) == 1
     assert "'a'" in warnings[0] and "'c'" in warnings[0] and "'b'" in warnings[0]
 
@@ -181,7 +181,7 @@ def test_straight_link_with_clear_path_is_not_flagged():
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=150, y=400)  # well clear of the a->c line
     diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
     root = build_layout(diagram, REGISTRY)
-    assert link_crossing_warnings(root, diagram.links) == []
+    assert link_crossing_warnings(root, diagram.links, REGISTRY) == []
 
 
 def test_link_between_container_siblings_does_not_flag_shared_parent():
@@ -190,7 +190,7 @@ def test_link_between_container_siblings_does_not_flag_shared_parent():
     parent = Element(kind="container", id="parent", type="vpc", provider="aws", children=[a, b])
     diagram = _diagram([parent], links=[Link(from_id="a", to_id="b")])
     root = build_layout(diagram, REGISTRY)
-    assert link_crossing_warnings(root, diagram.links) == []
+    assert link_crossing_warnings(root, diagram.links, REGISTRY) == []
 
 
 def test_link_to_a_container_does_not_flag_its_own_descendants():
@@ -201,7 +201,7 @@ def test_link_to_a_container_does_not_flag_its_own_descendants():
     actor = Element(kind="node", id="actor", type="User", provider="aws", x=0, y=0)
     diagram = _diagram([actor, cloud], links=[Link(from_id="actor", to_id="cloud")])
     root = build_layout(diagram, REGISTRY)
-    assert link_crossing_warnings(root, diagram.links) == []
+    assert link_crossing_warnings(root, diagram.links, REGISTRY) == []
 
 
 def test_link_crossing_another_links_label_is_flagged():
@@ -219,7 +219,7 @@ def test_link_crossing_another_links_label_is_flagged():
         ],
     )
     root = build_layout(diagram, REGISTRY)
-    warnings = link_crossing_warnings(root, diagram.links)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert any("label of link" in w for w in warnings)
 
 
@@ -269,7 +269,7 @@ def test_overlap_margin_zero_does_not_flag_a_near_miss():
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=250, y=100)
     diagram = _diagram([a, b])
     root = build_layout(diagram, REGISTRY)
-    assert overlap_warnings(root, margin=0) == []
+    assert overlap_warnings(root, REGISTRY, margin=0) == []
 
 
 def test_overlap_margin_flags_elements_that_are_merely_close():
@@ -279,7 +279,7 @@ def test_overlap_margin_flags_elements_that_are_merely_close():
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=250, y=100)
     diagram = _diagram([a, b])
     root = build_layout(diagram, REGISTRY)
-    assert overlap_warnings(root, margin=70) != []
+    assert overlap_warnings(root, REGISTRY, margin=70) != []
 
 
 def test_link_crossing_margin_flags_a_near_miss():
@@ -288,8 +288,8 @@ def test_link_crossing_margin_flags_a_near_miss():
     c = Element(kind="node", id="c", type="EC2", provider="aws", x=300, y=100)
     diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
     root = build_layout(diagram, REGISTRY)
-    assert link_crossing_warnings(root, diagram.links, margin=0) == []
-    assert link_crossing_warnings(root, diagram.links, margin=40) != []
+    assert link_crossing_warnings(root, diagram.links, REGISTRY, margin=0) == []
+    assert link_crossing_warnings(root, diagram.links, REGISTRY, margin=40) != []
 
 
 # --- label-aware connection points ------------------------------------------
@@ -375,7 +375,7 @@ def test_elbow_crossing_check_catches_a_hit_a_straight_approximation_would_miss(
     diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b")])
     root = build_layout(diagram, REGISTRY)
 
-    warnings = link_crossing_warnings(root, diagram.links)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert any("obstacle" in w for w in warnings)
 
 
@@ -394,5 +394,142 @@ def test_elbow_crossing_check_does_not_flag_the_unused_diagonal_chord():
     diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b")])
     root = build_layout(diagram, REGISTRY)
 
-    warnings = link_crossing_warnings(root, diagram.links)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert not any("obstacle" in w for w in warnings)
+
+
+# --- container label vs. children -------------------------------------------
+
+
+def test_child_overlapping_container_label_is_flagged():
+    # Sitting right at the container's own top-left corner puts this child
+    # squarely on top of the container's label text.
+    child = Element(kind="node", id="child", type="EC2", provider="aws", x=0, y=0)
+    parent = Element(kind="container", id="parent", type="vpc", provider="aws", label="My VPC", children=[child])
+    diagram = _diagram([parent])
+    root = build_layout(diagram, REGISTRY)
+    warnings = overlap_warnings(root, REGISTRY)
+    assert any("label of container 'parent'" in w for w in warnings)
+
+
+def test_auto_placed_child_does_not_overlap_container_label():
+    # Auto-layout already clears CONTAINER_LABEL_RESERVE for a labeled
+    # container (measure()'s content_top), so this must stay clean.
+    child = Element(kind="node", id="child", type="EC2", provider="aws")
+    parent = Element(kind="container", id="parent", type="vpc", provider="aws", label="My VPC", children=[child])
+    diagram = _diagram([parent])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root, REGISTRY) == []
+
+
+def test_container_label_overlap_respects_bottom_position():
+    child = Element(
+        kind="node", id="child", type="EC2", provider="aws", x=0, y=400, style={"labelPosition": "none"}
+    )
+    parent = Element(
+        kind="container",
+        id="parent",
+        type="vpc",
+        provider="aws",
+        label="My VPC",
+        style={"labelPosition": "bottom-left"},
+        width=200,
+        height=450,
+        children=[child],
+    )
+    diagram = _diagram([parent])
+    root = build_layout(diagram, REGISTRY)
+    warnings = overlap_warnings(root, REGISTRY)
+    assert any("label of container 'parent'" in w for w in warnings)
+
+
+def test_container_label_no_overlap_when_child_stays_clear_at_the_bottom():
+    child = Element(
+        kind="node", id="child", type="EC2", provider="aws", x=0, y=100, style={"labelPosition": "none"}
+    )
+    parent = Element(
+        kind="container",
+        id="parent",
+        type="vpc",
+        provider="aws",
+        label="My VPC",
+        style={"labelPosition": "bottom-left"},
+        width=200,
+        height=450,
+        children=[child],
+    )
+    diagram = _diagram([parent])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root, REGISTRY) == []
+
+
+# --- link labels vs. elements / other labels --------------------------------
+
+
+def test_link_label_overlapping_unrelated_element_is_flagged():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=100)
+    obstacle = Element(
+        kind="node", id="obstacle", type="RDS", provider="aws", x=140, y=90, style={"labelPosition": "none"}
+    )
+    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b", label="lbl")])
+    root = build_layout(diagram, REGISTRY)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
+    assert any("the label of link 'a' -> 'b' overlaps element 'obstacle'" in w for w in warnings)
+
+
+def test_two_link_labels_on_the_same_pair_overlap():
+    # Two labeled links between the same endpoints compute identical
+    # midpoints - a guaranteed, deterministic label/label overlap.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=100)
+    diagram = _diagram(
+        [a, b],
+        links=[Link(from_id="a", to_id="b", label="one"), Link(from_id="a", to_id="b", label="two")],
+    )
+    root = build_layout(diagram, REGISTRY)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
+    assert any("overlaps the label of link" in w for w in warnings)
+
+
+def test_link_label_does_not_overlap_a_distant_element():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=100)
+    far = Element(kind="node", id="far", type="RDS", provider="aws", x=800, y=800)
+    diagram = _diagram([a, b, far], links=[Link(from_id="a", to_id="b", label="lbl")])
+    root = build_layout(diagram, REGISTRY)
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
+    assert not any("the label of link" in w and "'far'" in w for w in warnings)
+
+
+# --- link path/label vs. container label (proposed addition) ---------------
+
+
+def test_link_path_crossing_its_own_ancestor_containers_label_is_flagged():
+    # a and b are the container's own children, so the container's *body*
+    # is correctly excluded from the ordinary obstacle check (a link is
+    # expected to pass through its own ancestor). Its label text is a
+    # different matter - visually crossing straight through "Production
+    # VPC" still looks wrong, so the lighter (endpoint-id-only) exclusion
+    # used for container labels must still catch this.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, width=20, height=20, style={"labelPosition": "none"})
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=0, width=20, height=20, style={"labelPosition": "none"})
+    vpc = Element(kind="container", id="vpc", type="vpc", provider="aws", label="Production VPC", children=[a, b])
+    diagram = _diagram([vpc], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
+    assert any("passes through the label of container 'vpc'" in w for w in warnings)
+    # and confirm the body-exclusion still holds - no generic "through element 'vpc'" noise
+    assert not any("passes through element 'vpc'" in w for w in warnings)
+
+
+def test_link_path_does_not_cross_ancestor_label_when_routed_below_it():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=200, style={"labelPosition": "none"})
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=200, style={"labelPosition": "none"})
+    vpc = Element(kind="container", id="vpc", type="vpc", provider="aws", label="Production VPC", children=[a, b])
+    diagram = _diagram([vpc], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
+    assert not any("label of container" in w for w in warnings)

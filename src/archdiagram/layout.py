@@ -198,17 +198,45 @@ def _inflate_rect(rect: tuple[float, float, float, float], margin: float) -> tup
     return x - margin, y - margin, w + 2 * margin, h + 2 * margin
 
 
-def overlap_warnings(root_box: Box, margin: float = 0) -> list[str]:
+def resolve_container_label_position(element: Element, registry: Registry) -> str:
+    """Same precedence render.py uses to pick a container's label position:
+    the element's own style wins, then the registry's group default, then
+    the schema's own "top-left" default. Shared so the overlap check can
+    never disagree with what's actually drawn."""
+    group_style = registry.resolve_group(element.type)
+    return element.style.get("labelPosition") or (group_style.label_position if group_style else "top-left")
+
+
+def container_label_rect(box: Box, registry: Registry) -> tuple[float, float, float, float] | None:
+    """Where a container's own label text is drawn: a CONTAINER_LABEL_RESERVE-
+    tall strip spanning the full width, at the top or bottom edge per
+    resolve_container_label_position(). None if the container has no label."""
+    if box.element.kind != "container" or not box.element.label:
+        return None
+    position = resolve_container_label_position(box.element, registry)
+    label_h = min(CONTAINER_LABEL_RESERVE, box.height)
+    y = box.abs_y + box.height - label_h if "bottom" in position else box.abs_y
+    return (box.abs_x, y, box.width, label_h)
+
+
+def overlap_warnings(root_box: Box, registry: Registry, margin: float = 0) -> list[str]:
     """Mechanically detect overlapping (or, with `margin` > 0, too-close)
-    elements from their computed coordinates. Checked at every nesting level
-    among direct siblings only - a node legitimately sits inside its parent
-    container, so ancestor/descendant pairs are not compared. Applies
-    uniformly to explicit and auto-placed children since it operates purely
-    on the final layout boxes.
+    elements from their computed coordinates.
+
+    Two kinds of pairs are checked:
+      - Direct siblings, at every nesting level. A node legitimately sits
+        inside its parent container, so ancestor/descendant pairs are never
+        compared here. Applies uniformly to explicit and auto-placed
+        children since it operates purely on the final layout boxes.
+      - A container's own label text against each of its *direct* children -
+        deliberately excluded from the sibling rule above (a child is
+        expected to sit inside its parent's box), but a child overlapping
+        the parent's own label specifically is a real, distinct defect an
+        author should see.
 
     `margin` (canvas.overlapMargin, logical units) inflates one side of each
-    pair before testing, so elements that come within `margin` of each
-    other are flagged even if their footprints don't literally touch.
+    pair before testing, so elements/labels that come within `margin` of
+    each other are flagged even if they don't literally touch.
     """
     messages: list[str] = []
 
@@ -219,6 +247,15 @@ def overlap_warnings(root_box: Box, margin: float = 0) -> list[str]:
                 a, b = children[i], children[j]
                 if _rects_overlap(_inflate_rect(_footprint_rect(a), margin), _footprint_rect(b)):
                     messages.append(f"element {a.element.id!r} overlaps element {b.element.id!r}")
+
+        label_rect = container_label_rect(box, registry)
+        if label_rect is not None:
+            for child in children:
+                if _rects_overlap(_inflate_rect(label_rect, margin), _footprint_rect(child)):
+                    messages.append(
+                        f"element {child.element.id!r} overlaps the label of container {box.element.id!r}"
+                    )
+
         for child in children:
             check(child)
 
@@ -352,21 +389,30 @@ def link_render_plan(from_box: Box, to_box: Box, style: str) -> tuple[int, int, 
     return s_idx, e_idx, eff_style, path
 
 
-def link_crossing_warnings(root_box: Box, links: list[Link], margin: float = 0) -> list[str]:
-    """Mechanically detect a link's rendered path running through an
-    unrelated element or another link's label, using the exact same
-    connection-point/routing geometry python-pptx will render
-    (link_render_plan() above, covering both straight and elbow routing).
-    Ancestors/descendants of either endpoint are excluded, since a link
-    legitimately touches its own endpoint's containers on the way in.
+def link_crossing_warnings(root_box: Box, links: list[Link], registry: Registry, margin: float = 0) -> list[str]:
+    """Mechanically detect a link's rendered path - and its own label box -
+    running through an unrelated element, a container's label text, or
+    another link's label, using the exact same connection-point/routing
+    geometry python-pptx will render (link_render_plan() above, covering
+    both straight and elbow routing).
 
-    `margin` (canvas.overlapMargin, logical units) inflates every obstacle
-    rect before testing, so a path that runs merely close to an element -
-    not literally through it - is flagged too.
+    Element obstacles: ancestors/descendants of either endpoint are
+    excluded, since a link legitimately touches its own endpoint's
+    containers on the way in.
 
-    Exact for `style: straight` and `elbow`. `curved` is approximated as a
-    straight chord between the endpoints, since its real bezier bow isn't
-    modeled - documented in docs-site/limitations.md.
+    Container *label* obstacles use a lighter exclusion - only the exact
+    endpoint ids, not their ancestors - because a link is expected to pass
+    through the body of its own ancestor container, but crossing straight
+    through that ancestor's visible label text still looks wrong regardless
+    of nesting.
+
+    `margin` (canvas.overlapMargin, logical units) inflates every obstacle/
+    label rect before testing, so a path or label that runs merely close to
+    something - not literally through/over it - is flagged too.
+
+    Path-crossing is exact for `style: straight` and `elbow`. `curved` is
+    approximated as a straight chord between the endpoints, since its real
+    bezier bow isn't modeled - documented in docs-site/limitations.md.
     """
     by_id, parent_of = _build_indices(root_box)
 
@@ -383,6 +429,11 @@ def link_crossing_warnings(root_box: Box, links: list[Link], margin: float = 0) 
         return {b.element.id for b in iter_boxes(box)} if box else set()
 
     obstacles = [(eid, _inflate_rect(_footprint_rect(b), margin)) for eid, b in by_id.items() if eid != "__root__"]
+    container_labels = [
+        (eid, _inflate_rect(rect, margin))
+        for eid, b in by_id.items()
+        if eid != "__root__" and (rect := container_label_rect(b, registry)) is not None
+    ]
 
     paths: dict[int, list[tuple[float, float]] | None] = {}
     for i, link in enumerate(links):
@@ -409,28 +460,68 @@ def link_crossing_warnings(root_box: Box, links: list[Link], margin: float = 0) 
         if path is None:
             continue
         segments = list(zip(path, path[1:]))
+        endpoints_only = {link.from_id, link.to_id}
         exclude = (
-            {link.from_id, link.to_id}
+            endpoints_only
             | ancestors(link.from_id)
             | ancestors(link.to_id)
             | descendants(link.from_id)
             | descendants(link.to_id)
         )
 
+        def crosses(rect: tuple[float, float, float, float]) -> bool:
+            return any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in segments)
+
         for eid, rect in obstacles:
             if eid in exclude:
                 continue
-            if any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in segments):
+            if crosses(rect):
                 messages.append(f"link {link.from_id!r} -> {link.to_id!r} passes through element {eid!r}")
+
+        for cid, rect in container_labels:
+            if cid in endpoints_only:
+                continue
+            if crosses(rect):
+                messages.append(f"link {link.from_id!r} -> {link.to_id!r} passes through the label of container {cid!r}")
 
         for j, rect in label_rects.items():
             if j == i:
                 continue
-            if any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in segments):
+            if crosses(rect):
                 other = links[j]
                 messages.append(
                     f"link {link.from_id!r} -> {link.to_id!r} passes through the label of link "
                     f"{other.from_id!r} -> {other.to_id!r}"
+                )
+
+        own_label_rect = label_rects.get(i)
+        if own_label_rect is not None:
+            for eid, rect in obstacles:
+                if eid in exclude:
+                    continue
+                if _rects_overlap(own_label_rect, rect):
+                    messages.append(
+                        f"the label of link {link.from_id!r} -> {link.to_id!r} overlaps element {eid!r}"
+                    )
+            for cid, rect in container_labels:
+                if cid in endpoints_only:
+                    continue
+                if _rects_overlap(own_label_rect, rect):
+                    messages.append(
+                        f"the label of link {link.from_id!r} -> {link.to_id!r} overlaps the label of "
+                        f"container {cid!r}"
+                    )
+
+    for i in range(len(links)):
+        for j in range(i + 1, len(links)):
+            ri, rj = label_rects.get(i), label_rects.get(j)
+            if ri is None or rj is None:
+                continue
+            if _rects_overlap(ri, rj):
+                a, b = links[i], links[j]
+                messages.append(
+                    f"the label of link {a.from_id!r} -> {a.to_id!r} overlaps the label of link "
+                    f"{b.from_id!r} -> {b.to_id!r}"
                 )
 
     return messages

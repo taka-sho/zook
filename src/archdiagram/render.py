@@ -26,7 +26,14 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from .errors import Warnings
-from .layout import LABEL_BOX_HEIGHT, Box, content_offset, label_gap, link_render_plan
+from .layout import (
+    LABEL_BOX_HEIGHT,
+    Box,
+    content_offset,
+    label_gap,
+    link_render_plan,
+    resolve_container_label_position,
+)
 from .model import Diagram, Link
 from .registry import Registry
 
@@ -61,7 +68,7 @@ def _add_container_rect(shapes, box: Box, registry: Registry):
     fill_color = style.get("fillColor") or (group_style.fill_color if group_style else None)
     border_width = style.get("borderWidth", group_style.border_width if group_style else 1)
     dashed = group_style.dashed if group_style else False
-    label_position = style.get("labelPosition") or (group_style.label_position if group_style else "top-left")
+    label_position = resolve_container_label_position(element, registry)
     label_text = element.label if element.label is not None else (group_style.label if group_style else "")
 
     rect = shapes.add_shape(MSO_SHAPE.RECTANGLE, E(box.abs_x), E(box.abs_y), E(box.width), E(box.height))
