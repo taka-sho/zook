@@ -29,6 +29,23 @@ def test_group_style_resolution():
     assert registry.resolve_group("nonexistent-container-type") is None
 
 
+def test_actor_icons_resolve():
+    registry = load_registry("aws")
+    for type_, alias in [("User", "enduser"), ("Admin", "administrator"), ("Developer", "dev"), ("Client", "browser")]:
+        assert registry.resolve_icon(type_) is not None
+        assert registry.resolve_icon(type_).file.exists()
+        assert registry.resolve_icon(alias) is registry.resolve_icon(type_)
+
+
+def test_cloud_group_resolves_with_corner_icon():
+    registry = load_registry("aws")
+    cloud = registry.resolve_group("cloud")
+    assert cloud is not None
+    assert cloud.label == "AWS Cloud"
+    assert cloud.icon is not None
+    assert cloud.icon.exists()
+
+
 def test_user_registry_overrides_builtin(tmp_path):
     override_file = tmp_path / "custom_icon.png"
     override_file.write_bytes(b"fake-png-bytes")

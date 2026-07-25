@@ -8,7 +8,7 @@ import click
 import yaml
 
 from .errors import DiagramError, Warnings
-from .layout import build_layout, out_of_canvas_warnings
+from .layout import build_layout, out_of_canvas_warnings, overlap_warnings
 from .model import parse_diagram
 from .registry import load_registry
 from .render import render
@@ -36,6 +36,8 @@ def main(input_path: str, output_path: str, user_registry_path: str | None) -> N
         registry = load_registry(provider="aws", user_registry_path=user_registry_path)
         root_box = build_layout(diagram, registry)
         for message in out_of_canvas_warnings(root_box, *diagram.canvas.size):
+            warnings.add(message)
+        for message in overlap_warnings(root_box):
             warnings.add(message)
 
         presentation = render(diagram, root_box, registry, warnings)

@@ -11,6 +11,7 @@ from archdiagram.render import render
 from archdiagram.validate import validate
 
 FIXTURE = Path(__file__).parent / "fixtures" / "example.yaml"
+CLOUD_ACTORS_FIXTURE = Path(__file__).parent / "fixtures" / "example-cloud-actors.yaml"
 
 
 def _build(raw):
@@ -89,3 +90,53 @@ def test_cli_succeeds_on_example_yaml(tmp_path):
     result = runner.invoke(main, [str(FIXTURE), "-o", str(out_path)])
     assert result.exit_code == 0
     assert out_path.exists()
+
+
+def test_example_cloud_actors_renders_without_warnings():
+    raw = yaml.safe_load(CLOUD_ACTORS_FIXTURE.read_text())
+    presentation, warnings = _build(raw)
+    assert warnings.messages == []
+    slide = presentation.slides[0]
+    assert len(slide.shapes) > 0
+
+
+def test_cli_succeeds_on_example_cloud_actors(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    out_path = tmp_path / "out.pptx"
+    runner = CliRunner()
+    result = runner.invoke(main, [str(CLOUD_ACTORS_FIXTURE), "-o", str(out_path)])
+    assert result.exit_code == 0
+    assert out_path.exists()
+
+
+def test_cli_reports_overlapping_elements_as_warning_not_error(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    overlapping_yaml = tmp_path / "overlap.yaml"
+    overlapping_yaml.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: a
+    type: EC2
+    x: 100
+    y: 100
+  - kind: node
+    id: b
+    type: EC2
+    x: 105
+    y: 105
+"""
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, [str(overlapping_yaml), "-o", str(tmp_path / "out.pptx")])
+    assert result.exit_code == 0
+    assert "overlaps" in (result.output + result.stderr)

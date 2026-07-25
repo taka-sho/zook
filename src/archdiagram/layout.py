@@ -168,6 +168,44 @@ def iter_boxes(box: Box):
         yield from iter_boxes(child)
 
 
+def _footprint_rect(box: Box) -> tuple[float, float, float, float]:
+    """(x, y, w, h) of the element's occupied area, including its label
+    reserve for nodes - the same box used for auto-layout spacing, so an
+    overlap here is a real visual collision regardless of how the element
+    was positioned (explicit x/y or auto-placed)."""
+    dx, dy = content_offset(box)
+    return box.abs_x - dx, box.abs_y - dy, box.footprint_w, box.footprint_h
+
+
+def _rects_overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return not (ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay)
+
+
+def overlap_warnings(root_box: Box) -> list[str]:
+    """Mechanically detect overlapping elements from their computed
+    coordinates. Checked at every nesting level among direct siblings only -
+    a node legitimately sits inside its parent container, so ancestor/
+    descendant pairs are not compared. Applies uniformly to explicit and
+    auto-placed children since it operates purely on the final layout boxes.
+    """
+    messages: list[str] = []
+
+    def check(box: Box) -> None:
+        children = box.children
+        for i in range(len(children)):
+            for j in range(i + 1, len(children)):
+                a, b = children[i], children[j]
+                if _rects_overlap(_footprint_rect(a), _footprint_rect(b)):
+                    messages.append(f"element {a.element.id!r} overlaps element {b.element.id!r}")
+        for child in children:
+            check(child)
+
+    check(root_box)
+    return messages
+
+
 def out_of_canvas_warnings(root_box: Box, canvas_w: float, canvas_h: float) -> list[str]:
     """sec9: coordinates outside the canvas are a Warning, not clamped."""
     messages = []

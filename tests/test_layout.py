@@ -1,4 +1,4 @@
-from archdiagram.layout import build_layout, out_of_canvas_warnings
+from archdiagram.layout import build_layout, out_of_canvas_warnings, overlap_warnings
 from archdiagram.model import Canvas, Diagram, Element, Layout
 from archdiagram.registry import load_registry
 
@@ -105,3 +105,49 @@ def test_in_bounds_element_has_no_warning():
     root = build_layout(diagram, REGISTRY)
     warnings = out_of_canvas_warnings(root, *diagram.canvas.size)
     assert warnings == []
+
+
+def test_overlapping_explicit_siblings_are_flagged():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=105, y=105)  # near-identical position
+    diagram = _diagram([a, b])
+    root = build_layout(diagram, REGISTRY)
+    warnings = overlap_warnings(root)
+    assert len(warnings) == 1
+    assert "'a'" in warnings[0] and "'b'" in warnings[0]
+
+
+def test_non_overlapping_explicit_siblings_are_not_flagged():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=400, y=400)
+    diagram = _diagram([a, b])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root) == []
+
+
+def test_auto_placed_siblings_never_overlap():
+    # Same mechanism the grid/horizontal/vertical placement uses internally -
+    # auto layout should never trip its own overlap detector.
+    children = [Element(kind="node", id=f"n{i}", type="EC2", provider="aws") for i in range(6)]
+    container = Element(kind="container", id="c", type="vpc", provider="aws", children=children)
+    diagram = _diagram([container])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root) == []
+
+
+def test_parent_and_child_are_not_falsely_flagged_as_overlapping():
+    child = Element(kind="node", id="child", type="EC2", provider="aws")
+    parent = Element(kind="container", id="parent", type="vpc", provider="aws", children=[child])
+    diagram = _diagram([parent])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root) == []
+
+
+def test_overlap_check_applies_within_nested_containers_too():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=10, y=10)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=12, y=12)
+    inner = Element(kind="container", id="inner", type="az", provider="aws", children=[a, b])
+    diagram = _diagram([inner])
+    root = build_layout(diagram, REGISTRY)
+    warnings = overlap_warnings(root)
+    assert len(warnings) == 1

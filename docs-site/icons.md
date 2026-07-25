@@ -2,7 +2,7 @@
 
 サービスの `type`(`EC2`、`Lambda` など)は YAML スキーマ上 enum で固定されていません。**アイコンレジストリが語彙の唯一の真実源**です。これにより、新サービスの追加にコード改修は不要で、レジストリへの追記だけで済みます。
 
-## 組み込み Tier-1 語彙(22サービス)
+## 組み込み Tier-1 語彙(26サービス)
 
 | カテゴリ | サービス |
 |---|---|
@@ -12,6 +12,16 @@
 | Networking | ELB(ALB), CloudFront, Route53, APIGateway, NATGateway |
 | Integration | SNS, SQS, EventBridge |
 | Security | IAM, Cognito |
+| General | User, Admin, Developer, Client(AWSサービスではなく、図に登場する人物・役割を表すアクター) |
+
+General カテゴリのアイコンは AWS サービスではなく、「誰がこの構成にアクセスするか」を表す汎用アクターです。エンドユーザーや管理者をノードとして配置し、システムへのリンクを引くことで、構成図に人の視点を加えられます。
+
+```yaml
+- kind: node
+  id: user
+  type: User
+  label: "End User"
+```
 
 定義は [`docs/registry.aws.yaml`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/registry.aws.yaml) にあります(実装が読み込むコピーは `src/archdiagram/data/icons/aws/registry.aws.yaml`)。
 
@@ -22,7 +32,26 @@
 3. ヒットすればアイコンファイルを解決。
 4. ミスすれば **Warning を出してプレースホルダーアイコンで継続**(Fatal にはしない)。
 
-コンテナの `type`(`vpc`/`az`/`subnet` など)も同様に `groups` エントリを引き、枠の色・破線・ラベル位置を適用します。ヒットしなければ既定の枠スタイルになります。
+コンテナの `type`(`cloud`/`vpc`/`az`/`subnet` など)も同様に `groups` エントリを引き、枠の色・破線・ラベル位置を適用します。ヒットしなければ既定の枠スタイルになります。
+
+### AWS Cloud 境界
+
+`type: cloud` は、構成図全体がどこから AWS のクラウド境界なのかを示す、最も外側のコンテナです。枠の左上(または左下)には AWS Cloud を表す小さなバッジアイコンが自動で描画され、ラベルもその分だけインデントされます。
+
+```yaml
+- kind: container
+  id: aws-cloud
+  type: cloud
+  label: "AWS Cloud"
+  children:
+    - kind: container
+      id: vpc-main
+      type: vpc
+      label: "Production VPC"
+      children: [...]
+```
+
+`groups` エントリの `icon` フィールドで、任意のコンテナ種別に同様の隅アイコンを設定できます。
 
 ## 独自アイコン・スタイルで上書きする
 

@@ -1,0 +1,67 @@
+version: "1.0"
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  # External actors, drawn outside the AWS Cloud boundary.
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+    x: 40
+    y: 220
+
+  - kind: node
+    id: admin
+    type: Admin
+    label: "Administrator"
+    x: 40
+    y: 420
+
+  - kind: container
+    id: aws-cloud
+    type: cloud
+    label: "AWS Cloud"
+    x: 220
+    y: 40
+    layout:
+      direction: horizontal
+      gap: 40
+      padding: 48
+    children:
+      - kind: container
+        id: vpc-main
+        type: vpc
+        label: "Production VPC"
+        layout:
+          direction: vertical
+          gap: 40
+        children:
+          - kind: node
+            id: alb
+            type: ELB
+            label: "ALB"
+          - kind: node
+            id: web
+            type: EC2
+            label: "WebServer"
+          - kind: node
+            id: db
+            type: RDS
+            label: "Database"
+
+links:
+  - from: user
+    to: aws-cloud
+    label: "HTTPS"
+  - from: admin
+    to: aws-cloud
+    label: "SSH"
+    style: elbow
+  - from: alb
+    to: web
+  - from: web
+    to: db
+    label: "3306"

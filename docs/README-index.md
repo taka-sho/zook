@@ -17,6 +17,7 @@
 | 3 | `yaml-spec.md` | YAML入力仕様書 | 入力YAMLの構造・座標系・レイアウト・リンク・エラー方針 |
 | 4 | `arch-diagram.schema.json` | JSON Schema | 入力YAMLの形式定義(検証の真実源) |
 | 5 | `example.yaml` | サンプル | 主要機能を網羅した入力例(検証済み) |
+| 5b | `example-cloud-actors.yaml` | サンプル | AWS Cloud境界+User/Adminアクターを含む入力例(検証済み) |
 | 6 | `icon-registry-and-vocabulary.md` | 仕様書 | サービス語彙とアイコン解決の方針 |
 | 7 | `icon-registry.schema.json` | JSON Schema | アイコンレジストリの形式定義 |
 | 8 | `registry.aws.yaml` | サンプル | AWS向け初期レジストリ(検証済み) |
@@ -49,20 +50,21 @@
 
 ### アイコン・語彙
 - `type` は enum で固定しない。**レジストリが語彙の真実源**。未知 type は Warning + プレースホルダ。
-- 初期同梱 Tier 1 = 22 サービス。追加はレジストリ追記のみ(スキーマ改修不要)。
+- 初期同梱 Tier 1 = 26 サービス(AWSサービス22 + General(アクター:User/Admin/Developer/Client)4)。追加はレジストリ追記のみ(スキーマ改修不要)。
+- コンテナ側にも `cloud`(AWS Cloud 境界。隅アイコン付き)を含む 7 種の枠スタイルを組み込み。
 - 解決は **エイリアス込み・大小文字無視**。ユーザーレジストリで**オーバーライド可**。
 - AWS は四半期更新 → `iconSet` にリリース記録し、キー安定・ファイル差し替え運用。
 
 ### エラー方針
 - 構造破綻(スキーマ違反・id 重複・リンク先不在)= **Fatal で即停止**(CI/CD は非ゼロ終了)。
-- 描画上の軽微問題(未知アイコン・座標範囲外)= **Warning で継続**。
+- 描画上の軽微問題(未知アイコン・座標範囲外・要素同士の重なり)= **Warning で継続**。座標ベースの重複検知は明示座標・自動配置どちらで置かれた要素にも同じロジックで適用される。
 
 ---
 
 ## 3. 検証済みの事項
 
 - `arch-diagram.schema.json` は Draft 2020-12 準拠。`example.yaml` が適合。不正入力(x単独/不正id/未知kind/範囲外比率/余計なフィールド)は棄却を確認。
-- `icon-registry.schema.json` に `registry.aws.yaml`(22 icons + 6 group styles)が適合。エイリアス lookup 35 キー、衝突なし。
+- `icon-registry.schema.json` に `registry.aws.yaml`(26 icons + 7 group styles)が適合。エイリアス lookup 46 キー、衝突なし。
 
 ---
 

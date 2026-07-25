@@ -21,7 +21,7 @@
 
 初期からレジストリに載せる語彙を Tier で分ける。
 
-### Tier 1（v1 同梱：22種）
+### Tier 1（v1 同梱：26種）
 
 実際の構成図で頻出する基礎サービスを網羅する。
 
@@ -33,8 +33,10 @@
 | Networking | ELB(ALB), CloudFront, Route53, APIGateway, NATGateway |
 | Integration | SNS, SQS, EventBridge |
 | Security | IAM, Cognito |
+| General | User, Admin, Developer, Client(AWSサービスではなく、図に登場する人物・役割を表すアクター) |
 
 - 当初要望の EC2/Lambda/RDS/S3 を含み、そこに「図でよく一緒に描かれる」ものを加えた実用最小セット。
+- General カテゴリは AWS サービスではなく、構成図に頻出する「誰がアクセスするか」を表すアクター(エンドユーザー・管理者・開発者・クライアント端末)。同じレジストリ機構(`icons` エントリ)にそのまま乗る。
 
 ### Tier 2（オンデマンド追加）
 
@@ -69,7 +71,9 @@
 
 ### 3.3 groups エントリ（コンテナ枠）
 
-キー = コンテナの `type`（vpc/az/subnet 等）。枠線色・塗り・破線・ラベル位置・任意の隅アイコンを定義。色は妥当な既定値を入れてあるが、**公式デックの配色に合わせて最終調整する**前提。
+キー = コンテナの `type`（cloud/vpc/az/subnet 等）。枠線色・塗り・破線・ラベル位置・任意の隅アイコンを定義。色は妥当な既定値を入れてあるが、**公式デックの配色に合わせて最終調整する**前提。
+
+- `cloud`(AWS Cloud 境界)は最も外側の枠として追加済み。`icon` に隅アイコン(`General/aws-cloud-badge.png`)を指定しており、実装側はラベル位置が `top-left`/`bottom-left` のとき、その隅にアイコンを描画しラベルをアイコン分だけ右にずらす(詳細は `detailed-design-pptx.md`)。「どこから AWS Cloud か」を一目で分かるようにする狙い。
 
 ## 4. 解決アルゴリズム
 

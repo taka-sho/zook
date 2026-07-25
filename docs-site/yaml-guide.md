@@ -30,7 +30,7 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
 ```yaml
 - kind: container
   id: vpc-main          # 図全体で一意
-  type: vpc               # 自由文字列。vpc/az/subnet/region/account/group など
+  type: vpc               # 自由文字列。cloud/vpc/az/subnet/region/account/group など
   provider: aws            # 既定 generic
   label: "Production VPC"
   layout:                  # 子の自動配置ルール(下記参照)
@@ -69,7 +69,7 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
 | `padding` | 32 | コンテナ内側の余白 |
 
 !!! note "v1の制約"
-    自動配置は既に座標指定された子を避けずに詰める第一版仕様です。重なりが生じた場合は PowerPoint 上で手直ししてください(詳細は[既知の制約](limitations.md))。
+    自動配置は既に座標指定された子を避けずに詰める第一版仕様です。重なりが生じた場合は archdiagram が Warning として検出しますが、自動では回避しません。PowerPoint 上で手直ししてください(詳細は[既知の制約](limitations.md))。
 
 ## links(接続線)
 

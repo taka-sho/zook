@@ -31,6 +31,9 @@ from .model import Diagram, Link
 from .registry import Registry
 
 LOGICAL_TO_EMU = 9525
+LOGICAL_TO_PT = LOGICAL_TO_EMU / 12700  # 1pt = 12700 EMU
+CORNER_BADGE_SIZE = 20  # logical units; corner icon for a container's group style (e.g. "AWS Cloud")
+CORNER_BADGE_PADDING = 6
 
 
 def E(value: float) -> Emu:
@@ -81,6 +84,21 @@ def _add_container_rect(shapes, box: Box, registry: Registry):
     for p in tf.paragraphs:
         p.font.size = Pt(10)
         p.font.color.rgb = RGBColor.from_string(border_color.lstrip("#"))
+
+    # Corner badge (e.g. the AWS Cloud logo) marks visually where a boundary
+    # like "AWS Cloud" starts, per groups.<type>.icon in the icon registry.
+    if group_style and group_style.icon and group_style.icon.exists() and "left" in label_position:
+        badge_x = box.abs_x + CORNER_BADGE_PADDING
+        badge_y = (
+            box.abs_y + CORNER_BADGE_PADDING
+            if "top" in label_position
+            else box.abs_y + box.height - CORNER_BADGE_PADDING - CORNER_BADGE_SIZE
+        )
+        shapes.add_picture(
+            str(group_style.icon), E(badge_x), E(badge_y), E(CORNER_BADGE_SIZE), E(CORNER_BADGE_SIZE)
+        )
+        tf.margin_left = Pt((CORNER_BADGE_SIZE + CORNER_BADGE_PADDING) * LOGICAL_TO_PT)
+
     return rect
 
 

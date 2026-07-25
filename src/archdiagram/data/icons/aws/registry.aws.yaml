@@ -37,9 +37,15 @@ icons:
   # Security
   IAM: { file: "Security/IAM.png", category: Security, aliases: [iam] }
   Cognito: { file: "Security/Cognito.png", category: Security, aliases: [cognito] }
+  # General (actors / non-service participants in a diagram)
+  User: { file: "General/User.png", category: General, aliases: [user, enduser, "end-user"] }
+  Admin: { file: "General/Admin.png", category: General, aliases: [admin, administrator, operator] }
+  Developer: { file: "General/Developer.png", category: General, aliases: [developer, dev] }
+  Client: { file: "General/Client.png", category: General, aliases: [client, browser, mobileclient] }
 
 # ---- Containers: frame styles (colors are sensible defaults; align to the official deck) ----
 groups:
+  cloud: { label: "AWS Cloud", borderColor: "#232F3E", dashed: false, labelPosition: top-left, icon: "General/aws-cloud-badge.png" }
   vpc: { label: "VPC", borderColor: "#8C4FFF", dashed: false, labelPosition: top-left }
   az: { label: "Availability Zone", borderColor: "#00A4A6", dashed: true, labelPosition: top-left }
   subnet: { label: "Subnet", borderColor: "#7AA116", fillColor: "#F2F8E8", labelPosition: top-left }
