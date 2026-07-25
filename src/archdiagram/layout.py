@@ -193,12 +193,22 @@ def _rects_overlap(a: tuple[float, float, float, float], b: tuple[float, float, 
     return not (ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay)
 
 
-def overlap_warnings(root_box: Box) -> list[str]:
-    """Mechanically detect overlapping elements from their computed
-    coordinates. Checked at every nesting level among direct siblings only -
-    a node legitimately sits inside its parent container, so ancestor/
-    descendant pairs are not compared. Applies uniformly to explicit and
-    auto-placed children since it operates purely on the final layout boxes.
+def _inflate_rect(rect: tuple[float, float, float, float], margin: float) -> tuple[float, float, float, float]:
+    x, y, w, h = rect
+    return x - margin, y - margin, w + 2 * margin, h + 2 * margin
+
+
+def overlap_warnings(root_box: Box, margin: float = 0) -> list[str]:
+    """Mechanically detect overlapping (or, with `margin` > 0, too-close)
+    elements from their computed coordinates. Checked at every nesting level
+    among direct siblings only - a node legitimately sits inside its parent
+    container, so ancestor/descendant pairs are not compared. Applies
+    uniformly to explicit and auto-placed children since it operates purely
+    on the final layout boxes.
+
+    `margin` (canvas.overlapMargin, logical units) inflates one side of each
+    pair before testing, so elements that come within `margin` of each
+    other are flagged even if their footprints don't literally touch.
     """
     messages: list[str] = []
 
@@ -207,7 +217,7 @@ def overlap_warnings(root_box: Box) -> list[str]:
         for i in range(len(children)):
             for j in range(i + 1, len(children)):
                 a, b = children[i], children[j]
-                if _rects_overlap(_footprint_rect(a), _footprint_rect(b)):
+                if _rects_overlap(_inflate_rect(_footprint_rect(a), margin), _footprint_rect(b)):
                     messages.append(f"element {a.element.id!r} overlaps element {b.element.id!r}")
         for child in children:
             check(child)
@@ -229,14 +239,64 @@ def choose_connection_indices(from_box: Box, to_box: Box) -> tuple[int, int]:
 def connection_point(box: Box, idx: int) -> tuple[float, float]:
     """Exact reproduction of python-pptx's Connector._move_begin_to_cxn/
     _move_end_to_cxn formula (pptx/shapes/connector.py), so a predicted
-    endpoint here always matches what python-pptx will actually draw."""
+    endpoint here always matches what python-pptx will actually draw -
+    except that a node's own label pushes its top/bottom connection point
+    out past the label instead of into it, when the arrow exits on the
+    same side the label sits on (a bottom-exit arrow on a node with a
+    below-label attaches under the label, not through it; symmetric for a
+    top-exit arrow with an above-label)."""
     x, y, cx, cy = box.abs_x, box.abs_y, box.width, box.height
-    return {
-        0: (x + cx / 2, y),
-        1: (x, y + cy / 2),
-        2: (x + cx / 2, y + cy),
-        3: (x + cx, y + cy / 2),
-    }[idx]
+    icon_cx, icon_cy = x + cx / 2, y + cy / 2
+
+    if idx == 0:
+        top = y
+        if box.element.kind == "node" and box.element.style.get("labelPosition", "below") == "above":
+            top = y - _label_reserve(box.element)
+        return (icon_cx, top)
+    if idx == 2:
+        bottom = y + cy
+        if box.element.kind == "node" and box.element.style.get("labelPosition", "below") == "below":
+            bottom = y + cy + _label_reserve(box.element)
+        return (icon_cx, bottom)
+    if idx == 1:
+        return (x, icon_cy)
+    return (x + cx, icon_cy)  # idx == 3
+
+
+def _is_axis_aligned(p1: tuple[float, float], p2: tuple[float, float], epsilon: float = 0.5) -> bool:
+    return abs(p1[0] - p2[0]) < epsilon or abs(p1[1] - p2[1]) < epsilon
+
+
+def effective_connector_style(style: str, p1: tuple[float, float], p2: tuple[float, float]) -> str:
+    """A literal diagonal line reads as broken next to AWS-diagram-style
+    orthogonal routing, so an unstyled/`straight` link whose two connection
+    points aren't axis-aligned is auto-upgraded to `elbow`. An explicit
+    `elbow`/`curved` choice is always left untouched."""
+    if style == "straight" and not _is_axis_aligned(p1, p2):
+        return "elbow"
+    return style
+
+
+def connector_path(style: str, p1: tuple[float, float], p2: tuple[float, float], start_idx: int) -> list[tuple[float, float]]:
+    """Waypoints matching what python-pptx actually renders.
+
+    - straight (and curved, approximated): the two endpoints.
+    - elbow: exact reproduction of the OOXML "bentConnector3" preset that
+      MSO_CONNECTOR.ELBOW always uses (confirmed empirically by rendering
+      probe connectors through LibreOffice - see detailed-design-pptx.md):
+      it exits perpendicular to the start shape's connected edge, bends
+      once at the midpoint of the bridging axis, and enters perpendicular
+      to the end shape's edge. Since choose_connection_indices() only ever
+      pairs same-axis indices (both horizontal: 1/3, or both vertical:
+      0/2), start_idx alone tells us which axis the exit/entry use.
+    """
+    if style != "elbow":
+        return [p1, p2]
+    if start_idx in (1, 3):  # horizontal exit/entry
+        mid_x = (p1[0] + p2[0]) / 2
+        return [p1, (mid_x, p1[1]), (mid_x, p2[1]), p2]
+    mid_y = (p1[1] + p2[1]) / 2  # vertical exit/entry
+    return [p1, (p1[0], mid_y), (p2[0], mid_y), p2]
 
 
 def _build_indices(root_box: Box) -> tuple[dict[str, Box], dict[str, str]]:
@@ -279,17 +339,34 @@ def _segment_intersects_rect(
 LINK_LABEL_SIZE = (60, 18)  # logical units; matches render.py's midpoint label textbox
 
 
-def link_crossing_warnings(root_box: Box, links: list[Link]) -> list[str]:
-    """Mechanically detect a link's straight-line path running through an
-    unrelated element or another link's label, using the exact same
-    connection-point geometry python-pptx will render (connection_point()
-    above). Ancestors/descendants of either endpoint are excluded, since a
-    link legitimately touches its own endpoint's containers on the way in.
+def link_render_plan(from_box: Box, to_box: Box, style: str) -> tuple[int, int, str, list[tuple[float, float]]]:
+    """Single source of truth for how a link will actually be drawn: which
+    connection-point indices, the effective style (straight auto-upgrades
+    to elbow when diagonal), and the resulting waypoints. render.py and
+    link_crossing_warnings() both call this so the check can never drift
+    from what's actually rendered."""
+    s_idx, e_idx = choose_connection_indices(from_box, to_box)
+    p1, p2 = connection_point(from_box, s_idx), connection_point(to_box, e_idx)
+    eff_style = effective_connector_style(style, p1, p2)
+    path = connector_path(eff_style, p1, p2, s_idx)
+    return s_idx, e_idx, eff_style, path
 
-    Exact for `style: straight` (the default and by far the most common).
-    For `elbow`/`curved` links the real path may bend away from this
-    straight-line approximation, so a clean result here is not a full
-    guarantee for those styles - documented in docs-site/limitations.md.
+
+def link_crossing_warnings(root_box: Box, links: list[Link], margin: float = 0) -> list[str]:
+    """Mechanically detect a link's rendered path running through an
+    unrelated element or another link's label, using the exact same
+    connection-point/routing geometry python-pptx will render
+    (link_render_plan() above, covering both straight and elbow routing).
+    Ancestors/descendants of either endpoint are excluded, since a link
+    legitimately touches its own endpoint's containers on the way in.
+
+    `margin` (canvas.overlapMargin, logical units) inflates every obstacle
+    rect before testing, so a path that runs merely close to an element -
+    not literally through it - is flagged too.
+
+    Exact for `style: straight` and `elbow`. `curved` is approximated as a
+    straight chord between the endpoints, since its real bezier bow isn't
+    modeled - documented in docs-site/limitations.md.
     """
     by_id, parent_of = _build_indices(root_box)
 
@@ -305,33 +382,33 @@ def link_crossing_warnings(root_box: Box, links: list[Link]) -> list[str]:
         box = by_id.get(element_id)
         return {b.element.id for b in iter_boxes(box)} if box else set()
 
-    obstacles = [(eid, _footprint_rect(b)) for eid, b in by_id.items() if eid != "__root__"]
+    obstacles = [(eid, _inflate_rect(_footprint_rect(b), margin)) for eid, b in by_id.items() if eid != "__root__"]
 
-    endpoints: dict[int, tuple[tuple[float, float], tuple[float, float]] | None] = {}
+    paths: dict[int, list[tuple[float, float]] | None] = {}
     for i, link in enumerate(links):
         from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
         if from_box is None or to_box is None:
-            endpoints[i] = None  # dangling refs are Fatal elsewhere; defensive only
+            paths[i] = None  # dangling refs are Fatal elsewhere; defensive only
             continue
-        s_idx, e_idx = choose_connection_indices(from_box, to_box)
-        endpoints[i] = (connection_point(from_box, s_idx), connection_point(to_box, e_idx))
+        _, _, _, path = link_render_plan(from_box, to_box, link.style)
+        paths[i] = path
 
     label_rects: dict[int, tuple[float, float, float, float]] = {}
     lw, lh = LINK_LABEL_SIZE
     for i, link in enumerate(links):
-        pts = endpoints[i]
-        if not link.label or pts is None:
+        path = paths[i]
+        if not link.label or path is None:
             continue
-        p1, p2 = pts
+        p1, p2 = path[0], path[-1]
         mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
-        label_rects[i] = (mx - lw / 2, my - lh / 2, lw, lh)
+        label_rects[i] = _inflate_rect((mx - lw / 2, my - lh / 2, lw, lh), margin)
 
     messages: list[str] = []
     for i, link in enumerate(links):
-        pts = endpoints[i]
-        if pts is None:
+        path = paths[i]
+        if path is None:
             continue
-        p1, p2 = pts
+        segments = list(zip(path, path[1:]))
         exclude = (
             {link.from_id, link.to_id}
             | ancestors(link.from_id)
@@ -343,13 +420,13 @@ def link_crossing_warnings(root_box: Box, links: list[Link]) -> list[str]:
         for eid, rect in obstacles:
             if eid in exclude:
                 continue
-            if _segment_intersects_rect(p1, p2, rect):
+            if any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in segments):
                 messages.append(f"link {link.from_id!r} -> {link.to_id!r} passes through element {eid!r}")
 
         for j, rect in label_rects.items():
             if j == i:
                 continue
-            if _segment_intersects_rect(p1, p2, rect):
+            if any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in segments):
                 other = links[j]
                 messages.append(
                     f"link {link.from_id!r} -> {link.to_id!r} passes through the label of link "

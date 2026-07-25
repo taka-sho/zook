@@ -17,6 +17,7 @@ class Canvas:
     aspect_ratio: str
     padding: float = 40
     background: Optional[str] = None
+    overlap_margin: float = 0
 
     @property
     def size(self) -> tuple[float, float]:
@@ -122,6 +123,7 @@ def parse_diagram(raw: dict) -> Diagram:
         aspect_ratio=canvas_raw["aspectRatio"],
         padding=canvas_raw.get("padding", 40),
         background=canvas_raw.get("background"),
+        overlap_margin=canvas_raw.get("overlapMargin", 0),
     )
     elements = [_parse_element(e) for e in raw["elements"]]
     links = [_parse_link(link) for link in raw.get("links", [])]

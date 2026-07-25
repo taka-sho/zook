@@ -26,7 +26,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from .errors import Warnings
-from .layout import LABEL_BOX_HEIGHT, Box, choose_connection_indices, content_offset, label_gap
+from .layout import LABEL_BOX_HEIGHT, Box, content_offset, label_gap, link_render_plan
 from .model import Diagram, Link
 from .registry import Registry
 
@@ -185,11 +185,17 @@ _CONNECTOR_TYPES = {"straight": MSO_CONNECTOR.STRAIGHT, "elbow": MSO_CONNECTOR.E
 def _render_link(shapes, link: Link, shape_index: dict) -> None:
     from_shape, from_box = shape_index[link.from_id]
     to_shape, to_box = shape_index[link.to_id]
-    start_idx, end_idx = choose_connection_indices(from_box, to_box)
+    start_idx, end_idx, eff_style, path = link_render_plan(from_box, to_box, link.style)
 
-    conn = shapes.add_connector(_CONNECTOR_TYPES[link.style], E(0), E(0), E(1), E(1))
+    conn = shapes.add_connector(_CONNECTOR_TYPES[eff_style], E(0), E(0), E(1), E(1))
     conn.begin_connect(from_shape, start_idx)
     conn.end_connect(to_shape, end_idx)
+    # begin_connect/end_connect snap to the connected shape's own edge; override
+    # with our (possibly label-aware, sec "connection_point") points so a
+    # bottom/top exit past a below/above label, and the auto-elbow bend for a
+    # diagonal `straight` link, both actually render as planned.
+    conn.begin_x, conn.begin_y = E(path[0][0]), E(path[0][1])
+    conn.end_x, conn.end_y = E(path[-1][0]), E(path[-1][1])
     conn.line.color.rgb = RGBColor.from_string("545B64")
     conn.line.width = Pt(1.25)
 

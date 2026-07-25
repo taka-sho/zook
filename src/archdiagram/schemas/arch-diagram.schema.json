@@ -58,6 +58,12 @@
           "type": "string",
           "pattern": "^#[0-9A-Fa-f]{6}$",
           "description": "Optional slide background color as #RRGGBB."
+        },
+        "overlapMargin": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "Extra buffer (logical units) added around every element before checking for overlaps or link-path crossings. 0 only flags literal overlap; raise it to also flag elements/links that merely sit close together."
         }
       }
     },

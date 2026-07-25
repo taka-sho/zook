@@ -2,8 +2,11 @@ from archdiagram.layout import (
     LABEL_BOX_HEIGHT,
     LABEL_GAP_DEFAULT,
     build_layout,
+    connection_point,
     content_offset,
+    effective_connector_style,
     link_crossing_warnings,
+    link_render_plan,
     out_of_canvas_warnings,
     overlap_warnings,
 )
@@ -256,3 +259,140 @@ def test_label_gap_does_not_apply_when_label_position_is_none():
     root = build_layout(diagram, REGISTRY)
     box = _boxes_by_id(root)["a"]
     assert box.footprint_h == box.height
+
+
+# --- overlapMargin ---------------------------------------------------------
+
+
+def test_overlap_margin_zero_does_not_flag_a_near_miss():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=250, y=100)
+    diagram = _diagram([a, b])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root, margin=0) == []
+
+
+def test_overlap_margin_flags_elements_that_are_merely_close():
+    # footprints are 60 logical units apart (a's right edge at 177, b's left
+    # edge at 237); a margin comfortably bigger than the gap must flag it.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=250, y=100)
+    diagram = _diagram([a, b])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root, margin=70) != []
+
+
+def test_link_crossing_margin_flags_a_near_miss():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=150, y=160)  # just under the a->c line
+    c = Element(kind="node", id="c", type="EC2", provider="aws", x=300, y=100)
+    diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
+    root = build_layout(diagram, REGISTRY)
+    assert link_crossing_warnings(root, diagram.links, margin=0) == []
+    assert link_crossing_warnings(root, diagram.links, margin=40) != []
+
+
+# --- label-aware connection points ------------------------------------------
+
+
+def test_bottom_exit_attaches_below_a_below_label():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    _, bottom_y = connection_point(box, 2)
+    assert bottom_y == box.abs_y + box.height + LABEL_GAP_DEFAULT + LABEL_BOX_HEIGHT
+
+
+def test_top_exit_attaches_above_an_above_label():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, style={"labelPosition": "above"})
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    _, top_y = connection_point(box, 0)
+    assert top_y == box.abs_y - (LABEL_GAP_DEFAULT + LABEL_BOX_HEIGHT)
+
+
+def test_side_exit_is_unaffected_by_a_below_label():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    _, right_y = connection_point(box, 3)
+    assert right_y == box.abs_y + box.height / 2
+
+
+def test_bottom_exit_ignores_label_when_label_position_is_none():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, style={"labelPosition": "none"})
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    _, bottom_y = connection_point(box, 2)
+    assert bottom_y == box.abs_y + box.height
+
+
+# --- auto-elbow for diagonal straight links --------------------------------
+
+
+def test_diagonal_straight_link_is_upgraded_to_elbow():
+    assert effective_connector_style("straight", (0, 0), (100, 50)) == "elbow"
+
+
+def test_axis_aligned_straight_link_stays_straight():
+    assert effective_connector_style("straight", (0, 0), (100, 0)) == "straight"
+    assert effective_connector_style("straight", (0, 0), (0, 100)) == "straight"
+
+
+def test_explicit_style_is_never_overridden():
+    assert effective_connector_style("curved", (0, 0), (100, 50)) == "curved"
+    assert effective_connector_style("elbow", (0, 0), (100, 0)) == "elbow"
+
+
+def test_diagonal_link_renders_as_elbow_end_to_end():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=300)
+    diagram = _diagram([a, b], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+    boxes = _boxes_by_id(root)
+    _, _, eff_style, path = link_render_plan(boxes["a"], boxes["b"], "straight")
+    assert eff_style == "elbow"
+    assert len(path) == 4  # two right-angle bends, matching bentConnector3
+
+
+# --- elbow-aware crossing detection -----------------------------------------
+
+
+def test_elbow_crossing_check_catches_a_hit_a_straight_approximation_would_miss():
+    # a->b is diagonal enough to auto-upgrade to elbow: exit (164,132), bend
+    # at x=332, entry (500,432). `obstacle` sits squarely on the first
+    # (horizontal, y=132) segment near the bend, at x=280-344, y=100-164 -
+    # but the straight diagonal chord's y there is 235-282, well clear of
+    # it. The elbow-aware check must catch this; a naive straight-line
+    # approximation would have missed it entirely.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=500, y=400)
+    obstacle = Element(kind="node", id="obstacle", type="RDS", provider="aws", x=280, y=100, style={"labelPosition": "none"})
+    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_crossing_warnings(root, diagram.links)
+    assert any("obstacle" in w for w in warnings)
+
+
+def test_elbow_crossing_check_does_not_flag_the_unused_diagonal_chord():
+    # Same shapes as above, but `obstacle` sits on the *diagonal chord*
+    # between a's exit (164,132) and b's entry (500,432) - at roughly
+    # (200-264, 160-224) the chord passes right through it - while staying
+    # clear of all three real elbow segments (y=132 / x=332 / y=432). A
+    # correct elbow-aware check must clear it; a naive straight-line
+    # approximation would have flagged it.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=500, y=400)
+    obstacle = Element(
+        kind="node", id="obstacle", type="RDS", provider="aws", x=200, y=160, style={"labelPosition": "none"}
+    )
+    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_crossing_warnings(root, diagram.links)
+    assert not any("obstacle" in w for w in warnings)

@@ -35,11 +35,12 @@ def main(input_path: str, output_path: str, user_registry_path: str | None) -> N
         diagram = parse_diagram(raw)
         registry = load_registry(provider="aws", user_registry_path=user_registry_path)
         root_box = build_layout(diagram, registry)
+        margin = diagram.canvas.overlap_margin
         for message in out_of_canvas_warnings(root_box, *diagram.canvas.size):
             warnings.add(message)
-        for message in overlap_warnings(root_box):
+        for message in overlap_warnings(root_box, margin):
             warnings.add(message)
-        for message in link_crossing_warnings(root_box, diagram.links):
+        for message in link_crossing_warnings(root_box, diagram.links, margin):
             warnings.add(message)
 
         presentation = render(diagram, root_box, registry, warnings)

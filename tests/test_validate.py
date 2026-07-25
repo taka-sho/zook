@@ -93,3 +93,14 @@ def test_negative_label_gap_is_fatal():
     )
     with pytest.raises(DiagramError):
         validate(doc)
+
+
+def test_canvas_overlap_margin_passes():
+    doc = _base(canvas={"aspectRatio": "16:9", "overlapMargin": 20})
+    validate(doc)
+
+
+def test_negative_overlap_margin_is_fatal():
+    doc = _base(canvas={"aspectRatio": "16:9", "overlapMargin": -1})
+    with pytest.raises(DiagramError):
+        validate(doc)
