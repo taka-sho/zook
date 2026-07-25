@@ -78,3 +78,18 @@ def test_valid_link_passes():
         links=[{"from": "a", "to": "b"}],
     )
     validate(doc)
+
+
+def test_node_label_gap_style_passes():
+    doc = _base(
+        elements=[{"kind": "node", "id": "a", "type": "EC2", "style": {"labelGap": 12}}],
+    )
+    validate(doc)
+
+
+def test_negative_label_gap_is_fatal():
+    doc = _base(
+        elements=[{"kind": "node", "id": "a", "type": "EC2", "style": {"labelGap": -5}}],
+    )
+    with pytest.raises(DiagramError):
+        validate(doc)

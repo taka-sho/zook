@@ -21,7 +21,8 @@ from dataclasses import dataclass, field
 from .model import Diagram, Element, Layout, Link
 from .registry import Registry
 
-LABEL_RESERVE = 22  # vertical space reserved for a node's below/above label
+LABEL_GAP_DEFAULT = 4  # default spacing between an icon and its label; overridable per-node via style.labelGap
+LABEL_BOX_HEIGHT = 18  # height of a node's label textbox
 LABEL_MIN_WIDTH = 90  # footprint width floor so labels have room to sit under an icon
 CONTAINER_LABEL_RESERVE = 28  # extra top space inside a container that has its own label
 
@@ -40,13 +41,22 @@ class Box:
     children: list["Box"] = field(default_factory=list)
 
 
+def label_gap(element: Element) -> float:
+    """style.labelGap (yaml-spec.md sec5.2): spacing between a node's icon and its label."""
+    return element.style.get("labelGap", LABEL_GAP_DEFAULT)
+
+
+def _label_reserve(element: Element) -> float:
+    return label_gap(element) + LABEL_BOX_HEIGHT
+
+
 def content_offset(box: Box) -> tuple[float, float]:
     """Offset from a node's footprint top-left to its icon's top-left."""
     if box.element.kind != "node":
         return (0.0, 0.0)
     label_position = box.element.style.get("labelPosition", "below")
     dx = (box.footprint_w - box.width) / 2
-    dy = LABEL_RESERVE if label_position == "above" else 0.0
+    dy = _label_reserve(box.element) if label_position == "above" else 0.0
     return (dx, dy)
 
 
@@ -57,7 +67,7 @@ def _measure_node(element: Element, registry: Registry) -> Box:
     height = element.height or default_size
     label_position = element.style.get("labelPosition", "below")
     footprint_w = width if label_position == "none" else max(width, LABEL_MIN_WIDTH)
-    footprint_h = height + (LABEL_RESERVE if label_position in ("below", "above") else 0)
+    footprint_h = height + (_label_reserve(element) if label_position in ("below", "above") else 0)
     return Box(element, width, height, footprint_w, footprint_h)
 
 

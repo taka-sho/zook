@@ -48,7 +48,10 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
   label: "WebServer"
   style:
     labelPosition: below    # below(既定) / above / right / none
+    labelGap: 4              # アイコンとラベルの間隔(論理単位、既定4)
 ```
+
+`labelGap` を大きくすると、狭いレイアウトでラベル同士やリンクのラベルとの重なりを避けやすくなります(重なりは[既知の制約](limitations.md)にある通り警告されますが、自動では回避されません)。
 
 ## 座標とサイズ
 

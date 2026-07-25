@@ -169,7 +169,13 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "labelPosition": { "enum": ["below", "above", "right", "none"], "default": "below" }
+        "labelPosition": { "enum": ["below", "above", "right", "none"], "default": "below" },
+        "labelGap": {
+          "type": "number",
+          "minimum": 0,
+          "default": 4,
+          "description": "Spacing between the icon and its label (logical units). No effect when labelPosition is 'none'."
+        }
       }
     },
     "link": {

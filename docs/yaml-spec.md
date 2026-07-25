@@ -74,7 +74,9 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 | `label` | | string | — | アイコンのラベル |
 | `x`,`y` | | number | — | 絶対位置（両方セットで指定） |
 | `width`,`height` | | number > 0 | — | アイコンサイズ。省略時は既定サイズ |
-| `style` | | object | — | ラベル位置（below/above/right/none） |
+| `style` | | object | — | ラベル位置（`labelPosition`: below/above/right/none）とラベル間隔（`labelGap`） |
+
+`style.labelGap`（number ≥ 0、既定 4、論理単位）：アイコンとラベルの間隔。`labelPosition: none` のときは効果なし。狭いレイアウトでラベル同士・リンクラベルとの重なりを避けたい場合に個別調整できる。
 
 ### 5.3 id 規則
 

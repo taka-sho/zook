@@ -1,4 +1,12 @@
-from archdiagram.layout import build_layout, link_crossing_warnings, out_of_canvas_warnings, overlap_warnings
+from archdiagram.layout import (
+    LABEL_BOX_HEIGHT,
+    LABEL_GAP_DEFAULT,
+    build_layout,
+    content_offset,
+    link_crossing_warnings,
+    out_of_canvas_warnings,
+    overlap_warnings,
+)
 from archdiagram.model import Canvas, Diagram, Element, Layout, Link
 from archdiagram.registry import load_registry
 
@@ -210,3 +218,41 @@ def test_link_crossing_another_links_label_is_flagged():
     root = build_layout(diagram, REGISTRY)
     warnings = link_crossing_warnings(root, diagram.links)
     assert any("label of link" in w for w in warnings)
+
+
+def test_default_label_gap_matches_LABEL_GAP_DEFAULT():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert box.footprint_h == box.height + LABEL_GAP_DEFAULT + LABEL_BOX_HEIGHT
+
+
+def test_custom_label_gap_widens_footprint_and_offsets_below_label():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, style={"labelGap": 40})
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert box.footprint_h == box.height + 40 + LABEL_BOX_HEIGHT
+
+
+def test_custom_label_gap_offsets_above_label():
+    el = Element(
+        kind="node", id="a", type="EC2", provider="aws", x=0, y=0, style={"labelPosition": "above", "labelGap": 40}
+    )
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    # the icon is pushed down by the full reserve so the label fits above it
+    dx, dy = content_offset(box)
+    assert dy == 40 + LABEL_BOX_HEIGHT
+
+
+def test_label_gap_does_not_apply_when_label_position_is_none():
+    el = Element(
+        kind="node", id="a", type="EC2", provider="aws", x=0, y=0, style={"labelPosition": "none", "labelGap": 40}
+    )
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert box.footprint_h == box.height

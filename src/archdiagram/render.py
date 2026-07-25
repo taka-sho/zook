@@ -26,7 +26,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from .errors import Warnings
-from .layout import LABEL_RESERVE, Box, choose_connection_indices, content_offset
+from .layout import LABEL_BOX_HEIGHT, Box, choose_connection_indices, content_offset, label_gap
 from .model import Diagram, Link
 from .registry import Registry
 
@@ -103,19 +103,21 @@ def _add_container_rect(shapes, box: Box, registry: Registry):
 
 
 def _add_node_label(shapes, box: Box, text: str, position: str) -> None:
+    gap = label_gap(box.element)
     dx, dy = content_offset(box)
     footprint_x, footprint_y = box.abs_x - dx, box.abs_y - dy
     if position == "below":
-        tb = shapes.add_textbox(
-            E(footprint_x), E(box.abs_y + box.height + 4), E(box.footprint_w), E(LABEL_RESERVE - 4)
-        )
+        tb = shapes.add_textbox(E(footprint_x), E(box.abs_y + box.height + gap), E(box.footprint_w), E(LABEL_BOX_HEIGHT))
         align = PP_ALIGN.CENTER
     elif position == "above":
-        tb = shapes.add_textbox(E(footprint_x), E(footprint_y), E(box.footprint_w), E(LABEL_RESERVE - 4))
+        tb = shapes.add_textbox(E(footprint_x), E(footprint_y), E(box.footprint_w), E(LABEL_BOX_HEIGHT))
         align = PP_ALIGN.CENTER
     else:  # right
         tb = shapes.add_textbox(
-            E(box.abs_x + box.width + 6), E(box.abs_y), E(max(box.footprint_w - box.width - 6, 60)), E(box.height)
+            E(box.abs_x + box.width + gap),
+            E(box.abs_y),
+            E(max(box.footprint_w - box.width - gap, 60)),
+            E(box.height),
         )
         align = PP_ALIGN.LEFT
     tf = tb.text_frame
