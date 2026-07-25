@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/arch-diagram/v1.schema.json",
+  "title": "Architecture Diagram Definition",
+  "description": "YAML/JSON definition for generating a single architecture diagram slide.",
+  "type": "object",
+  "required": ["version", "canvas", "elements"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version. Must be '1.0'."
+    },
+    "canvas": { "$ref": "#/$defs/canvas" },
+    "elements": {
+      "type": "array",
+      "description": "Top-level containers and/or nodes on the slide.",
+      "items": { "$ref": "#/$defs/element" }
+    },
+    "links": {
+      "type": "array",
+      "description": "Connections between elements. Omit entirely for a diagram with no lines.",
+      "items": { "$ref": "#/$defs/link" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+      "description": "Unique identifier. Starts with a letter; letters/digits/_/- only."
+    },
+    "coord": {
+      "type": "number",
+      "description": "Logical unit. 16:9 canvas is 1280x720, 4:3 is 960x720. Origin top-left, +x right, +y down."
+    },
+    "dimension": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Logical unit size (> 0)."
+    },
+    "canvas": {
+      "type": "object",
+      "required": ["aspectRatio"],
+      "additionalProperties": false,
+      "properties": {
+        "aspectRatio": {
+          "enum": ["16:9", "4:3"],
+          "description": "Slide aspect ratio. 16:9 -> 1280x720 logical (13.333in x 7.5in); 4:3 -> 960x720 logical (10in x 7.5in)."
+        },
+        "padding": {
+          "type": "number",
+          "minimum": 0,
+          "default": 40,
+          "description": "Outer padding between slide edge and top-level auto-laid elements (logical units)."
+        },
+        "background": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Optional slide background color as #RRGGBB."
+        }
+      }
+    },
+    "element": {
+      "description": "Either a container (grouping box) or a node (leaf icon).",
+      "oneOf": [
+        { "$ref": "#/$defs/container" },
+        { "$ref": "#/$defs/node" }
+      ]
+    },
+    "container": {
+      "type": "object",
+      "required": ["kind", "id", "type"],
+      "additionalProperties": false,
+      "dependentRequired": { "x": ["y"], "y": ["x"] },
+      "properties": {
+        "kind": { "const": "container" },
+        "id": { "$ref": "#/$defs/id" },
+        "type": {
+          "type": "string",
+          "description": "Container type. Known: vpc, az, subnet, region, account, group. Extensible.",
+          "examples": ["vpc", "az", "subnet", "region", "group"]
+        },
+        "provider": {
+          "enum": ["aws", "gcp", "azure", "custom", "generic"],
+          "default": "generic",
+          "description": "Provider namespace for container styling/icon resolution."
+        },
+        "label": { "type": "string", "description": "Display label drawn on the container." },
+        "x": { "$ref": "#/$defs/coord", "description": "Absolute x. If omitted, auto-placed by parent." },
+        "y": { "$ref": "#/$defs/coord", "description": "Absolute y. If omitted, auto-placed by parent." },
+        "width": { "$ref": "#/$defs/dimension", "description": "Explicit width. If omitted, auto-sized to fit children." },
+        "height": { "$ref": "#/$defs/dimension", "description": "Explicit height. If omitted, auto-sized to fit children." },
+        "layout": { "$ref": "#/$defs/layout" },
+        "style": { "$ref": "#/$defs/containerStyle" },
+        "children": {
+          "type": "array",
+          "description": "Nested containers and/or nodes.",
+          "items": { "$ref": "#/$defs/element" }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["kind", "id", "type"],
+      "additionalProperties": false,
+      "dependentRequired": { "x": ["y"], "y": ["x"] },
+      "properties": {
+        "kind": { "const": "node" },
+        "id": { "$ref": "#/$defs/id" },
+        "type": {
+          "type": "string",
+          "description": "Service type resolved to an icon. Known (aws): EC2, Lambda, RDS, S3. Extensible.",
+          "examples": ["EC2", "Lambda", "RDS", "S3"]
+        },
+        "provider": {
+          "enum": ["aws", "gcp", "azure", "custom"],
+          "default": "aws",
+          "description": "Provider namespace used to resolve the icon file (e.g. icons/<provider>/<type>.png)."
+        },
+        "label": { "type": "string", "description": "Display label under/near the icon." },
+        "x": { "$ref": "#/$defs/coord", "description": "Absolute x. If omitted, auto-placed by parent." },
+        "y": { "$ref": "#/$defs/coord", "description": "Absolute y. If omitted, auto-placed by parent." },
+        "width": { "$ref": "#/$defs/dimension", "description": "Icon width. If omitted, uses default icon size." },
+        "height": { "$ref": "#/$defs/dimension", "description": "Icon height. If omitted, uses default icon size." },
+        "style": { "$ref": "#/$defs/nodeStyle" }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Auto-layout rules for children without explicit x/y.",
+      "properties": {
+        "direction": {
+          "enum": ["horizontal", "vertical", "grid"],
+          "default": "grid",
+          "description": "How auto-placed children are arranged."
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Column count for grid direction. If omitted, chosen automatically."
+        },
+        "gap": {
+          "type": "number",
+          "minimum": 0,
+          "default": 24,
+          "description": "Spacing between auto-placed children (logical units)."
+        },
+        "padding": {
+          "type": "number",
+          "minimum": 0,
+          "default": 32,
+          "description": "Inner padding between container edge and its children (logical units)."
+        }
+      }
+    },
+    "containerStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "borderColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "fillColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "borderWidth": { "type": "number", "minimum": 0, "default": 1 },
+        "labelPosition": { "enum": ["top-left", "top-center", "bottom-left"], "default": "top-left" }
+      }
+    },
+    "nodeStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labelPosition": { "enum": ["below", "above", "right", "none"], "default": "below" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "from": { "type": "string", "description": "Source element id." },
+        "to": { "type": "string", "description": "Target element id." },
+        "arrow": {
+          "enum": ["end", "both", "none"],
+          "default": "end",
+          "description": "Arrowhead placement. 'none' draws a plain line."
+        },
+        "style": {
+          "enum": ["straight", "elbow", "curved"],
+          "default": "straight",
+          "description": "Connector routing style."
+        },
+        "label": { "type": "string", "description": "Optional label carried on the connector." }
+      }
+    }
+  }
+}

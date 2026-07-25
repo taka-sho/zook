@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.DS_Store
+.claude/
+prototype/prototype_output.pptx
+prototype/~$*.pptx
+
+# Zensical docs site build output (published via GitHub Actions, not committed)
+site/

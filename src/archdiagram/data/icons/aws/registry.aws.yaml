@@ -1,0 +1,48 @@
+registryVersion: "1.0"
+provider: aws
+iconSet: "AWS Architecture Icons (quarterly release) — record the exact release you vendored"
+basePath: "."
+defaults:
+  size: 64
+  ext: png
+
+# ---- Nodes: Tier-1 starter vocabulary ----
+# Key = the `type` used in the diagram YAML. Extend by adding entries + files.
+icons:
+  # Compute
+  EC2: { file: "Compute/EC2.png", category: Compute, aliases: [ec2, AmazonEC2] }
+  Lambda: { file: "Compute/Lambda.png", category: Compute, aliases: [lambda, AWSLambda] }
+  ECS: { file: "Compute/ECS.png", category: Compute, aliases: [ecs] }
+  EKS: { file: "Compute/EKS.png", category: Compute, aliases: [eks, Kubernetes] }
+  Fargate: { file: "Compute/Fargate.png", category: Compute, aliases: [fargate] }
+  # Storage
+  S3: { file: "Storage/S3.png", category: Storage, aliases: [s3, SimpleStorageService] }
+  EFS: { file: "Storage/EFS.png", category: Storage, aliases: [efs] }
+  EBS: { file: "Storage/EBS.png", category: Storage, aliases: [ebs] }
+  # Database
+  RDS: { file: "Database/RDS.png", category: Database, aliases: [rds] }
+  Aurora: { file: "Database/Aurora.png", category: Database, aliases: [aurora] }
+  DynamoDB: { file: "Database/DynamoDB.png", category: Database, aliases: [dynamodb, ddb] }
+  ElastiCache: { file: "Database/ElastiCache.png", category: Database, aliases: [elasticache, redis] }
+  # Networking & Content Delivery
+  ELB: { file: "Networking/ELB.png", category: Networking, aliases: [elb, alb, ALB, LoadBalancer] }
+  CloudFront: { file: "Networking/CloudFront.png", category: Networking, aliases: [cloudfront, cdn] }
+  Route53: { file: "Networking/Route53.png", category: Networking, aliases: [route53, dns] }
+  APIGateway: { file: "Networking/APIGateway.png", category: Networking, aliases: [apigateway, apigw] }
+  NATGateway: { file: "Networking/NATGateway.png", category: Networking, aliases: [nat, natgw] }
+  # Application Integration
+  SNS: { file: "Integration/SNS.png", category: Integration, aliases: [sns] }
+  SQS: { file: "Integration/SQS.png", category: Integration, aliases: [sqs] }
+  EventBridge: { file: "Integration/EventBridge.png", category: Integration, aliases: [eventbridge] }
+  # Security
+  IAM: { file: "Security/IAM.png", category: Security, aliases: [iam] }
+  Cognito: { file: "Security/Cognito.png", category: Security, aliases: [cognito] }
+
+# ---- Containers: frame styles (colors are sensible defaults; align to the official deck) ----
+groups:
+  vpc: { label: "VPC", borderColor: "#8C4FFF", dashed: false, labelPosition: top-left }
+  az: { label: "Availability Zone", borderColor: "#00A4A6", dashed: true, labelPosition: top-left }
+  subnet: { label: "Subnet", borderColor: "#7AA116", fillColor: "#F2F8E8", labelPosition: top-left }
+  region: { label: "Region", borderColor: "#00A4A6", dashed: true, labelPosition: top-left }
+  account: { label: "AWS Account", borderColor: "#E7157B", dashed: false, labelPosition: top-left }
+  group: { label: "", borderColor: "#5A6B86", dashed: false, labelPosition: top-left }

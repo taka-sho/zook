@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/arch-diagram/icon-registry.v1.schema.json",
+  "title": "Icon Registry",
+  "description": "Maps diagram element types to icon files (nodes) and frame styles (containers), per provider.",
+  "type": "object",
+  "required": ["registryVersion", "provider", "icons"],
+  "additionalProperties": false,
+  "properties": {
+    "registryVersion": { "type": "string", "const": "1.0" },
+    "provider": {
+      "type": "string",
+      "description": "Provider namespace this registry serves (aws, gcp, azure, custom)."
+    },
+    "iconSet": {
+      "type": "string",
+      "description": "Human-readable source/version of the icon assets, e.g. 'AWS Architecture Icons 2025.07 (Q3)'."
+    },
+    "basePath": {
+      "type": "string",
+      "default": ".",
+      "description": "Directory (relative to this registry file) containing the icon files."
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": { "type": "number", "exclusiveMinimum": 0, "default": 64, "description": "Default node icon size (logical units)." },
+        "ext": { "type": "string", "default": "png", "description": "Default file extension when a file is given without one." }
+      }
+    },
+    "icons": {
+      "type": "object",
+      "description": "Node (service/resource) entries. Key = the 'type' used in diagram YAML.",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/iconEntry" }
+    },
+    "groups": {
+      "type": "object",
+      "description": "Container (frame) style entries. Key = the container 'type', e.g. vpc, az, subnet.",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/groupEntry" }
+    }
+  },
+  "$defs": {
+    "iconEntry": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "description": "Icon file path relative to basePath." },
+        "category": { "type": "string", "description": "AWS-style category (Compute, Storage, ...)." },
+        "kind": { "enum": ["service", "resource"], "default": "service" },
+        "label": { "type": "string", "description": "Default display label if the element omits one." },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Alternative type names resolving to this entry (matched case-insensitively)."
+        },
+        "size": { "type": "number", "exclusiveMinimum": 0, "description": "Per-icon default size override." }
+      }
+    },
+    "groupEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "description": "Default frame label." },
+        "borderColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "fillColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "borderWidth": { "type": "number", "minimum": 0, "default": 1 },
+        "dashed": { "type": "boolean", "default": false },
+        "labelPosition": { "enum": ["top-left", "top-center", "bottom-left"], "default": "top-left" },
+        "icon": { "type": "string", "description": "Optional corner icon file (relative to basePath)." },
+        "aliases": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+version: "1.0"
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: container
+    id: vpc-main
+    type: vpc
+    provider: aws
+    label: "Production VPC"
+    layout:
+      direction: horizontal
+      gap: 48
+      padding: 40
+    children:
+      - kind: container
+        id: az-a
+        type: az
+        label: "ap-northeast-1a"
+        layout:
+          direction: vertical
+          gap: 32
+        children:
+          - kind: node
+            id: web-a
+            type: EC2
+            label: "WebServer A"
+          - kind: node
+            id: db-a
+            type: RDS
+            label: "Primary DB"
+
+      - kind: container
+        id: az-c
+        type: az
+        label: "ap-northeast-1c"
+        layout:
+          direction: vertical
+          gap: 32
+        children:
+          - kind: node
+            id: web-c
+            type: EC2
+            label: "WebServer C"
+          - kind: node
+            id: fn-c
+            type: Lambda
+            label: "Batch Worker"
+
+  # Node placed outside the VPC with an absolute position
+  - kind: node
+    id: bucket
+    type: S3
+    label: "Asset Bucket"
+    x: 1080
+    y: 300
+    width: 96
+    height: 96
+
+links:
+  - from: web-a
+    to: db-a
+    label: "3306"
+  - from: web-c
+    to: fn-c
+    arrow: end
+    style: elbow
+  - from: web-c
+    to: bucket
+    arrow: none

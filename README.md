@@ -1,0 +1,72 @@
+# archdiagram
+
+YAML で書いたアーキテクチャ構成から PowerPoint(.pptx)を生成するCLIツール。
+
+利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/archtecture-diagram-generator/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。
+
+設計・仕様は `docs/README-index.md` を参照(要件定義・YAML入力仕様・JSON Schema・アイコンレジストリ仕様・pptx詳細設計の一式)。本ディレクトリはその実装。
+
+## セットアップ
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+```
+
+## 使い方
+
+```bash
+.venv/bin/archdiagram docs/example.yaml -o out.pptx
+
+# 独自アイコン/枠スタイルで組み込みレジストリを上書きする場合
+.venv/bin/archdiagram diagram.yaml -o out.pptx --registry my-registry.yaml
+```
+
+- スキーマ違反・id重複・リンク参照先不在などの構造破綻は Fatal(標準エラー出力 + 非ゼロ終了)。
+- 未知の`type`・キャンバス範囲外の座標などは Warning(標準エラー出力に出して継続)。
+
+## 構成
+
+```
+src/archdiagram/
+  cli.py        CLIエントリポイント
+  validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照)
+  model.py      パース後のデータモデル
+  registry.py   アイコン/枠スタイルのレジストリ解決(エイリアス・上書き対応)
+  layout.py     自動レイアウト(grid/horizontal/vertical、明示座標との混在)
+  render.py     python-pptx によるスライド生成(階層グループ・コネクタ・ラベル)
+  schemas/      arch-diagram.schema.json / icon-registry.schema.json(docs/の写し)
+  data/icons/aws/  組み込みAWSレジストリ + プレースホルダーアイコンPNG
+```
+
+## アイコンについて
+
+`src/archdiagram/data/icons/aws/` のPNGは AWS公式アイコンではなく、`scripts/generate_placeholder_icons.py` で生成した自作プレースホルダー(カテゴリ別配色+略称)。
+
+実際のAWS公式アイコンに差し替える場合は、`registry.aws.yaml` の `file` パスに合わせて画像を配置するだけでよい(コード変更不要)。ラスタライズ解像度は表示pxの4倍が目安(`docs/detailed-design-pptx.md` §8.6)。
+
+## テスト
+
+```bash
+.venv/bin/pytest tests/ -v
+```
+
+## 既知の制約(v1)
+
+- 自動レイアウトは重なり回避をしない第一版仕様(`docs/yaml-spec.md` §6)。生成後の手編集を前提とする。
+- GCP/Azureの組み込みレジストリは未実装(`docs/README-index.md` §5、次版スコープ)。
+
+## ドキュメントサイト(docs-site/)
+
+利用者向けドキュメントは [Zensical](https://zensical.org/) で `docs-site/` から生成し、`main` への push で GitHub Actions(`.github/workflows/docs.yml`)が GitHub Pages に自動デプロイします。
+
+```bash
+.venv/bin/pip install zensical
+.venv/bin/zensical serve      # http://localhost:8000 でプレビュー
+.venv/bin/zensical build --clean  # site/ に静的サイトを生成(コミット対象外)
+```
+
+## CI
+
+- `.github/workflows/tests.yml` — push/PR で `pytest` を実行
+- `.github/workflows/docs.yml` — `main` への push で docs-site を GitHub Pages へデプロイ
