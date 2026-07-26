@@ -185,6 +185,19 @@
 - いずれも `canvas.overlapMargin` が適用される。Warning のみ、迂回や自動修正は行わない。
 - `resolve_container_label_position()` は `render.py`(実描画)と `layout.py`(検知)の両方から呼ばれる共有関数とし、ラベル位置の解決ロジックが2箇所で乖離しないようにしている(§8.9 の `link_render_plan()` と同じ設計方針)。
 
+### 8.11 CLI 再設計・自動回避・軽量プレビュー・マルチクラウド(実装時に追加)
+
+要求:CIワークフロー改善・アイコン発見性・描画品質・マルチクラウド対応をまとめて追加したい。
+
+- **CLI をサブコマンド構成に再設計**:`archdiagram <file> -o <out>` の単一コマンドから、`build`/`validate`/`icons list`/`preview` の click Group 構成に変更した(破壊的変更。呼び出しは `archdiagram build <file> -o <out>` になる)。`_load_and_check()` を共通処理として切り出し、`build`/`validate` はレンダリング以外の全チェック(スキーマ・意味検証・アイコン解決・座標範囲・重なり・リンク経路)を共有する。
+  - `--strict`:Warning が1件でもあれば非ゼロ終了。
+  - `--format {text,json,github}`:CI 連携用の機械可読出力(`github` は `::warning::`/`::error::` アノテーション)。
+  - この再設計の過程で、**`validate` が `build` と同じ Warning を検出できていなかったバグ**を発見・修正した。「未知アイコン type」の Warning は従来 `render.py` の中でのみ発生しており、レンダリングをスキップする `validate` では検出できなかった。`icon_resolution_warnings()` として `layout.py` 側の純粋なチェックに切り出し、`_load_and_check()` から呼ぶことで解消。`render.py` 側の重複した警告発行は削除した。
+- **アイコン発見性**:`archdiagram icons list` で登録済みの全 `type`・エイリアス・グループを一覧表示。表示用に `IconEntry`/`GroupEntry` へ元の大文字小文字を保持した `name` フィールドを追加(内部の lookup キーは引き続き小文字化)。
+- **自動配置の重複回避**(`_avoid_explicit_overlaps()`):自動配置の子要素が明示座標の兄弟要素と重なる場合、自動配置側だけを真下に押し出して回避する。単純な1軸方向への押し出しのみ(複数の明示座標要素が積み重なっている場合は複数回押し出す、上限 `len(explicit)+1` 回)。明示座標同士・自動配置同士は対象外(前者は著者の意図、後者は既存アルゴリズムで衝突しない)。`overlap_warnings()` は回避後も引き続き実行され、それでも解消しない重なりを検出する。
+- **軽量PNGプレビュー**(`preview.py`):LibreOffice/PowerPoint を使わず、同じ `Box` 木・`link_render_plan()` を Pillow で直接描画する第二のレンダラー。`render.py` の `resolve_container_style()`(新設。枠色・塗り・破線・ラベル位置・隅アイコンをまとめて解決する共有関数で、従来 `_add_container_rect()` に直書きされていたロジックを抽出したもの)を共用し、2つのレンダラーが見た目の解決ロジックで乖離しないようにしている。
+- **マルチクラウド**:`registry.gcp.yaml`/`registry.azure.yaml` を追加し、`Registry` を複数保持して要素の `provider` でディスパッチする `MultiRegistry` を導入した。既存の `resolve_icon`/`resolve_group` 呼び出しは全て `element.provider` を渡すよう更新(`layout.py`/`render.py`)。コンテナの `groups` はプロバイダ自身に定義がなければ AWS レジストリへフォールバックする(§8.10 で確定した `container_label_rect()` 等、ラベル位置解決も含めて一貫してこの経路を通る)。
+
 ## 9. 次アクション
 
 - [x] python-pptx で「VPC枠＋AZ＋アイコン＋ラベル」を階層グループ化する最小プロトタイプを作成(`prototype/build_prototype.py`)

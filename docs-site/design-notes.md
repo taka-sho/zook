@@ -38,6 +38,14 @@ OOXML スキーマ上、コネクタ要素(`p:cxnSp`)は `txBody`(テキスト�
 
 SVG アイコンを PNG 化する際は、**表示ピクセル数の4倍**の解像度でラスタライズします。1倍(96dpi 相当)ではPowerPoint/LibreOffice上での拡大描画時ににじみが視認できましたが、2倍以降でほぼ解消し、3倍・4倍との違いは目視で判別できない水準でした。アイコン程度の画像サイズであれば4倍でもファイルサイズは軽微(数十KB程度)です。
 
+## 軽量PNGプレビューとの見た目の一貫性
+
+`archdiagram preview` は python-pptx を使わず、同じレイアウト計算結果(`Box` 木・接続点計算)を Pillow で直接描画する第二のレンダラーです。枠線色・塗り・破線・ラベル位置・隅アイコンといったコンテナの見た目は `resolve_container_style()` という共有関数で1箇所にまとめて解決しており、pptx用レンダラーとPNGプレビューが見た目のロジックで食い違わないようにしています。
+
+## マルチクラウドの解決
+
+要素の `provider`(`aws`/`gcp`/`azure`/任意のカスタム値)ごとに別々のレジストリを保持し、`MultiRegistry` が振り分けます。アイコンは各プロバイダのレジストリにしかない前提ですが、コンテナの `groups`(vpc/az/subnet など)は該当プロバイダに定義がなければ AWS レジストリへフォールバックします。これは、クラウド間で共通する構造概念(VPCやAZなど)を GCP/Azure のレジストリで毎回再定義しなくて済むようにするための設計判断です。
+
 ## 検証方法
 
 これらの決定は、`prototype/build_prototype.py` で実際に pptx を生成し、LibreOffice headless(`soffice --convert-to pdf` → `pdftoppm`)で画像化して目視確認しています。再現手順は [`prototype/README.md`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/prototype/README.md) を参照してください。

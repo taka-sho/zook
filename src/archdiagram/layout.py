@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Optional
 
 from .model import Diagram, Element, Layout, Link
-from .registry import Registry
+from .registry import MultiRegistry
 
 LABEL_GAP_DEFAULT = 4  # default spacing between an icon and its label; overridable per-node via style.labelGap
 LABEL_BOX_HEIGHT = 18  # height of a node's label textbox
@@ -60,9 +61,9 @@ def content_offset(box: Box) -> tuple[float, float]:
     return (dx, dy)
 
 
-def _measure_node(element: Element, registry: Registry) -> Box:
-    icon_entry = registry.resolve_icon(element.type)
-    default_size = icon_entry.size if (icon_entry and icon_entry.size) else registry.default_size
+def _measure_node(element: Element, registry: MultiRegistry) -> Box:
+    icon_entry = registry.resolve_icon(element.type, element.provider)
+    default_size = icon_entry.size if (icon_entry and icon_entry.size) else registry.default_size(element.provider)
     width = element.width or default_size
     height = element.height or default_size
     label_position = element.style.get("labelPosition", "below")
@@ -116,6 +117,41 @@ def _arrange_children(children: list[Box], layout: Layout, content_top: float) -
             b.local_x = padding + col * cell_w + dx
             b.local_y = content_top + row * cell_h + dy
 
+    _avoid_explicit_overlaps(auto, explicit, gap)
+
+
+def _local_footprint_rect(box: Box) -> tuple[float, float, float, float]:
+    """Same shape as _footprint_rect() below, but before assign_absolute()
+    has run - operates on local_x/local_y instead of abs_x/abs_y, for use
+    while _arrange_children() is still placing children within one parent."""
+    dx, dy = content_offset(box)
+    return box.local_x - dx, box.local_y - dy, box.footprint_w, box.footprint_h
+
+
+def _avoid_explicit_overlaps(auto: list[Box], explicit: list[Box], gap: float) -> None:
+    """First-version overlap avoidance: an auto-placed child that ends up
+    overlapping an *explicitly* positioned sibling is nudged straight down
+    until clear. Auto-vs-auto pairs are never touched (already collision-
+    free by construction, since they're packed by the grid/horizontal/
+    vertical algorithms above) and explicit positions are never silently
+    moved (the author stated them on purpose) - this only closes the one
+    documented gap (yaml-spec.md sec6): auto layout didn't used to look at
+    explicit siblings at all. overlap_warnings() remains authoritative and
+    still flags anything this simple push doesn't fully resolve.
+    """
+    if not explicit:
+        return
+    for a in auto:
+        for _ in range(len(explicit) + 1):  # bounded: at most one push per explicit sibling
+            hit = next(
+                (e for e in explicit if _rects_overlap(_local_footprint_rect(a), _local_footprint_rect(e))), None
+            )
+            if hit is None:
+                break
+            _, hit_y, _, hit_h = _local_footprint_rect(hit)
+            dx, dy = content_offset(a)
+            a.local_y = (hit_y + hit_h + gap) + dy
+
 
 def _bbox(children: list[Box], content_top: float, padding: float) -> tuple[float, float]:
     if not children:
@@ -129,7 +165,7 @@ def _bbox(children: list[Box], content_top: float, padding: float) -> tuple[floa
     return max_x + padding, max_y + padding
 
 
-def measure(element: Element, registry: Registry) -> Box:
+def measure(element: Element, registry: MultiRegistry) -> Box:
     if element.kind == "node":
         return _measure_node(element, registry)
 
@@ -155,7 +191,7 @@ def assign_absolute(box: Box, parent_abs_x: float = 0.0, parent_abs_y: float = 0
         assign_absolute(child, box.abs_x, box.abs_y)
 
 
-def build_layout(diagram: Diagram, registry: Registry) -> Box:
+def build_layout(diagram: Diagram, registry: MultiRegistry) -> Box:
     canvas_w, canvas_h = diagram.canvas.size
     root_element = Element(
         kind="container",
@@ -198,16 +234,45 @@ def _inflate_rect(rect: tuple[float, float, float, float], margin: float) -> tup
     return x - margin, y - margin, w + 2 * margin, h + 2 * margin
 
 
-def resolve_container_label_position(element: Element, registry: Registry) -> str:
+def resolve_container_label_position(element: Element, registry: MultiRegistry) -> str:
     """Same precedence render.py uses to pick a container's label position:
     the element's own style wins, then the registry's group default, then
     the schema's own "top-left" default. Shared so the overlap check can
     never disagree with what's actually drawn."""
-    group_style = registry.resolve_group(element.type)
+    group_style = registry.resolve_group(element.type, element.provider)
     return element.style.get("labelPosition") or (group_style.label_position if group_style else "top-left")
 
 
-def container_label_rect(box: Box, registry: Registry) -> tuple[float, float, float, float] | None:
+@dataclass
+class ResolvedContainerStyle:
+    border_color: str
+    fill_color: Optional[str]
+    border_width: float
+    dashed: bool
+    label_position: str
+    label_text: str
+    corner_icon: Optional[object]  # Path | None; typed loosely to avoid importing pathlib here
+
+
+def resolve_container_style(element: Element, registry: MultiRegistry) -> ResolvedContainerStyle:
+    """Every visual property of a container's own frame, resolved with the
+    same element.style > registry group > hardcoded-default precedence.
+    Shared by render.py (pptx) and preview.py (PNG) so the two renderers
+    can't drift apart."""
+    group_style = registry.resolve_group(element.type, element.provider)
+    style = element.style or {}
+    return ResolvedContainerStyle(
+        border_color=style.get("borderColor") or (group_style.border_color if group_style else "#5A6B86"),
+        fill_color=style.get("fillColor") or (group_style.fill_color if group_style else None),
+        border_width=style.get("borderWidth", group_style.border_width if group_style else 1),
+        dashed=group_style.dashed if group_style else False,
+        label_position=resolve_container_label_position(element, registry),
+        label_text=element.label if element.label is not None else (group_style.label if group_style else ""),
+        corner_icon=group_style.icon if group_style else None,
+    )
+
+
+def container_label_rect(box: Box, registry: MultiRegistry) -> tuple[float, float, float, float] | None:
     """Where a container's own label text is drawn: a CONTAINER_LABEL_RESERVE-
     tall strip spanning the full width, at the top or bottom edge per
     resolve_container_label_position(). None if the container has no label."""
@@ -219,7 +284,7 @@ def container_label_rect(box: Box, registry: Registry) -> tuple[float, float, fl
     return (box.abs_x, y, box.width, label_h)
 
 
-def overlap_warnings(root_box: Box, registry: Registry, margin: float = 0) -> list[str]:
+def overlap_warnings(root_box: Box, registry: MultiRegistry, margin: float = 0) -> list[str]:
     """Mechanically detect overlapping (or, with `margin` > 0, too-close)
     elements from their computed coordinates.
 
@@ -389,7 +454,7 @@ def link_render_plan(from_box: Box, to_box: Box, style: str) -> tuple[int, int, 
     return s_idx, e_idx, eff_style, path
 
 
-def link_crossing_warnings(root_box: Box, links: list[Link], registry: Registry, margin: float = 0) -> list[str]:
+def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegistry, margin: float = 0) -> list[str]:
     """Mechanically detect a link's rendered path - and its own label box -
     running through an unrelated element, a container's label text, or
     another link's label, using the exact same connection-point/routing
@@ -524,6 +589,28 @@ def link_crossing_warnings(root_box: Box, links: list[Link], registry: Registry,
                     f"{b.from_id!r} -> {b.to_id!r}"
                 )
 
+    return messages
+
+
+def icon_resolution_warnings(root_box: Box, registry: MultiRegistry) -> list[str]:
+    """sec9: an unresolved `type`, or a resolved entry whose file is
+    missing on disk, is a Warning (placeholder icon), not Fatal. Pure
+    lookup/`Path.exists()` - safe to run without rendering, so `validate`
+    catches the same issues `build` would (render.py no longer emits this
+    warning itself, to avoid a duplicate when build calls both)."""
+    messages: list[str] = []
+    for box in iter_boxes(root_box):
+        element = box.element
+        if element.kind != "node":
+            continue
+        icon_entry = registry.resolve_icon(element.type, element.provider)
+        if icon_entry is None:
+            messages.append(
+                f"unknown type {element.type!r} for node {element.id!r} (provider {element.provider!r}); "
+                "using placeholder icon"
+            )
+        elif not icon_entry.file.exists():
+            messages.append(f"icon file missing for type {element.type!r} ({icon_entry.file}); using placeholder icon")
     return messages
 
 

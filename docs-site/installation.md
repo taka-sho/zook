@@ -24,21 +24,29 @@ python3 -m venv .venv
 ```
 
 ```text
-Usage: archdiagram [OPTIONS] INPUT_PATH
+Usage: archdiagram [OPTIONS] COMMAND [ARGS]...
+
+  archdiagram: generate PowerPoint architecture diagrams from a YAML
+  definition.
 
 Options:
-  -o, --output FILE  Output .pptx path.  [required]
-  --registry FILE    Optional icon registry YAML layered on top of the built-
-                      in AWS registry (same keys override).
-  --help              Show this message and exit.
+  --help  Show this message and exit.
+
+Commands:
+  build     Generate a .pptx from INPUT_PATH.
+  icons     Inspect the icon/group registry.
+  preview   Render a quick PNG preview of INPUT_PATH (no...
+  validate  Check INPUT_PATH for Fatal/Warning issues without rendering a...
 ```
+
+各サブコマンドの詳細は[使い方](usage.md)を参照してください。
 
 ## 動作確認
 
 同梱のサンプル YAML(`docs/example.yaml`)から pptx を生成できることを確認してください。
 
 ```bash
-.venv/bin/archdiagram docs/example.yaml -o example.pptx
+.venv/bin/archdiagram build docs/example.yaml -o example.pptx
 ```
 
 `Wrote example.pptx` と表示され、終了コード `0` であれば成功です。

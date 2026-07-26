@@ -25,17 +25,16 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
-from .errors import Warnings
 from .layout import (
     LABEL_BOX_HEIGHT,
     Box,
     content_offset,
     label_gap,
     link_render_plan,
-    resolve_container_label_position,
+    resolve_container_style,
 )
 from .model import Diagram, Link
-from .registry import Registry
+from .registry import MultiRegistry
 
 LOGICAL_TO_EMU = 9525
 LOGICAL_TO_PT = LOGICAL_TO_EMU / 12700  # 1pt = 12700 EMU
@@ -59,50 +58,42 @@ def _apply_label_position(text_frame, position: str) -> None:
         p.alignment = align
 
 
-def _add_container_rect(shapes, box: Box, registry: Registry):
+def _add_container_rect(shapes, box: Box, registry: MultiRegistry):
     element = box.element
-    group_style = registry.resolve_group(element.type)
-    style = element.style or {}
-
-    border_color = style.get("borderColor") or (group_style.border_color if group_style else "#5A6B86")
-    fill_color = style.get("fillColor") or (group_style.fill_color if group_style else None)
-    border_width = style.get("borderWidth", group_style.border_width if group_style else 1)
-    dashed = group_style.dashed if group_style else False
-    label_position = resolve_container_label_position(element, registry)
-    label_text = element.label if element.label is not None else (group_style.label if group_style else "")
+    style = resolve_container_style(element, registry)
 
     rect = shapes.add_shape(MSO_SHAPE.RECTANGLE, E(box.abs_x), E(box.abs_y), E(box.width), E(box.height))
-    if fill_color:
+    if style.fill_color:
         rect.fill.solid()
-        rect.fill.fore_color.rgb = RGBColor.from_string(fill_color.lstrip("#"))
+        rect.fill.fore_color.rgb = RGBColor.from_string(style.fill_color.lstrip("#"))
     else:
         rect.fill.background()
-    rect.line.color.rgb = RGBColor.from_string(border_color.lstrip("#"))
-    rect.line.width = Pt(border_width)
-    if dashed:
+    rect.line.color.rgb = RGBColor.from_string(style.border_color.lstrip("#"))
+    rect.line.width = Pt(style.border_width)
+    if style.dashed:
         _set_dashed(rect.line)
     rect.shadow.inherit = False
 
     tf = rect.text_frame
     tf.word_wrap = True
     tf.margin_left = tf.margin_top = tf.margin_right = tf.margin_bottom = Pt(4)
-    tf.text = label_text
-    _apply_label_position(tf, label_position)
+    tf.text = style.label_text
+    _apply_label_position(tf, style.label_position)
     for p in tf.paragraphs:
         p.font.size = Pt(10)
-        p.font.color.rgb = RGBColor.from_string(border_color.lstrip("#"))
+        p.font.color.rgb = RGBColor.from_string(style.border_color.lstrip("#"))
 
     # Corner badge (e.g. the AWS Cloud logo) marks visually where a boundary
     # like "AWS Cloud" starts, per groups.<type>.icon in the icon registry.
-    if group_style and group_style.icon and group_style.icon.exists() and "left" in label_position:
+    if style.corner_icon and style.corner_icon.exists() and "left" in style.label_position:
         badge_x = box.abs_x + CORNER_BADGE_PADDING
         badge_y = (
             box.abs_y + CORNER_BADGE_PADDING
-            if "top" in label_position
+            if "top" in style.label_position
             else box.abs_y + box.height - CORNER_BADGE_PADDING - CORNER_BADGE_SIZE
         )
         shapes.add_picture(
-            str(group_style.icon), E(badge_x), E(badge_y), E(CORNER_BADGE_SIZE), E(CORNER_BADGE_SIZE)
+            str(style.corner_icon), E(badge_x), E(badge_y), E(CORNER_BADGE_SIZE), E(CORNER_BADGE_SIZE)
         )
         tf.margin_left = Pt((CORNER_BADGE_SIZE + CORNER_BADGE_PADDING) * LOGICAL_TO_PT)
 
@@ -134,17 +125,17 @@ def _add_node_label(shapes, box: Box, text: str, position: str) -> None:
     tf.paragraphs[0].font.size = Pt(9)
 
 
-def _add_node(shapes, box: Box, registry: Registry, warnings: Warnings):
+def _add_node(shapes, box: Box, registry: MultiRegistry):
+    # Unresolved type / missing icon file are reported by
+    # layout.icon_resolution_warnings() (run once, before rendering, so
+    # `validate` sees the same warnings `build` would) - fall back to the
+    # placeholder silently here rather than reporting it a second time.
     element = box.element
-    icon_entry = registry.resolve_icon(element.type)
-    if icon_entry is None:
-        warnings.add(f"unknown type {element.type!r} for node {element.id!r}; using placeholder icon")
+    icon_entry = registry.resolve_icon(element.type, element.provider)
+    if icon_entry is None or not icon_entry.file.exists():
         icon_path = registry.placeholder_icon
     else:
         icon_path = icon_entry.file
-        if not icon_path.exists():
-            warnings.add(f"icon file missing for type {element.type!r} ({icon_path}); using placeholder icon")
-            icon_path = registry.placeholder_icon
 
     pic = shapes.add_picture(str(icon_path), E(box.abs_x), E(box.abs_y), E(box.width), E(box.height))
 
@@ -157,7 +148,7 @@ def _add_node(shapes, box: Box, registry: Registry, warnings: Warnings):
     return pic
 
 
-def _render_element(shapes, box: Box, registry: Registry, warnings: Warnings, shape_index: dict) -> None:
+def _render_element(shapes, box: Box, registry: MultiRegistry, shape_index: dict) -> None:
     element = box.element
     if element.is_container:
         group = shapes.add_group_shape()
@@ -165,9 +156,9 @@ def _render_element(shapes, box: Box, registry: Registry, warnings: Warnings, sh
         rect = _add_container_rect(group_shapes, box, registry)
         shape_index[element.id] = (rect, box)
         for child in box.children:
-            _render_element(group_shapes, child, registry, warnings, shape_index)
+            _render_element(group_shapes, child, registry, shape_index)
     else:
-        pic = _add_node(shapes, box, registry, warnings)
+        pic = _add_node(shapes, box, registry)
         shape_index[element.id] = (pic, box)
 
 
@@ -216,7 +207,7 @@ def _render_link(shapes, link: Link, shape_index: dict) -> None:
         _add_link_label(shapes, conn, link.label)
 
 
-def render(diagram: Diagram, root_box: Box, registry: Registry, warnings: Warnings) -> Presentation:
+def render(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> Presentation:
     prs = Presentation()
     canvas_w, canvas_h = diagram.canvas.size
     prs.slide_width = E(canvas_w)
@@ -229,7 +220,7 @@ def render(diagram: Diagram, root_box: Box, registry: Registry, warnings: Warnin
 
     shape_index: dict[str, tuple] = {}
     for child_box in root_box.children:
-        _render_element(slide.shapes, child_box, registry, warnings, shape_index)
+        _render_element(slide.shapes, child_box, registry, shape_index)
 
     for link in diagram.links:
         _render_link(slide.shapes, link, shape_index)

@@ -1,0 +1,41 @@
+registryVersion: "1.0"
+provider: gcp
+iconSet: "Google Cloud Icons (record the exact release you vendored)"
+basePath: "."
+defaults:
+  size: 64
+  ext: png
+
+# ---- Nodes: Tier-1 starter vocabulary (mirrors registry.aws.yaml's categories) ----
+icons:
+  # Compute
+  ComputeEngine: { file: "Compute/ComputeEngine.png", category: Compute, aliases: [computeengine, gce] }
+  CloudFunctions: { file: "Compute/CloudFunctions.png", category: Compute, aliases: [cloudfunctions, cloudfunction, cf] }
+  GKE: { file: "Compute/GKE.png", category: Compute, aliases: [gke, kubernetesengine] }
+  CloudRun: { file: "Compute/CloudRun.png", category: Compute, aliases: [cloudrun] }
+  # Storage
+  CloudStorage: { file: "Storage/CloudStorage.png", category: Storage, aliases: [cloudstorage, gcs] }
+  PersistentDisk: { file: "Storage/PersistentDisk.png", category: Storage, aliases: [persistentdisk, pd] }
+  # Database
+  CloudSQL: { file: "Database/CloudSQL.png", category: Database, aliases: [cloudsql] }
+  Firestore: { file: "Database/Firestore.png", category: Database, aliases: [firestore] }
+  BigQuery: { file: "Database/BigQuery.png", category: Database, aliases: [bigquery, bq] }
+  Memorystore: { file: "Database/Memorystore.png", category: Database, aliases: [memorystore, redis] }
+  # Networking
+  CloudLoadBalancing: { file: "Networking/CloudLoadBalancing.png", category: Networking, aliases: [cloudloadbalancing, clb, loadbalancer] }
+  CloudCDN: { file: "Networking/CloudCDN.png", category: Networking, aliases: [cloudcdn, cdn] }
+  CloudDNS: { file: "Networking/CloudDNS.png", category: Networking, aliases: [clouddns, dns] }
+  APIGateway: { file: "Networking/APIGateway.png", category: Networking, aliases: [apigateway, apigw] }
+  CloudNAT: { file: "Networking/CloudNAT.png", category: Networking, aliases: [cloudnat, nat] }
+  # Application Integration
+  PubSub: { file: "Integration/PubSub.png", category: Integration, aliases: [pubsub] }
+  Eventarc: { file: "Integration/Eventarc.png", category: Integration, aliases: [eventarc] }
+  # Security
+  CloudIAM: { file: "Security/CloudIAM.png", category: Security, aliases: [cloudiam, iam] }
+  IdentityPlatform: { file: "Security/IdentityPlatform.png", category: Security, aliases: [identityplatform] }
+
+# ---- Containers: frame styles ----
+groups:
+  cloud: { label: "Google Cloud", borderColor: "#4285F4", dashed: false, labelPosition: top-left, icon: "General/gcp-cloud-badge.png" }
+  vpc: { label: "VPC Network", borderColor: "#4285F4", dashed: false, labelPosition: top-left }
+  project: { label: "Project", borderColor: "#EA4335", dashed: false, labelPosition: top-left, aliases: [account] }

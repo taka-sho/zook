@@ -11,9 +11,9 @@ from archdiagram.layout import (
     overlap_warnings,
 )
 from archdiagram.model import Canvas, Diagram, Element, Layout, Link
-from archdiagram.registry import load_registry
+from archdiagram.registry import load_registries
 
-REGISTRY = load_registry("aws")
+REGISTRY = load_registries()
 
 
 def _diagram(elements, links=None, aspect_ratio="16:9"):
@@ -79,6 +79,60 @@ def test_explicit_and_auto_children_coexist():
     # explicit child keeps author-specified local position (relative to parent)
     assert boxes["fixed"].abs_x == boxes["c"].abs_x + 5
     assert boxes["fixed"].abs_y == boxes["c"].abs_y + 5
+
+
+def test_auto_child_is_nudged_clear_of_an_overlapping_explicit_sibling():
+    explicit = Element(kind="node", id="fixed", type="EC2", provider="aws", x=0, y=0)
+    auto = Element(kind="node", id="auto", type="S3", provider="aws")
+    container = Element(
+        kind="container", id="c", type="vpc", provider="aws", layout=Layout(direction="grid"), children=[explicit, auto]
+    )
+    diagram = _diagram([container])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root, REGISTRY) == []
+
+
+def test_avoidance_never_moves_the_explicit_sibling_itself():
+    explicit = Element(kind="node", id="fixed", type="EC2", provider="aws", x=0, y=0)
+    auto = Element(kind="node", id="auto", type="S3", provider="aws")
+    container = Element(kind="container", id="c", type="vpc", provider="aws", children=[explicit, auto])
+    diagram = _diagram([container])
+    root = build_layout(diagram, REGISTRY)
+    boxes = _boxes_by_id(root)
+    assert boxes["fixed"].abs_x == boxes["c"].abs_x
+    assert boxes["fixed"].abs_y == boxes["c"].abs_y
+
+
+def test_avoidance_does_not_move_auto_children_that_were_never_overlapping():
+    from archdiagram.layout import measure
+
+    auto_alone = Element(kind="node", id="auto", type="S3", provider="aws")
+    container_alone = Element(kind="container", id="c", type="vpc", provider="aws", children=[auto_alone])
+    box_alone = measure(container_alone, REGISTRY)
+    alone_local = (box_alone.children[0].local_x, box_alone.children[0].local_y)
+
+    explicit = Element(kind="node", id="fixed", type="EC2", provider="aws", x=1000, y=1000)
+    auto_with_neighbor = Element(kind="node", id="auto", type="S3", provider="aws")
+    container_with_neighbor = Element(
+        kind="container", id="c", type="vpc", provider="aws", children=[explicit, auto_with_neighbor]
+    )
+    box_with_neighbor = measure(container_with_neighbor, REGISTRY)
+    auto_box = next(b for b in box_with_neighbor.children if b.element.id == "auto")
+
+    # a far-off explicit sibling shouldn't nudge the auto child at all
+    assert (auto_box.local_x, auto_box.local_y) == alone_local
+
+
+def test_avoidance_handles_multiple_stacked_explicit_obstacles():
+    e1 = Element(kind="node", id="e1", type="EC2", provider="aws", x=0, y=0)
+    e2 = Element(kind="node", id="e2", type="EC2", provider="aws", x=0, y=90)
+    auto = Element(kind="node", id="auto", type="S3", provider="aws")
+    container = Element(
+        kind="container", id="c", type="vpc", provider="aws", layout=Layout(direction="grid"), children=[e1, e2, auto]
+    )
+    diagram = _diagram([container])
+    root = build_layout(diagram, REGISTRY)
+    assert overlap_warnings(root, REGISTRY) == []
 
 
 def test_container_without_explicit_size_wraps_its_children():

@@ -1,20 +1,67 @@
 # 使い方
 
-## 基本
+archdiagram は `build`/`validate`/`icons`/`preview` の4つのサブコマンドを持ちます。
 
 ```bash
-archdiagram <input.yaml> -o <output.pptx>
+archdiagram --help
+```
+
+## build — PowerPoint を生成する
+
+```bash
+archdiagram build <input.yaml> -o <output.pptx>
 ```
 
 - `input.yaml` — [YAML入力仕様](yaml-guide.md)に従った構成定義ファイル
 - `-o, --output` — 出力する `.pptx` のパス(必須)
+- `--registry` — 独自レジストリで組み込みレジストリを上書き([アイコン・レジストリ](icons.md)参照)
+- `--strict` — Warning が1件でもあれば非ゼロ終了する(既定では Fatal のときのみ非ゼロ終了)
+- `--format {text,json,github}` — 出力形式(後述)
+
+## validate — レンダリングせずに検証だけ行う
+
+`build` から実際の pptx 生成(python-pptx 呼び出し)を除いたものです。スキーマ検証・意味検証・重なり検知はすべて行われるため、LLM が生成した YAML を素早く検証するループに向いています。
+
+```bash
+archdiagram validate diagram.yaml
+archdiagram validate diagram.yaml --strict          # Warningも失敗扱いにする
+archdiagram validate diagram.yaml --format json      # CI向けの機械可読出力
+```
+
+## icons list — 登録済みアイコン・コンテナ種別を一覧表示
+
+```bash
+archdiagram icons list                  # aws/gcp/azure すべて
+archdiagram icons list --provider gcp    # 特定プロバイダのみ
+archdiagram icons list --format json
+```
+
+```text
+[aws]
+  node   EC2                  [Compute] (aliases: ec2, AmazonEC2)
+  node   Lambda               [Compute] (aliases: lambda, AWSLambda)
+  ...
+  group  vpc
+  group  cloud
+  ...
+```
+
+`type` を書き間違えて Warning になる前に、実際に使える名前を確認できます。`--registry` を併用すると、独自レジストリを重ねた状態での一覧になります。
+
+## preview — 軽量PNGプレビュー
+
+PowerPoint も LibreOffice も使わずに、構成をすぐに目で確認できます(Pillow による簡易描画。実際の pptx とは見た目が多少異なります)。
+
+```bash
+archdiagram preview diagram.yaml -o diagram.png
+```
 
 ## 独自アイコン・スタイルで上書きする
 
-`--registry` オプションで、組み込みの AWS レジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。
+`--registry` オプション(`build`/`validate`/`icons list`/`preview` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
 
 ```bash
-archdiagram diagram.yaml -o diagram.pptx --registry my-registry.yaml
+archdiagram build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 ```
 
 `my-registry.yaml` は [`icon-registry.schema.json`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry.schema.json) に従った形式です。詳細は[アイコン・レジストリ](icons.md)を参照してください。
@@ -32,7 +79,7 @@ archdiagram は「構造的な破綻」と「描画上の軽微な問題」を�
 - `links` の `from`/`to` が存在しない `id` を参照している
 
 ```bash
-$ archdiagram broken.yaml -o out.pptx
+$ archdiagram build broken.yaml -o out.pptx
 Error: Duplicate element id(s): web
 $ echo $?
 1
@@ -40,31 +87,36 @@ $ echo $?
 
 ### Warning(標準エラー出力に出力して継続)
 
-以下は警告を出しつつ生成を継続します(終了コードは `0`)。
+以下は警告を出しつつ生成を継続します(終了コードは既定 `0`。`--strict` を付けると `1`)。
 
 - `type` がレジストリで解決できない(未知のサービス名) → プレースホルダーアイコンで描画
 - 要素の座標がキャンバス範囲外 → クリップせずそのまま配置
-- 要素同士が座標上で重なっている(兄弟要素間) → 計算済みの座標から機械的に矩形の重なりを検出して警告(自動修正はしない)。明示座標・自動配置のどちらで決まった位置でも同じロジックで検出される
-- 子要素がコンテナ自身のラベル文字の領域と重なっている(自動配置の子はこの領域を避けて配置されるため引っかからないが、明示座標の子は避けない)
-- リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告。コンテナのラベルとの重なりは祖先コンテナであっても除外されない(本体を通り抜けるのは正常だが、ラベル文字を貫通するのは見た目上おかしいため)
+- 要素同士が座標上で重なっている(兄弟要素間) → 計算済みの座標から機械的に矩形の重なりを検出して警告。明示座標の子は自動修正しないが、**自動配置の子は明示座標の兄弟と重なる場合に自動でずらされる**(それでも重なりが解消しない場合のみ警告される)
+- 子要素がコンテナ自身のラベル文字の領域と重なっている
+- リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告。コンテナのラベルとの重なりは祖先コンテナであっても除外されない
 
 いずれも `canvas.overlapMargin`([YAML入力仕様](yaml-guide.md#canvas)参照)を設定すると、文字通りの重なりだけでなく「近すぎる」状態も検知対象にできます。
 
 ```bash
-$ archdiagram diagram.yaml -o out.pptx
+$ archdiagram build diagram.yaml -o out.pptx
 Warning: unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon
 Warning: element 'web' overlaps element 'cache'
-Warning: element 'web' overlaps the label of container 'vpc-main'
-Warning: link 'web' -> 'db' passes through element 'cache'
-Warning: link 'web' -> 'db' passes through the label of container 'vpc-main'
-Warning: the label of link 'web' -> 'db' overlaps element 'cache'
 Wrote out.pptx
 ```
 
-CI/CD パイプラインからは、この終了コードでゲートを掛けられます(Fatal のみブロックし、Warning は許容する運用を想定)。
+### 機械可読な出力(`--format`)
+
+`build`/`validate` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
+
+```bash
+$ archdiagram validate diagram.yaml --format json
+{"status": "warning", "warnings": ["unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon"]}
+```
+
+CI/CD パイプラインからは、終了コード(`--strict` 併用可)や `--format` の出力でゲートを掛けられます。
 
 ## 生成される PowerPoint について
 
 - VPC → AZ → サービスのような入れ子構造は、PowerPoint 上でも階層グループとして生成されます。各階層を個別にドラッグ・編集できます。
 - コネクタ(矢印)は矩形図形(アイコン・コンテナ枠)同士の接続点に接続され、図形移動にある程度追従します(詳細は[内部設計メモ](design-notes.md)を参照)。
-- 生成される図は「後編集の起点」として十分な品質を目標としており、完璧な自動レイアウトは行いません。要素の重なりは Warning として検出されますが自動では回避されないため、PowerPoint 上で手直しする前提です。
+- 生成される図は「後編集の起点」として十分な品質を目標としており、完璧な自動レイアウトは行いません。重なりの一部(自動配置 vs 明示座標)は自動で回避されますが、それ以外の重なりは Warning として検出されるのみで、PowerPoint 上で手直しする前提です。

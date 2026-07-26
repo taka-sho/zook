@@ -1,0 +1,41 @@
+registryVersion: "1.0"
+provider: azure
+iconSet: "Azure Architecture Icons (record the exact release you vendored)"
+basePath: "."
+defaults:
+  size: 64
+  ext: png
+
+# ---- Nodes: Tier-1 starter vocabulary (mirrors registry.aws.yaml's categories) ----
+icons:
+  # Compute
+  VirtualMachine: { file: "Compute/VirtualMachine.png", category: Compute, aliases: [virtualmachine, vm] }
+  Functions: { file: "Compute/Functions.png", category: Compute, aliases: [azurefunctions, func] }
+  AKS: { file: "Compute/AKS.png", category: Compute, aliases: [aks, kubernetesservice] }
+  ContainerApps: { file: "Compute/ContainerApps.png", category: Compute, aliases: [containerapps] }
+  # Storage
+  BlobStorage: { file: "Storage/BlobStorage.png", category: Storage, aliases: [blobstorage, blob, storage] }
+  ManagedDisk: { file: "Storage/ManagedDisk.png", category: Storage, aliases: [manageddisk, disk] }
+  # Database
+  SQLDatabase: { file: "Database/SQLDatabase.png", category: Database, aliases: [sqldatabase, sql] }
+  CosmosDB: { file: "Database/CosmosDB.png", category: Database, aliases: [cosmosdb] }
+  CacheForRedis: { file: "Database/CacheForRedis.png", category: Database, aliases: [cacheforredis, rediscache, redis] }
+  # Networking
+  LoadBalancer: { file: "Networking/LoadBalancer.png", category: Networking, aliases: [loadbalancer, lb] }
+  FrontDoor: { file: "Networking/FrontDoor.png", category: Networking, aliases: [frontdoor, cdn] }
+  DNS: { file: "Networking/DNS.png", category: Networking, aliases: [dns] }
+  APIManagement: { file: "Networking/APIManagement.png", category: Networking, aliases: [apimanagement, apim, apigateway] }
+  NATGateway: { file: "Networking/NATGateway.png", category: Networking, aliases: [natgateway, nat] }
+  # Integration
+  ServiceBus: { file: "Integration/ServiceBus.png", category: Integration, aliases: [servicebus] }
+  EventGrid: { file: "Integration/EventGrid.png", category: Integration, aliases: [eventgrid] }
+  # Security
+  EntraID: { file: "Security/EntraID.png", category: Security, aliases: [entraid, azuread, aad, iam] }
+  KeyVault: { file: "Security/KeyVault.png", category: Security, aliases: [keyvault] }
+
+# ---- Containers: frame styles ----
+groups:
+  cloud: { label: "Microsoft Azure", borderColor: "#0078D4", dashed: false, labelPosition: top-left, icon: "General/azure-cloud-badge.png" }
+  vpc: { label: "Virtual Network", borderColor: "#0078D4", dashed: false, labelPosition: top-left }
+  resourcegroup: { label: "Resource Group", borderColor: "#0078D4", dashed: true, labelPosition: top-left }
+  subscription: { label: "Subscription", borderColor: "#773ADC", dashed: false, labelPosition: top-left, aliases: [account] }

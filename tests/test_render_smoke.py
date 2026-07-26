@@ -4,9 +4,9 @@ import yaml
 from pptx import Presentation
 
 from archdiagram.errors import Warnings
-from archdiagram.layout import build_layout
+from archdiagram.layout import build_layout, icon_resolution_warnings
 from archdiagram.model import parse_diagram
-from archdiagram.registry import load_registry
+from archdiagram.registry import load_registries
 from archdiagram.render import render
 from archdiagram.validate import validate
 
@@ -17,10 +17,12 @@ CLOUD_ACTORS_FIXTURE = Path(__file__).parent / "fixtures" / "example-cloud-actor
 def _build(raw):
     validate(raw)
     diagram = parse_diagram(raw)
-    registry = load_registry("aws")
+    registry = load_registries()
     root_box = build_layout(diagram, registry)
     warnings = Warnings()
-    presentation = render(diagram, root_box, registry, warnings)
+    for message in icon_resolution_warnings(root_box, registry):
+        warnings.add(message)
+    presentation = render(diagram, root_box, registry)
     return presentation, warnings
 
 
@@ -75,7 +77,7 @@ elements:
 """
     )
     runner = CliRunner()
-    result = runner.invoke(main, [str(bad_yaml), "-o", str(tmp_path / "out.pptx")])
+    result = runner.invoke(main, ["build", str(bad_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 1
     assert "Duplicate" in result.output
 
@@ -87,7 +89,7 @@ def test_cli_succeeds_on_example_yaml(tmp_path):
 
     out_path = tmp_path / "out.pptx"
     runner = CliRunner()
-    result = runner.invoke(main, [str(FIXTURE), "-o", str(out_path)])
+    result = runner.invoke(main, ["build", str(FIXTURE), "-o", str(out_path)])
     assert result.exit_code == 0
     assert out_path.exists()
 
@@ -107,7 +109,7 @@ def test_cli_succeeds_on_example_cloud_actors(tmp_path):
 
     out_path = tmp_path / "out.pptx"
     runner = CliRunner()
-    result = runner.invoke(main, [str(CLOUD_ACTORS_FIXTURE), "-o", str(out_path)])
+    result = runner.invoke(main, ["build", str(CLOUD_ACTORS_FIXTURE), "-o", str(out_path)])
     assert result.exit_code == 0
     assert out_path.exists()
 
@@ -137,7 +139,7 @@ elements:
 """
     )
     runner = CliRunner()
-    result = runner.invoke(main, [str(overlapping_yaml), "-o", str(tmp_path / "out.pptx")])
+    result = runner.invoke(main, ["build", str(overlapping_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
     assert "overlaps" in (result.output + result.stderr)
 
@@ -175,6 +177,90 @@ links:
 """
     )
     runner = CliRunner()
-    result = runner.invoke(main, [str(crossing_yaml), "-o", str(tmp_path / "out.pptx")])
+    result = runner.invoke(main, ["build", str(crossing_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
     assert "passes through element 'b'" in (result.output + result.stderr)
+
+
+def test_cli_strict_exits_nonzero_on_warning(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    unknown_yaml = tmp_path / "unknown.yaml"
+    unknown_yaml.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: a
+    type: NotARealService
+"""
+    )
+    runner = CliRunner()
+    lenient = runner.invoke(main, ["build", str(unknown_yaml), "-o", str(tmp_path / "out1.pptx")])
+    assert lenient.exit_code == 0
+
+    strict = runner.invoke(main, ["build", str(unknown_yaml), "-o", str(tmp_path / "out2.pptx"), "--strict"])
+    assert strict.exit_code == 1
+
+
+def test_cli_validate_does_not_write_a_file(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(main, ["validate", str(FIXTURE)])
+        assert result.exit_code == 0
+        assert not any(Path(".").iterdir())
+
+
+def test_cli_validate_catches_unresolved_icon_without_rendering():
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("unknown.yaml").write_text(
+            """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: a
+    type: NotARealService
+"""
+        )
+        result = runner.invoke(main, ["validate", "unknown.yaml", "--format", "json"])
+        assert result.exit_code == 0
+        assert "NotARealService" in result.output
+
+
+def test_cli_icons_list_includes_builtin_aws_service():
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["icons", "list", "--provider", "aws"])
+    assert result.exit_code == 0
+    assert "EC2" in result.output
+
+
+def test_cli_preview_writes_a_png(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    out_path = tmp_path / "out.png"
+    runner = CliRunner()
+    result = runner.invoke(main, ["preview", str(FIXTURE), "-o", str(out_path)])
+    assert result.exit_code == 0
+    assert out_path.exists()
+    assert out_path.stat().st_size > 0

@@ -1,10 +1,10 @@
-"""Generate placeholder PNG icons for the Tier-1 AWS vocabulary.
+"""Generate placeholder PNG icons for the Tier-1 aws/gcp/azure vocabularies.
 
-These are NOT official AWS icons (not sourced/licensed here) - just distinct,
-readable stand-ins so the tool is runnable end-to-end. Swapping in the real
-AWS Architecture Icons later is a drop-in file replacement: keep the same
-`file` paths in registry.aws.yaml, no code changes needed (per
-docs/icon-registry-and-vocabulary.md sec8).
+These are NOT official cloud-provider icons (not sourced/licensed here) -
+just distinct, readable stand-ins so the tool is runnable end-to-end.
+Swapping in real vendor icons later is a drop-in file replacement: keep the
+same `file` paths in each registry.<provider>.yaml, no code changes needed
+(per docs/icon-registry-and-vocabulary.md sec8).
 
 Rasterization follows the confirmed decision in
 docs/detailed-design-pptx.md sec8.6: render at 4x the logical display size
@@ -21,8 +21,7 @@ import cairosvg
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-REGISTRY_PATH = REPO_ROOT / "src/archdiagram/data/icons/aws/registry.aws.yaml"
-OUT_DIR = REGISTRY_PATH.parent
+PROVIDERS = ["aws", "gcp", "azure"]
 RASTER_SCALE = 4  # confirmed in detailed-design-pptx.md sec8.6
 
 CATEGORY_COLORS = {
@@ -35,7 +34,6 @@ CATEGORY_COLORS = {
     "General": "#3B48CC",
 }
 DEFAULT_COLOR = "#5A6B86"
-CLOUD_BADGE_COLOR = "#232F3E"
 
 
 def _abbrev(key: str) -> str:
@@ -88,20 +86,22 @@ def _rasterize(svg_text: str, out_path: Path, size_logical_units: float) -> None
     cairosvg.svg2png(bytestring=svg_text.encode("utf-8"), write_to=str(out_path), output_width=px, output_height=px)
 
 
-def main() -> None:
-    registry = yaml.safe_load(REGISTRY_PATH.read_text())
+def _generate_for_provider(provider: str) -> None:
+    registry_path = REPO_ROOT / f"src/archdiagram/data/icons/{provider}/registry.{provider}.yaml"
+    out_dir = registry_path.parent
+    registry = yaml.safe_load(registry_path.read_text())
     default_size = registry.get("defaults", {}).get("size", 64)
 
     for key, spec in registry["icons"].items():
         category = spec.get("category")
         color = CATEGORY_COLORS.get(category, DEFAULT_COLOR)
         svg_text = _actor_svg(_abbrev(key), color) if category == "General" else _icon_svg(_abbrev(key), color)
-        out_path = OUT_DIR / spec["file"]
+        out_path = out_dir / spec["file"]
         size = spec.get("size", default_size)
         _rasterize(svg_text, out_path, size)
         print(f"wrote {out_path}")
 
-    placeholder_path = OUT_DIR / "_placeholder.png"
+    placeholder_path = out_dir / "_placeholder.png"
     _rasterize(_placeholder_svg(), placeholder_path, default_size)
     print(f"wrote {placeholder_path}")
 
@@ -109,9 +109,16 @@ def main() -> None:
     for spec in registry.get("groups", {}).values():
         if not spec.get("icon"):
             continue
-        out_path = OUT_DIR / spec["icon"]
-        _rasterize(_cloud_badge_svg(CLOUD_BADGE_COLOR), out_path, badge_size)
+        out_path = out_dir / spec["icon"]
+        # Corner badge uses the group's own brand border color (e.g. AWS
+        # squid ink, Google blue, Azure blue) instead of one fixed color.
+        _rasterize(_cloud_badge_svg(spec.get("borderColor", DEFAULT_COLOR)), out_path, badge_size)
         print(f"wrote {out_path}")
+
+
+def main() -> None:
+    for provider in PROVIDERS:
+        _generate_for_provider(provider)
 
 
 if __name__ == "__main__":

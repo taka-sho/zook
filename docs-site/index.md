@@ -29,7 +29,7 @@ links:
 ```
 
 ```bash
-archdiagram diagram.yaml -o diagram.pptx
+archdiagram build diagram.yaml -o diagram.pptx
 ```
 
 ## なぜ archdiagram なのか
@@ -43,16 +43,18 @@ archdiagram diagram.yaml -o diagram.pptx
 
 | 機能 | 概要 |
 |---|---|
-| 階層コンテナ | AWS Cloud → VPC → AZ → subnet のような入れ子構造を `container` の再帰 `children` で表現 |
-| AWS Cloud 境界 | `type: cloud` でクラウド境界そのものを枠として描画。隅にバッジアイコン付き |
+| マルチクラウド | AWS/GCP/Azure の組み込みレジストリを同梱。ノードごとに `provider` を指定して混在可能 |
+| 階層コンテナ | Cloud → VPC → AZ → subnet のような入れ子構造を `container` の再帰 `children` で表現 |
+| クラウド境界 | `type: cloud` でクラウド境界そのものを枠として描画。プロバイダごとのブランドカラー・バッジアイコン付き |
 | アクターアイコン | User/Admin/Developer/Client など、構成にアクセスする人物・役割をノードとして配置可能 |
-| 自動レイアウト | 座標未指定の要素を grid/horizontal/vertical で自動整列。明示座標との混在も可能 |
+| 自動レイアウト | 座標未指定の要素を grid/horizontal/vertical で自動整列。明示座標との混在も可能。自動配置の要素は明示座標の兄弟と重ならないよう自動でずれる |
 | コネクタ | サービス間の関係を矢印付き線で接続。ラベル(ポート番号等)も付与可能。コンテナへのリンクも可。斜めになる接続は自動で直角の折れ線に切り替え |
 | ラベル回避接続 | ラベル付きノードから同じ方向に矢印を伸ばすと、ラベルを避けてその外側に接続 |
-| アイコン解決 | エイリアス込み・大小文字無視でサービス名からアイコンを解決。未知のサービスは警告付きプレースホルダーで継続 |
+| アイコン解決 | エイリアス込み・大小文字無視でサービス名からアイコンを解決。未知のサービスは警告付きプレースホルダーで継続。`archdiagram icons list` で一覧表示 |
 | レジストリ上書き | 組み込みレジストリの上にユーザー独自のアイコン/スタイル定義を重ねられる |
 | 重なり検知 | 計算済みの座標から、兄弟要素同士・コンテナのラベル文字・矢印の経路・リンクラベルが互いに重なっていないかを機械的に検出し Warning で通知。`overlapMargin` で近接判定のバッファも設定可能 |
-| CI/CD 対応 | 構造的な誤り(スキーマ違反・id重複・リンク参照先不在)は非ゼロ終了。CLI 単体で動作 |
+| 軽量プレビュー | `archdiagram preview` で PowerPoint も LibreOffice も使わずにPNGですぐ確認 |
+| CI/CD 対応 | 構造的な誤り(スキーマ違反・id重複・リンク参照先不在)は非ゼロ終了。`--strict` で Warning もゲート可能。`--format json`/`github` で機械可読出力。`archdiagram validate` でレンダリングなしの高速チェックも可能 |
 
 ## ドキュメント構成
 

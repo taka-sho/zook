@@ -15,35 +15,42 @@ python3 -m venv .venv
 
 ## 使い方
 
+`build`(生成)/`validate`(検証のみ)/`icons list`(登録済みアイコン一覧)/`preview`(軽量PNG)の4サブコマンド。
+
 ```bash
-.venv/bin/archdiagram docs/example.yaml -o out.pptx
+.venv/bin/archdiagram build docs/example.yaml -o out.pptx
+.venv/bin/archdiagram validate docs/example.yaml --strict --format json
+.venv/bin/archdiagram icons list --provider gcp
+.venv/bin/archdiagram preview docs/example.yaml -o out.png
 
 # 独自アイコン/枠スタイルで組み込みレジストリを上書きする場合
-.venv/bin/archdiagram diagram.yaml -o out.pptx --registry my-registry.yaml
+.venv/bin/archdiagram build diagram.yaml -o out.pptx --registry my-registry.yaml
 ```
 
 - スキーマ違反・id重複・リンク参照先不在などの構造破綻は Fatal(標準エラー出力 + 非ゼロ終了)。
-- 未知の`type`・キャンバス範囲外の座標などは Warning(標準エラー出力に出して継続)。
+- 未知の`type`・キャンバス範囲外の座標・要素/ラベルの重なりなどは Warning(標準エラー出力に出して継続。`--strict` で非ゼロ終了に変更可能)。
+- `--format json`/`github` で機械可読出力(CI連携向け)。
 
 ## 構成
 
 ```
 src/archdiagram/
-  cli.py        CLIエントリポイント
+  cli.py        CLIエントリポイント(build/validate/icons/preview)
   validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照)
   model.py      パース後のデータモデル
-  registry.py   アイコン/枠スタイルのレジストリ解決(エイリアス・上書き対応)
-  layout.py     自動レイアウト(grid/horizontal/vertical、明示座標との混在)
+  registry.py   アイコン/枠スタイルのレジストリ解決(MultiRegistry、provider別・エイリアス・上書き対応)
+  layout.py     自動レイアウト(grid/horizontal/vertical、明示座標との混在、重複回避・検知)
   render.py     python-pptx によるスライド生成(階層グループ・コネクタ・ラベル)
+  preview.py    Pillow による軽量PNGプレビュー(LibreOffice/PowerPoint不要)
   schemas/      arch-diagram.schema.json / icon-registry.schema.json(docs/の写し)
-  data/icons/aws/  組み込みAWSレジストリ + プレースホルダーアイコンPNG
+  data/icons/{aws,gcp,azure}/  組み込みレジストリ + プレースホルダーアイコンPNG
 ```
 
 ## アイコンについて
 
-`src/archdiagram/data/icons/aws/` のPNGは AWS公式アイコンではなく、`scripts/generate_placeholder_icons.py` で生成した自作プレースホルダー(カテゴリ別配色+略称)。
+`src/archdiagram/data/icons/{aws,gcp,azure}/` のPNGは各社公式アイコンではなく、`scripts/generate_placeholder_icons.py` で生成した自作プレースホルダー(カテゴリ別配色+略称)。
 
-実際のAWS公式アイコンに差し替える場合は、`registry.aws.yaml` の `file` パスに合わせて画像を配置するだけでよい(コード変更不要)。ラスタライズ解像度は表示pxの4倍が目安(`docs/detailed-design-pptx.md` §8.6)。
+実際の公式アイコンに差し替える場合は、各 `registry.<provider>.yaml` の `file` パスに合わせて画像を配置するだけでよい(コード変更不要)。ラスタライズ解像度は表示pxの4倍が目安(`docs/detailed-design-pptx.md` §8.6)。
 
 ## テスト
 
@@ -53,8 +60,8 @@ src/archdiagram/
 
 ## 既知の制約(v1)
 
-- 自動レイアウトは重なり回避をしない第一版仕様(`docs/yaml-spec.md` §6)。重なりはWarningとして検出されるが自動修正はされないため、生成後の手編集を前提とする。
-- GCP/Azureの組み込みレジストリは未実装(`docs/README-index.md` §5、次版スコープ)。
+- 自動レイアウトは、自動配置の要素が明示座標の兄弟要素と重なる場合のみ自動でずらす(単純な「真下に押し出す」処理)。それ以外の重なりはWarningとして検出されるのみで自動修正はされないため、生成後の手編集を前提とする(`docs/yaml-spec.md` §6)。
+- AWS/GCP/Azureの組み込みレジストリはTier-1語彙(十数〜二十数サービス)のみ。それ以外は `--registry` でのユーザー拡張を想定。
 
 ## ドキュメントサイト(docs-site/)
 

@@ -3,7 +3,7 @@
 **バージョン:** 1.0
 **作成日:** 2026-07-25
 **対象:** 要求仕様書 §7.4、YAML入力仕様書 §10 の確定
-**関連ファイル:** `icon-registry.schema.json`, `registry.aws.yaml`
+**関連ファイル:** `icon-registry.schema.json`, `registry.aws.yaml`, `registry.gcp.yaml`, `registry.azure.yaml`
 
 ---
 
@@ -84,9 +84,10 @@
 3. ヒット → `basePath` + `file` を実ファイルに解決。
 4. ミス → Warning を出し、プレースホルダアイコンで継続。
 
-コンテナは同様に `groups` を引き、ヒットすれば枠スタイルを適用、なければ既定枠。
+コンテナは同様に `groups` を引く。**その provider 自身のレジストリに定義がなければ AWS レジストリの `groups` にフォールバック**する(vpc/az/subnet のような一般的な概念を GCP/Azure で毎回再定義しなくて済むようにするため)。`cloud` のようにプロバイダ固有の見た目にしたいものだけ、各プロバイダのレジストリで個別定義する。ヒットしなければ既定枠。
 
-- 検証済み：Tier 1 の 22 エントリ + 別名で lookup キー 35 個、**衝突なし**。`alb`→ELB、`AmazonEC2`→EC2、`ddb`→DynamoDB 等が解決可能。
+- 検証済み(AWS registry)：Tier 1 の 26 エントリ + 別名で lookup キー 46 個、**衝突なし**。`alb`→ELB、`AmazonEC2`→EC2、`ddb`→DynamoDB 等が解決可能。
+- 検証済み(実装フェーズ)：GCP/Azure レジストリ追加後、`MultiRegistry` が要素の `provider` に応じて正しいレジストリへディスパッチすること、および `groups` の AWS フォールバックが機能することをユニットテストで確認済み(`tests/test_registry.py`)。
 
 ## 5. 上書き（オーバーライド）機構
 
@@ -101,11 +102,13 @@
 - `iconSet` に採用リリースを明記し、アイコン一式ごと差し替え可能にする(vendoring)。
 - レジストリのキー(=YAML の `type`)は安定させ、更新時はファイル実体だけ入れ替える運用を基本とする。
 
-## 7. 他プロバイダへの拡張
+## 7. 他プロバイダへの拡張(実装フェーズで確定)
 
-- `registry.gcp.yaml` / `registry.azure.yaml` を同形式で追加するだけ。
+- `registry.gcp.yaml` / `registry.azure.yaml` を同形式で追加済み(それぞれ Tier-1 18サービス + `cloud`/`vpc`/固有アカウント概念の groups)。
 - スキーマ(`icon-registry.schema.json`)は共通。`provider` 値と `icons`/`groups` の中身が変わるだけ。
-- 図 YAML 側はノードに `provider: gcp` を付けるだけで切り替わる。
+- 図 YAML 側はノードに `provider: gcp` を付けるだけで切り替わる。1つの図の中で複数プロバイダを混在させることも可能(要素ごとに `provider` を個別指定できるため)。
+- 解決は `MultiRegistry`(`src/archdiagram/registry.py`)が担当。`aws`/`gcp`/`azure` を常にすべて読み込み、`--registry` で指定したユーザーレジストリはその **ファイル自身が宣言する `provider`** に重ねる(未知の値、例えば `custom` を宣言すれば独立した新しいプロバイダとして追加される)。
+- `archdiagram icons list [--provider <name>]` で、実際に解決可能な語彙を一覧確認できる。
 
 ## 8. 確定状況 & 申し送り
 
