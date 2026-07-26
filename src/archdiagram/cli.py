@@ -20,6 +20,7 @@ from .layout import (
     Box,
     build_layout,
     icon_resolution_warnings,
+    link_aliasing_warnings,
     link_crossing_warnings,
     out_of_canvas_warnings,
     overlap_warnings,
@@ -80,6 +81,8 @@ def _load_and_check(input_path: str, user_registry_path: str | None) -> tuple[Di
     for message in overlap_warnings(root_box, registry, margin):
         warnings.add(message)
     for message in link_crossing_warnings(root_box, diagram.links, registry, margin):
+        warnings.add(message)
+    for message in link_aliasing_warnings(root_box, diagram.links):
         warnings.add(message)
 
     return diagram, root_box, registry, warnings

@@ -7,6 +7,7 @@ from archdiagram.layout import (
     content_offset,
     effective_connector_style,
     label_box_height,
+    link_aliasing_warnings,
     link_crossing_warnings,
     link_label_size,
     link_render_plan,
@@ -652,3 +653,52 @@ def test_custom_link_label_font_size_scales_the_label_rect():
     default_w, default_h = link_label_size(8)
     big_w, big_h = link_label_size(16)
     assert (big_w, big_h) == (default_w * 2, default_h * 2)
+
+
+# --- Z-route false edge aliasing --------------------------------------------
+
+
+def test_two_links_meeting_at_the_same_edge_of_a_shared_node_are_flagged_as_aliasing():
+    # alb (above-left), vpc (below, centered), s3 (above-right) - reproduces
+    # the reported geometry: both alb->vpc and vpc->s3 pick VPC's top-center
+    # connection point (since |dy| > |dx| for both), so the Z-routes meet
+    # nose-to-tail there and read as one straight ALB->S3 line.
+    alb = Element(kind="node", id="alb", type="ELB", provider="aws", x=297, y=74, width=100, height=100)
+    vpc = Element(kind="container", id="vpc", type="vpc", provider="aws", x=405, y=229, width=300, height=300)
+    s3 = Element(kind="node", id="s3", type="S3", provider="aws", x=713, y=74, width=100, height=100)
+    diagram = _diagram([alb, vpc, s3], links=[Link(from_id="alb", to_id="vpc"), Link(from_id="vpc", to_id="s3")])
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_aliasing_warnings(root, diagram.links)
+    assert any(
+        "link 'alb' -> 'vpc' and link 'vpc' -> 's3' share a collinear segment" in w for w in warnings
+    )
+
+
+def test_unrelated_links_with_disjoint_routes_are_not_flagged_as_aliasing():
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=200, y=0)
+    c = Element(kind="node", id="c", type="EC2", provider="aws", x=400, y=400)
+    d = Element(kind="node", id="d", type="EC2", provider="aws", x=600, y=400)
+    diagram = _diagram([a, b, c, d], links=[Link(from_id="a", to_id="b"), Link(from_id="c", to_id="d")])
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_aliasing_warnings(root, diagram.links)
+    assert warnings == []
+
+
+def test_workaround_from_bug_report_no_longer_shares_an_edge_and_is_not_flagged():
+    # The bug report's own workaround: retarget alb->vpc to a lower-centered
+    # sibling (az-a) so |dx| > |dy| and a horizontal (not top) edge is
+    # chosen, no longer coinciding with vpc->s3's vertical top-edge route.
+    alb = Element(kind="node", id="alb", type="ELB", provider="aws", x=279, y=74, width=100, height=100)
+    az_a = Element(kind="node", id="az-a", type="EC2", provider="aws", x=479, y=216, width=100, height=100)
+    vpc = Element(kind="container", id="vpc", type="vpc", provider="aws", x=405, y=229, width=300, height=300)
+    s3 = Element(kind="node", id="s3", type="S3", provider="aws", x=713, y=74, width=100, height=100)
+    diagram = _diagram(
+        [alb, az_a, vpc, s3], links=[Link(from_id="alb", to_id="az-a"), Link(from_id="vpc", to_id="s3")]
+    )
+    root = build_layout(diagram, REGISTRY)
+
+    warnings = link_aliasing_warnings(root, diagram.links)
+    assert warnings == []

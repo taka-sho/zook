@@ -211,6 +211,19 @@
 - **`render.py`/`preview.py` 両方を更新**:pptx版は `Pt(font_size)` を各テキストフレームに設定し、テキストボックスの寸法にも `label_box_height()`/`link_label_size()` を使う。PNG プレビュー版も同じ解決関数(`node_label_font_size()`/`resolve_container_style().label_font_size`/`link.label_font_size`)を参照し、フォントサイズと矩形サイズが2つのレンダラー間で乖離しないようにした(§8.11 で確立した「共有関数で解決ロジックを1箇所にまとめる」方針を踏襲)。
 - LibreOffice レンダリングと `archdiagram preview` の両方で、コンテナラベル・ノードアイコン+ラベル・リンクラベルそれぞれを既定値/拡大値で比較し、両レンダラーの見た目が一致することを目視確認済み。
 
+### 8.13 Z ルートの false edge aliasing 検出(外部バグ報告により追加)
+
+要求(外部バグ報告):2本のリンクが共通ノードの同一接続点(例:コンテナの上端中央)を経由すると、`elbow` の Z ルートの線分が同一直線上で連続し、無関係な2要素が直接つながっているように見える。報告された具体例:水平レイアウトの中間ノード(ALB)を挟む `ALB→VPC`・`VPC→S3` の2本が、どちらも `choose_connection_indices()` の判定(`|dy|>|dx|`)で VPC の同じ辺(上端中央)を選び、Z ルートの水平区間が接触・整列して ALB→S3 の直接接続に見えてしまう。
+
+- **根本原因**:`choose_connection_indices()`/`connector_path()` は各リンクを1本ずつ独立に経路計算するため、複数リンクの経路が結果的に同一直線上に並ぶ状況を検知できない。既存の `link_crossing_warnings()` はリンクが無関係な要素・ラベルを**横切る**(交差する)ケースしか見ておらず、2本のリンクが同一直線上で**接触・整列**するケースは対象外だった。
+- **検出方式(報告書の案1を採用)**:新関数 `link_aliasing_warnings()` を追加。各リンクの経路(`link_render_plan()` で算出、既存の検知と同じ実描画ジオメトリ)を線分単位に分解し、全リンクペアについて総当たりで「軸(水平/垂直)が同じ・同一座標(直線)上にあり・範囲が重なるか1点でも触れる」線分の組を探す。1点だけ触れる(重複範囲がゼロ長)場合も検出対象に含めている点が肝で、報告書の例では2本の水平区間が VPC の接続点で1点だけ接触しているにすぎないが、それでも見た目上は連続した1本の線に見えるため。
+  - `_segment_axis_range()`:線分を `('h', y, (x_lo,x_hi))` / `('v', x, (y_lo,y_hi))` に正規化(斜めの線分は対象外 = None)。
+  - `_collinear_overlap()`:同じ軸・同じ座標で、範囲が `lo <= hi + epsilon` (touching含む)なら共有区間を返す。
+  - 検出は**交差(横切り)ではなく整列**を見ているため、`_segments_intersect()`/`_segment_intersects_rect()` とは別の判定ロジック(垂直に交わる場合は誤検知しない)。
+- Warning のみ。接続点をずらす・迂回するといった自動修正(報告書の案2・案3)は行わない - 既存の重なり検知と同じく「機械的検出 + 手直しは利用者側」という方針を踏襲(§8.8/§8.10 と同じ設計判断)。
+- **実例で検証**:この検出を実装した結果、同梱サンプル `example-cloud-actors.yaml` で実際に警告が発生することが判明した(`user→aws-cloud` と `admin→aws-cloud` が、どちらも `aws-cloud` コンテナの左辺中央という同一点に接続していたため)。`connection_point()` の左右接続(idx1/3)は常にそのボックス自身の辺の中心を返す設計(§8.2 で確定済み)であるため、相手ノードの位置に関わらず複数リンクが同じ点に収束しうる。サンプルは `admin` を VPC の下方に配置し直し(左辺ではなく下辺から接続させる)ことで解消し、"canonical な example は警告ゼロ" という既存の不変条件を回復した。
+- `tests/test_render_smoke.py` の `_build()` ヘルパーは、従来 `icon_resolution_warnings()` のみを集計しており、`overlap_warnings()`/`link_crossing_warnings()`/`link_aliasing_warnings()` を素通りしていた(=これらの回帰テストが実質チェックしていなかった)。CLI(`_load_and_check()`)が実際に集計する全チェックと揃うよう `_build()` を修正した。
+
 ## 9. 次アクション
 
 - [x] python-pptx で「VPC枠＋AZ＋アイコン＋ラベル」を階層グループ化する最小プロトタイプを作成(`prototype/build_prototype.py`)

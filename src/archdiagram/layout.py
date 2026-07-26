@@ -641,6 +641,91 @@ def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegi
     return messages
 
 
+def _segment_axis_range(
+    p1: tuple[float, float], p2: tuple[float, float], epsilon: float = 0.5
+) -> tuple[str, float, tuple[float, float]] | None:
+    """('h', y, (x_lo, x_hi)) or ('v', x, (y_lo, y_hi)) for an axis-aligned
+    segment; None for a diagonal one (straight links that stayed diagonal,
+    e.g. an explicit `style: straight` override, never alias this way)."""
+    if abs(p1[1] - p2[1]) < epsilon:
+        return ("h", (p1[1] + p2[1]) / 2, (min(p1[0], p2[0]), max(p1[0], p2[0])))
+    if abs(p1[0] - p2[0]) < epsilon:
+        return ("v", (p1[0] + p2[0]) / 2, (min(p1[1], p2[1]), max(p1[1], p2[1])))
+    return None
+
+
+def _collinear_overlap(
+    seg_a: tuple[tuple[float, float], tuple[float, float]],
+    seg_b: tuple[tuple[float, float], tuple[float, float]],
+    epsilon: float = 0.5,
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """The shared sub-segment of two axis-aligned segments that sit on the
+    same line, or None if they're on different lines or don't touch at all.
+    A single shared point (ranges that only touch at an endpoint) counts -
+    that's exactly the case where two Z-routes meet nose-to-tail and read
+    as one continuous line."""
+    a, b = _segment_axis_range(*seg_a, epsilon), _segment_axis_range(*seg_b, epsilon)
+    if a is None or b is None or a[0] != b[0]:
+        return None
+    axis, coord_a, (lo_a, hi_a) = a
+    _, coord_b, (lo_b, hi_b) = b
+    if abs(coord_a - coord_b) > epsilon:
+        return None
+    lo, hi = max(lo_a, lo_b), min(hi_a, hi_b)
+    if lo > hi + epsilon:
+        return None
+    return ((lo, coord_a), (hi, coord_a)) if axis == "h" else ((coord_a, lo), (coord_a, hi))
+
+
+def link_aliasing_warnings(root_box: Box, links: list[Link]) -> list[str]:
+    """Two distinct links can each independently pick a routing that, put
+    together, reads as one uninterrupted straight line - typically when
+    both attach to the exact same connection point of a node they share
+    (one arrives there, the other departs from it) and `choose_connection_
+    indices()` happens to pick the same edge for both, per the "Z-route
+    false edge aliasing" bug report. Detected by checking every segment of
+    one link's rendered path against every segment of another's for a
+    collinear, touching-or-overlapping run - not a crossing (perpendicular
+    hit), but the same-line continuation that makes two separate arrows
+    look like a single direct edge. Warning only; routing is unchanged."""
+    by_id, _ = _build_indices(root_box)
+
+    paths: list[list[tuple[float, float]] | None] = []
+    for link in links:
+        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
+        if from_box is None or to_box is None:
+            paths.append(None)  # dangling refs are Fatal elsewhere; defensive only
+            continue
+        _, _, _, path = link_render_plan(from_box, to_box, link.style)
+        paths.append(path)
+
+    messages: list[str] = []
+    for i in range(len(links)):
+        path_i = paths[i]
+        if path_i is None:
+            continue
+        segments_i = list(zip(path_i, path_i[1:]))
+        for j in range(i + 1, len(links)):
+            path_j = paths[j]
+            if path_j is None:
+                continue
+            segments_j = list(zip(path_j, path_j[1:]))
+            overlap = next(
+                (o for seg_a in segments_i for seg_b in segments_j if (o := _collinear_overlap(seg_a, seg_b))),
+                None,
+            )
+            if overlap is None:
+                continue
+            (x0, y0), (x1, y1) = overlap
+            a, b = links[i], links[j]
+            messages.append(
+                f"link {a.from_id!r} -> {a.to_id!r} and link {b.from_id!r} -> {b.to_id!r} share a collinear "
+                f"segment near ({x0:.0f}, {y0:.0f})-({x1:.0f}, {y1:.0f}), which may appear as a direct connection"
+            )
+
+    return messages
+
+
 def icon_resolution_warnings(root_box: Box, registry: MultiRegistry) -> list[str]:
     """sec9: an unresolved `type`, or a resolved entry whose file is
     missing on disk, is a Warning (placeholder icon), not Fatal. Pure

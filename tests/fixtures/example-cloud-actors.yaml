@@ -17,8 +17,8 @@ elements:
     id: admin
     type: Admin
     label: "Administrator"
-    x: 40
-    y: 420
+    x: 260
+    y: 630
 
   - kind: container
     id: aws-cloud

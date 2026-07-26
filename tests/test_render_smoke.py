@@ -4,7 +4,14 @@ import yaml
 from pptx import Presentation
 
 from archdiagram.errors import Warnings
-from archdiagram.layout import build_layout, icon_resolution_warnings
+from archdiagram.layout import (
+    build_layout,
+    icon_resolution_warnings,
+    link_aliasing_warnings,
+    link_crossing_warnings,
+    out_of_canvas_warnings,
+    overlap_warnings,
+)
 from archdiagram.model import parse_diagram
 from archdiagram.registry import load_registries
 from archdiagram.render import render
@@ -20,7 +27,16 @@ def _build(raw):
     registry = load_registries()
     root_box = build_layout(diagram, registry)
     warnings = Warnings()
+    margin = diagram.canvas.overlap_margin
     for message in icon_resolution_warnings(root_box, registry):
+        warnings.add(message)
+    for message in out_of_canvas_warnings(root_box, *diagram.canvas.size):
+        warnings.add(message)
+    for message in overlap_warnings(root_box, registry, margin):
+        warnings.add(message)
+    for message in link_crossing_warnings(root_box, diagram.links, registry, margin):
+        warnings.add(message)
+    for message in link_aliasing_warnings(root_box, diagram.links):
         warnings.add(message)
     presentation = render(diagram, root_box, registry)
     return presentation, warnings
@@ -180,6 +196,55 @@ links:
     result = runner.invoke(main, ["build", str(crossing_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
     assert "passes through element 'b'" in (result.output + result.stderr)
+
+
+def test_cli_reports_link_aliasing_as_warning_not_error(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    # Reproduces the reported "Z-route false edge aliasing": alb->vpc and
+    # vpc->s3 both pick VPC's top-center connection point, so their Z-routes
+    # meet nose-to-tail and read as one straight alb->s3 line.
+    aliasing_yaml = tmp_path / "aliasing.yaml"
+    aliasing_yaml.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: alb
+    type: ELB
+    x: 297
+    y: 74
+    width: 100
+    height: 100
+  - kind: container
+    id: vpc
+    type: vpc
+    x: 405
+    y: 229
+    width: 300
+    height: 300
+  - kind: node
+    id: s3
+    type: S3
+    x: 713
+    y: 74
+    width: 100
+    height: 100
+links:
+  - from: alb
+    to: vpc
+  - from: vpc
+    to: s3
+"""
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["build", str(aliasing_yaml), "-o", str(tmp_path / "out.pptx")])
+    assert result.exit_code == 0
+    assert "share a collinear segment" in (result.output + result.stderr)
 
 
 def test_cli_strict_exits_nonzero_on_warning(tmp_path):
