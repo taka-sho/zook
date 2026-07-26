@@ -43,7 +43,12 @@ _DEFAULT_CONTAINER_STYLE = "container=1;collapsible=0;recursiveResize=0;vertical
 def _node_style(element: Element, registry: MultiRegistry) -> str:
     icon_entry = registry.resolve_icon(element.type, element.provider)
     if icon_entry and icon_entry.drawio_shape:
-        return icon_entry.drawio_shape
+        # The registry's drawioShape is just the icon's own visual style
+        # (fillColor/shape/resIcon); label placement is a separate,
+        # shape-independent concern, so it isn't baked into that value -
+        # apply it here for every node regardless of where its shape style
+        # came from.
+        return _DEFAULT_NODE_STYLE + icon_entry.drawio_shape
     icon_path = icon_entry.file if (icon_entry and icon_entry.file.exists()) else registry.placeholder_icon
     data = base64.b64encode(icon_path.read_bytes()).decode("ascii")
     return _DEFAULT_NODE_STYLE + f"shape=image;imageAspect=0;image=data:image/png;base64,{data};"
