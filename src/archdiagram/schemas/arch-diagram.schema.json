@@ -166,10 +166,27 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "borderColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "fillColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "borderWidth": { "type": "number", "minimum": 0, "default": 1 },
-        "labelPosition": { "enum": ["top-left", "top-center", "bottom-left"], "default": "top-left" },
+        "borderColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Border color override. Defaults to the icon registry's groups.<type> style, or #5A6B86 if that container type has no registry entry."
+        },
+        "fillColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Fill color override. Defaults to the icon registry's groups.<type> style, or no fill if that container type has no registry entry."
+        },
+        "borderWidth": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1,
+          "description": "Border width override (logical units). Defaults to the icon registry's groups.<type> style, or 1."
+        },
+        "labelPosition": {
+          "enum": ["top-left", "top-center", "bottom-left"],
+          "default": "top-left",
+          "description": "Where the container's own label is drawn. Defaults to the icon registry's groups.<type>.labelPosition."
+        },
         "labelFontSize": {
           "type": "number",
           "exclusiveMinimum": 0,

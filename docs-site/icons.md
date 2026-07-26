@@ -35,7 +35,7 @@ archdiagram icons list --provider gcp  # 特定プロバイダのみ
 | Security | IAM, Cognito |
 | General | User, Admin, Developer, Client(クラウドサービスではなく、図に登場する人物・役割を表すアクター。プロバイダを問わず使える) |
 
-### GCP(18)
+### GCP(19)
 
 | カテゴリ | サービス |
 |---|---|
@@ -119,6 +119,10 @@ archdiagram build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 ```
 
 形式は [`icon-registry.schema.json`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry.schema.json) で検証されます。詳細仕様は [`docs/icon-registry-and-vocabulary.md`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry-and-vocabulary.md) を参照してください。
+
+## draw.io連携でのアイコン表示
+
+`archdiagram export-drawio`(詳細は[draw.io連携](drawio-sync.md))で書き出す際、レジストリの各エントリに任意で `drawioShape` フィールドを設定できます。設定されていれば draw.io 公式のシェイプ(AWS4等)として書き出され、未設定ならこのツール自身のPNGアイコンをそのまま埋め込みます。現時点では組み込みのAWSレジストリのみ `drawioShape` を設定済みです(GCP/Azureは未設定 → PNGフォールバック)。
 
 ## アイコン画像について {: #icon-assets }
 

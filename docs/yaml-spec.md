@@ -66,6 +66,10 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 
 `style.labelFontSize`（number > 0、既定 10、pt）：コンテナ自身のラベル文字サイズ。自動レイアウトがラベル用に確保する上下スペースも、この値に比例して拡大/縮小する。
 
+`style.borderColor`/`style.fillColor`（`#RRGGBB`）・`style.borderWidth`（number ≥ 0、既定 1）：枠線色・塗り・線幅。省略時はアイコンレジストリの `groups.<type>` に定義された既定スタイルを使う（`groups` にも無ければ枠線色 `#5A6B86`・塗りなし・線幅1）。個別要素だけレジストリの既定から色を変えたい場合に指定する。
+
+`style.labelPosition`（enum: `top-left`/`top-center`/`bottom-left`、既定 `top-left`）：コンテナ自身のラベルの表示位置。省略時はレジストリの `groups.<type>.labelPosition` に従う。
+
 ### 5.2 node（アイコン：EC2 / Lambda / RDS / S3 など）
 
 | フィールド | 必須 | 型 | 既定 | 説明 |

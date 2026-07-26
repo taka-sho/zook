@@ -105,7 +105,7 @@
 
 ## 7. 他プロバイダへの拡張(実装フェーズで確定)
 
-- `registry.gcp.yaml` / `registry.azure.yaml` を同形式で追加済み(それぞれ Tier-1 18サービス + `cloud`/`vpc`/固有アカウント概念の groups)。
+- `registry.gcp.yaml` / `registry.azure.yaml` を同形式で追加済み(Tier-1 でGCP 19サービス・Azure 18サービス + `cloud`/`vpc`/固有アカウント概念の groups)。
 - スキーマ(`icon-registry.schema.json`)は共通。`provider` 値と `icons`/`groups` の中身が変わるだけ。
 - 図 YAML 側はノードに `provider: gcp` を付けるだけで切り替わる。1つの図の中で複数プロバイダを混在させることも可能(要素ごとに `provider` を個別指定できるため)。
 - 解決は `MultiRegistry`(`src/archdiagram/registry.py`)が担当。`aws`/`gcp`/`azure` を常にすべて読み込み、`--registry` で指定したユーザーレジストリはその **ファイル自身が宣言する `provider`** に重ねる(未知の値、例えば `custom` を宣言すれば独立した新しいプロバイダとして追加される)。

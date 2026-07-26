@@ -36,13 +36,16 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
   label: "Production VPC"
   style:
     labelFontSize: 10       # 枠自身のラベル文字サイズ(pt、既定10)
+    borderColor: "#8C4FFF"   # 任意。省略時はアイコンレジストリのgroups.<type>の既定色
+    fillColor: "#F5F0FF"      # 任意。省略時は塗りなし(レジストリ側の既定に従う)
+    borderWidth: 2             # 任意。省略時は既定1
   layout:                  # 子の自動配置ルール(下記参照)
     direction: horizontal
     gap: 48
   children: [...]           # 入れ子(再帰)
 ```
 
-`style.labelFontSize` を大きくすると、自動レイアウトがそのラベル用に確保する上下スペースも比例して広がります。
+`style.labelFontSize` を大きくすると、自動レイアウトがそのラベル用に確保する上下スペースも比例して広がります。`borderColor`/`fillColor`/`borderWidth` は、個別のコンテナだけアイコンレジストリの既定スタイル([アイコン・レジストリ](icons.md)参照)から色・線幅を変えたい場合に指定します。
 
 ### node(アイコン:EC2 / Lambda / RDS / S3 など)
 

@@ -1,6 +1,6 @@
 # 使い方
 
-archdiagram は `build`/`validate`/`icons`/`preview` の4つのサブコマンドを持ちます。
+archdiagram は `build`/`validate`/`icons`/`preview`/`export-drawio`/`sync` の6つのサブコマンドを持ちます。
 
 ```bash
 archdiagram --help
@@ -68,7 +68,7 @@ archdiagram sync diagram.yaml diagram.drawio -o diagram.yaml # 変更をYAMLに�
 
 ## 独自アイコン・スタイルで上書きする
 
-`--registry` オプション(`build`/`validate`/`icons list`/`preview` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
+`--registry` オプション(`build`/`validate`/`icons list`/`preview`/`export-drawio`/`sync` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
 
 ```bash
 archdiagram build diagram.yaml -o diagram.pptx --registry my-registry.yaml
@@ -87,6 +87,7 @@ archdiagram は「構造的な破綻」と「描画上の軽微な問題」を�
 - YAML が JSON Schema に違反している(必須フィールド欠落・型不一致・未知フィールド・`x`/`y` の片方のみ指定 など)
 - element の `id` が重複している
 - `links` の `from`/`to` が存在しない `id` を参照している
+- `link.fromSide`/`toSide` を両方指定し、かつ軸(`top`/`bottom` の垂直と `left`/`right` の水平)が矛盾している
 
 ```bash
 $ archdiagram build broken.yaml -o out.pptx
@@ -104,6 +105,7 @@ $ echo $?
 - 要素同士が座標上で重なっている(兄弟要素間) → 計算済みの座標から機械的に矩形の重なりを検出して警告。明示座標の子は自動修正しないが、**自動配置の子は明示座標の兄弟と重なる場合に自動でずらされる**(それでも重なりが解消しない場合のみ警告される)
 - 子要素がコンテナ自身のラベル文字の領域と重なっている
 - リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告。コンテナのラベルとの重なりは祖先コンテナであっても除外されない
+- 2本の別リンクのZルートが共通ノードの同一接続点で連続し、直接接続に見える(false edge aliasing、詳細は[既知の制約](limitations.md))
 
 いずれも `canvas.overlapMargin`([YAML入力仕様](yaml-guide.md#canvas)参照)を設定すると、文字通りの重なりだけでなく「近すぎる」状態も検知対象にできます。
 
@@ -116,7 +118,7 @@ Wrote out.pptx
 
 ### 機械可読な出力(`--format`)
 
-`build`/`validate` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
+`build`/`validate`/`export-drawio`/`sync` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
 
 ```bash
 $ archdiagram validate diagram.yaml --format json
