@@ -1,10 +1,13 @@
 """CLI entry point. Requirements R-OP-02/R-OP-03: YAML -> PPTX, non-zero exit on Fatal.
 
 Subcommands:
-  build     YAML -> PPTX (the original single-command behavior).
-  validate  Schema + semantic + overlap/crossing checks, no rendering.
-  icons     list          Show every registered icon type/alias/group.
-  preview   YAML -> lightweight PNG, no PowerPoint/LibreOffice needed.
+  build           YAML -> PPTX (the original single-command behavior).
+  validate        Schema + semantic + overlap/crossing checks, no rendering.
+  icons list      Show every registered icon type/alias/group.
+  preview         YAML -> lightweight PNG, no PowerPoint/LibreOffice needed.
+  export-drawio   YAML -> .drawio, for manual editing in draw.io.
+  sync            Edited .drawio -> updated YAML (position/size only; see
+                  docs/detailed-design-pptx.md sec8.14).
 """
 
 from __future__ import annotations
@@ -226,6 +229,57 @@ def preview(input_path: str, output_path: str, user_registry_path: str | None) -
     warnings.emit()
     render_preview(diagram, root_box, registry).save(output_path)
     print(f"Wrote {output_path}")
+
+
+@main.command(name="export-drawio")
+@click.argument("input_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("-o", "--output", "output_path", required=True, type=click.Path(dir_okay=False), help="Output .drawio path.")
+@_registry_option
+@_format_option
+def export_drawio_cmd(input_path: str, output_path: str, user_registry_path: str | None, fmt: str) -> None:
+    """Export INPUT_PATH as a .drawio file for manual editing in draw.io."""
+    from .drawio import export_drawio
+
+    try:
+        diagram, root_box, registry, warnings = _load_and_check(input_path, user_registry_path)
+    except DiagramError as exc:
+        _emit(fmt, status="error", warning_messages=[], error=str(exc))
+        sys.exit(1)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(export_drawio(diagram, root_box, registry))
+
+    status = "warning" if warnings.messages else "ok"
+    _emit(fmt, status=status, warning_messages=warnings.messages, output_path=output_path)
+
+
+@main.command(name="sync")
+@click.argument("yaml_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("drawio_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("-o", "--output", "output_path", type=click.Path(dir_okay=False), help="Where to write the updated YAML (default: overwrite YAML_PATH).")
+@_registry_option
+@_format_option
+def sync_cmd(yaml_path: str, drawio_path: str, output_path: str | None, user_registry_path: str | None, fmt: str) -> None:
+    """Sync position/size changes made in an edited DRAWIO_PATH back into YAML_PATH.
+
+    Only elements whose position or size actually changed (vs. what the
+    original YAML's auto-layout would have produced) are touched; added/
+    removed shapes and style/color changes made in draw.io are not synced
+    - see docs/detailed-design-pptx.md sec8.14.
+    """
+    from .drawio import dump_yaml, sync_from_drawio
+
+    try:
+        updated, warnings = sync_from_drawio(yaml_path, drawio_path, user_registry_path=user_registry_path)
+    except DiagramError as exc:
+        _emit(fmt, status="error", warning_messages=[], error=str(exc))
+        sys.exit(1)
+
+    dest = output_path or yaml_path
+    dump_yaml(updated, dest)
+
+    status = "warning" if warnings else "ok"
+    _emit(fmt, status=status, warning_messages=warnings, output_path=dest)
 
 
 if __name__ == "__main__":

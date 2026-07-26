@@ -56,6 +56,16 @@ PowerPoint も LibreOffice も使わずに、構成をすぐに目で確認で�
 archdiagram preview diagram.yaml -o diagram.png
 ```
 
+## export-drawio / sync — draw.ioで手直しして継続的に管理する
+
+生成した構成図を[draw.io](https://www.diagrams.net/)で手直しし、その位置・サイズの変更をYAMLに機械的に反映できます。詳細な運用フローは[draw.io連携](drawio-sync.md)を参照してください。
+
+```bash
+archdiagram export-drawio diagram.yaml -o diagram.drawio   # draw.ioで開ける形式で書き出す
+# ... draw.io で位置・サイズを調整して保存 ...
+archdiagram sync diagram.yaml diagram.drawio -o diagram.yaml # 変更をYAMLに反映
+```
+
 ## 独自アイコン・スタイルで上書きする
 
 `--registry` オプション(`build`/`validate`/`icons list`/`preview` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
@@ -66,7 +76,7 @@ archdiagram build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 
 `my-registry.yaml` は [`icon-registry.schema.json`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry.schema.json) に従った形式です。詳細は[アイコン・レジストリ](icons.md)を参照してください。
 
-## エラーハンドリング
+## エラーハンドリング {: #error-handling }
 
 archdiagram は「構造的な破綻」と「描画上の軽微な問題」を明確に区別します(CI/CD での利用を想定した設計)。
 

@@ -68,10 +68,11 @@
 - `label`：要素側でラベル省略時の既定表示名
 - `aliases`：別名リスト(大小文字無視でマッチ)
 - `size`：このアイコン固有のサイズ上書き
+- `drawioShape`：`archdiagram export-drawio`(`detailed-design-pptx.md` sec8.14参照)が使うdraw.io公式シェイプのstyle文字列。省略時はPNG(`file`)をそのまま埋め込む
 
 ### 3.3 groups エントリ（コンテナ枠）
 
-キー = コンテナの `type`（cloud/vpc/az/subnet 等）。枠線色・塗り・破線・ラベル位置・任意の隅アイコンを定義。色は妥当な既定値を入れてあるが、**公式デックの配色に合わせて最終調整する**前提。
+キー = コンテナの `type`（cloud/vpc/az/subnet 等）。枠線色・塗り・破線・ラベル位置・任意の隅アイコンを定義。色は妥当な既定値を入れてあるが、**公式デックの配色に合わせて最終調整する**前提。`drawioShape`（任意）も同様にexport-drawio用の公式コンテナシェイプを指定できる。
 
 - `cloud`(AWS Cloud 境界)は最も外側の枠として追加済み。`icon` に隅アイコン(`General/aws-cloud-badge.png`)を指定しており、実装側はラベル位置が `top-left`/`bottom-left` のとき、その隅にアイコンを描画しラベルをアイコン分だけ右にずらす(詳細は `detailed-design-pptx.md`)。「どこから AWS Cloud か」を一目で分かるようにする狙い。
 

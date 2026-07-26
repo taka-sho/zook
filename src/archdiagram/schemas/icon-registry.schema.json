@@ -58,7 +58,11 @@
           "items": { "type": "string" },
           "description": "Alternative type names resolving to this entry (matched case-insensitively)."
         },
-        "size": { "type": "number", "exclusiveMinimum": 0, "description": "Per-icon default size override." }
+        "size": { "type": "number", "exclusiveMinimum": 0, "description": "Per-icon default size override." },
+        "drawioShape": {
+          "type": "string",
+          "description": "draw.io mxGraph style string for this icon (e.g. an official AWS4/GCP2/Azure shape library reference). If omitted, `archdiagram export-drawio` embeds the icon's own PNG as a data URI instead."
+        }
       }
     },
     "groupEntry": {
@@ -72,7 +76,11 @@
         "dashed": { "type": "boolean", "default": false },
         "labelPosition": { "enum": ["top-left", "top-center", "bottom-left"], "default": "top-left" },
         "icon": { "type": "string", "description": "Optional corner icon file (relative to basePath)." },
-        "aliases": { "type": "array", "items": { "type": "string" } }
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "drawioShape": {
+          "type": "string",
+          "description": "draw.io mxGraph style string for this container's frame (e.g. an official AWS4/GCP2/Azure group shape). If omitted, `archdiagram export-drawio` renders a plain rectangle using borderColor/fillColor/dashed."
+        }
       }
     }
   }

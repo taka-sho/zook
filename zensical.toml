@@ -16,6 +16,7 @@ nav = [
     { "使い方" = "usage.md" },
     { "YAML入力仕様" = "yaml-guide.md" },
     { "アイコン・レジストリ" = "icons.md" },
+    { "draw.io連携(継続的な構成図管理)" = "drawio-sync.md" },
     { "内部設計メモ" = "design-notes.md" },
     { "既知の制約" = "limitations.md" },
 ]

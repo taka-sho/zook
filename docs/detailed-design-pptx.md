@@ -224,6 +224,17 @@
 - **実例で検証**:この検出を実装した結果、同梱サンプル `example-cloud-actors.yaml` で実際に警告が発生することが判明した(`user→aws-cloud` と `admin→aws-cloud` が、どちらも `aws-cloud` コンテナの左辺中央という同一点に接続していたため)。`connection_point()` の左右接続(idx1/3)は常にそのボックス自身の辺の中心を返す設計(§8.2 で確定済み)であるため、相手ノードの位置に関わらず複数リンクが同じ点に収束しうる。サンプルは `admin` を VPC の下方に配置し直し(左辺ではなく下辺から接続させる)ことで解消し、"canonical な example は警告ゼロ" という既存の不変条件を回復した。
 - `tests/test_render_smoke.py` の `_build()` ヘルパーは、従来 `icon_resolution_warnings()` のみを集計しており、`overlap_warnings()`/`link_crossing_warnings()`/`link_aliasing_warnings()` を素通りしていた(=これらの回帰テストが実質チェックしていなかった)。CLI(`_load_and_check()`)が実際に集計する全チェックと揃うよう `_build()` を修正した。
 
+### 8.14 draw.io連携(エクスポート・同期・CI自動PR)
+
+要求:構成図を継続的に管理したい。ツールで生成したベース構成図を draw.io(self-hosted)で手直しし、その変更を再びYAMLに反映したい。
+
+- **PowerPointではなくdraw.ioを選定した理由**:PowerPointのグループ(コンテナ)は `chOff`/`chExt` という子座標系のオフセット・スケールを持ち、グループをリサイズすると子要素の座標が暗黙にスケーリングされる(§8.4)。これをpptxから読み取って正しく座標復元するには、ネストしたグループ変換を再帰的に解決するロジックが要る。draw.io(mxGraph)のコンテナ(`container=1`)は子要素の座標が親からの単純な相対オフセットのままで、リサイズしても子はスケールされない設計であることを `jgraph/drawio` の公式ソース(後述)で確認済みで、この罠がそもそも存在しない。加えてmxGraph XMLはテキスト形式でgit diffが取れ、self-hostも可能(構成図を社外クラウドに預けずに完結できる)。
+- **`archdiagram export-drawio`**(`drawio.py: export_drawio()`):`Box` 木を mxGraph XML に変換する。座標変換は不要 — `Box.local_x/local_y`(親相対のcontent位置)は mxGraph の子要素 `<mxGeometry>` の座標系とまったく同じ意味論(親からの単純な相対オフセット)なので、そのまま使える。コンテナは `parent` 属性を実際の親要素idにし `container=1` を付与、ノードのラベルは別テキストボックスを作らず mxCell自身の `value` + `verticalLabelPosition=bottom` に任せる(draw.io側の慣習に合わせた簡略化。pptx/preview用の footprint 計算とは無関係)。
+- **公式シェイプライブラリの検証**:`jgraph/drawio` リポジトリ(`dev`ブランチ)の `Sidebar-AWS4.js` を直接取得し、実際に使われている `resIcon`/`grIcon` 識別子を(推測ではなく)ソースから確認した上で、既存のAWSレジストリ(26アイコン+7グループ)の `drawioShape` フィールドに投入した。GCP2/Azure2は識別子が複数ファイル・複数ヘルパー関数に分散しており、今回の実装時間内では確実な検証ができなかったため見送り、`drawioShape` 未設定分は既存のPNGをbase64データURIとして埋め込むフォールバックに委ねている(3プロバイダ共通の仕組みなので、GCP/Azureへの拡張は後日の追加作業で対応可能)。
+- **`archdiagram sync`**(`drawio.py: sync_from_drawio()`):元のYAMLを`build_layout()`にかけ「本来の自動配置座標」をベースラインとして計算し、編集後の`.drawio`から同idのセルの座標を読み取って比較する。差分がある要素だけ明示 `x`/`y`/`width`/`height` を書き込み、触れていない要素は自動配置のまま維持する。ruamel.yaml(round-trip)でYAMLを読み書きするため、コメント・キー順序を保持する。未知セル(id不一致)・見つからないセル(削除された可能性)はいずれもWarningのみで、ノード/コンテナの追加・削除・色変更は同期対象外(§8.8/§8.10/§8.13で確立した「機械的検出+手直しは利用者側」の方針を踏襲)。
+- **`.drawio`の圧縮形式**:draw.io本体が保存すると `<diagram>` 要素の中身は既定で `encodeURIComponent → raw deflate → base64` により圧縮される。一方 `export_drawio()` が書き出す形式は非圧縮(`<mxGraphModel>` を生のXML子要素としてそのまま埋め込む)。`_diagram_model_root()` は両方の形式を判別して読めるようにしている(圧縮側のみ実装が必要 — 非圧縮側はXMLとしてそのまま子要素になる)。
+- **CI自動PR**(`.github/workflows/drawio-sync.yml`):`**/*.drawio` の変更をトリガーに起動。同名ファイル規約(`X.yaml`⇔`X.drawio`)で対応するYAMLを特定し `archdiagram sync` を実行、差分があれば `peter-evans/create-pull-request` でPRを自動作成する。直接コミットではなくPR作成なので、保護ブランチのポリシーと衝突しない。
+
 ## 9. 次アクション
 
 - [x] python-pptx で「VPC枠＋AZ＋アイコン＋ラベル」を階層グループ化する最小プロトタイプを作成(`prototype/build_prototype.py`)

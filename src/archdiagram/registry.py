@@ -37,6 +37,7 @@ class IconEntry:
     label: Optional[str] = None
     size: Optional[float] = None
     aliases: list = field(default_factory=list)
+    drawio_shape: Optional[str] = None  # mxGraph style string; None -> export-drawio embeds `file` as a PNG data URI
 
 
 @dataclass
@@ -50,6 +51,7 @@ class GroupEntry:
     label_position: str = "top-left"
     icon: Optional[Path] = None
     aliases: list = field(default_factory=list)
+    drawio_shape: Optional[str] = None  # mxGraph group-shape style string; None -> export-drawio draws a plain rect
 
 
 @dataclass
@@ -79,6 +81,7 @@ def _index_icons(raw_icons: dict, base_path: Path) -> dict[str, IconEntry]:
             label=spec.get("label"),
             size=spec.get("size"),
             aliases=list(spec.get("aliases", [])),
+            drawio_shape=spec.get("drawioShape"),
         )
         index[key.lower()] = entry
         for alias in spec.get("aliases", []):
@@ -99,6 +102,7 @@ def _index_groups(raw_groups: dict, base_path: Path) -> dict[str, GroupEntry]:
             label_position=spec.get("labelPosition", "top-left"),
             aliases=list(spec.get("aliases", [])),
             icon=(base_path / spec["icon"]) if spec.get("icon") else None,
+            drawio_shape=spec.get("drawioShape"),
         )
         index[key.lower()] = entry
         for alias in spec.get("aliases", []):

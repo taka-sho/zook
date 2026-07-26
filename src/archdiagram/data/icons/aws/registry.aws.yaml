@@ -8,47 +8,56 @@ defaults:
 
 # ---- Nodes: Tier-1 starter vocabulary ----
 # Key = the `type` used in the diagram YAML. Extend by adding entries + files.
+# drawioShape values were extracted verbatim from jgraph/drawio's own
+# Sidebar-AWS4.js (dev branch) - see docs/detailed-design-pptx.md sec8.14.
+# Entries without a verified official shape are left unset; `archdiagram
+# export-drawio` falls back to embedding the PNG in `file` for those.
 icons:
   # Compute
-  EC2: { file: "Compute/EC2.png", category: Compute, aliases: [ec2, AmazonEC2] }
-  Lambda: { file: "Compute/Lambda.png", category: Compute, aliases: [lambda, AWSLambda] }
-  ECS: { file: "Compute/ECS.png", category: Compute, aliases: [ecs] }
-  EKS: { file: "Compute/EKS.png", category: Compute, aliases: [eks, Kubernetes] }
-  Fargate: { file: "Compute/Fargate.png", category: Compute, aliases: [fargate] }
+  EC2: { file: "Compute/EC2.png", category: Compute, aliases: [ec2, AmazonEC2], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;fillColor=#ED7100;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  Lambda: { file: "Compute/Lambda.png", category: Compute, aliases: [lambda, AWSLambda], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  ECS: { file: "Compute/ECS.png", category: Compute, aliases: [ecs], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecs;fillColor=#ED7100;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  EKS: { file: "Compute/EKS.png", category: Compute, aliases: [eks, Kubernetes], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eks;fillColor=#ED7100;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  Fargate: { file: "Compute/Fargate.png", category: Compute, aliases: [fargate], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fargate;fillColor=#ED7100;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   # Storage
-  S3: { file: "Storage/S3.png", category: Storage, aliases: [s3, SimpleStorageService] }
-  EFS: { file: "Storage/EFS.png", category: Storage, aliases: [efs] }
-  EBS: { file: "Storage/EBS.png", category: Storage, aliases: [ebs] }
+  S3: { file: "Storage/S3.png", category: Storage, aliases: [s3, SimpleStorageService], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  EFS: { file: "Storage/EFS.png", category: Storage, aliases: [efs], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elastic_file_system;fillColor=#7AA116;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  EBS: { file: "Storage/EBS.png", category: Storage, aliases: [ebs], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elastic_block_store;fillColor=#7AA116;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   # Database
-  RDS: { file: "Database/RDS.png", category: Database, aliases: [rds] }
-  Aurora: { file: "Database/Aurora.png", category: Database, aliases: [aurora] }
-  DynamoDB: { file: "Database/DynamoDB.png", category: Database, aliases: [dynamodb, ddb] }
-  ElastiCache: { file: "Database/ElastiCache.png", category: Database, aliases: [elasticache, redis] }
+  RDS: { file: "Database/RDS.png", category: Database, aliases: [rds], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;fillColor=#C925D1;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  Aurora: { file: "Database/Aurora.png", category: Database, aliases: [aurora], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.aurora;fillColor=#C925D1;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  DynamoDB: { file: "Database/DynamoDB.png", category: Database, aliases: [dynamodb, ddb], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fillColor=#C925D1;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  ElastiCache: { file: "Database/ElastiCache.png", category: Database, aliases: [elasticache, redis], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticache;fillColor=#C925D1;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   # Networking & Content Delivery
-  ELB: { file: "Networking/ELB.png", category: Networking, aliases: [elb, alb, ALB, LoadBalancer] }
-  CloudFront: { file: "Networking/CloudFront.png", category: Networking, aliases: [cloudfront, cdn] }
-  Route53: { file: "Networking/Route53.png", category: Networking, aliases: [route53, dns] }
-  APIGateway: { file: "Networking/APIGateway.png", category: Networking, aliases: [apigateway, apigw] }
-  NATGateway: { file: "Networking/NATGateway.png", category: Networking, aliases: [nat, natgw] }
+  ELB: { file: "Networking/ELB.png", category: Networking, aliases: [elb, alb, ALB, LoadBalancer], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elastic_load_balancing;fillColor=#8C4FFF;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  CloudFront: { file: "Networking/CloudFront.png", category: Networking, aliases: [cloudfront, cdn], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;fillColor=#8C4FFF;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  Route53: { file: "Networking/Route53.png", category: Networking, aliases: [route53, dns], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;fillColor=#8C4FFF;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  APIGateway: { file: "Networking/APIGateway.png", category: Networking, aliases: [apigateway, apigw], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#8C4FFF;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  NATGateway: { file: "Networking/NATGateway.png", category: Networking, aliases: [nat, natgw], drawioShape: "sketch=0;shape=mxgraph.aws4.nat_gateway;fillColor=#8C4FFF;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   # Application Integration
-  SNS: { file: "Integration/SNS.png", category: Integration, aliases: [sns] }
-  SQS: { file: "Integration/SQS.png", category: Integration, aliases: [sqs] }
-  EventBridge: { file: "Integration/EventBridge.png", category: Integration, aliases: [eventbridge] }
+  SNS: { file: "Integration/SNS.png", category: Integration, aliases: [sns], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sns;fillColor=#E7157B;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  SQS: { file: "Integration/SQS.png", category: Integration, aliases: [sqs], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sqs;fillColor=#E7157B;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  EventBridge: { file: "Integration/EventBridge.png", category: Integration, aliases: [eventbridge], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eventbridge;fillColor=#E7157B;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   # Security
-  IAM: { file: "Security/IAM.png", category: Security, aliases: [iam] }
-  Cognito: { file: "Security/Cognito.png", category: Security, aliases: [cognito] }
+  IAM: { file: "Security/IAM.png", category: Security, aliases: [iam], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
+  Cognito: { file: "Security/Cognito.png", category: Security, aliases: [cognito], drawioShape: "sketch=0;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;fillColor=#DD344C;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   # General (actors / non-service participants in a diagram)
-  User: { file: "General/User.png", category: General, aliases: [user, enduser, "end-user"] }
+  # No official AWS4 shape for Admin/Developer/Client - export-drawio embeds their PNG instead.
+  User: { file: "General/User.png", category: General, aliases: [user, enduser, "end-user"], drawioShape: "sketch=0;shape=mxgraph.aws4.user;fillColor=#232F3D;strokeColor=#ffffff;outlineConnect=0;fontColor=#232F3E;" }
   Admin: { file: "General/Admin.png", category: General, aliases: [admin, administrator, operator] }
   Developer: { file: "General/Developer.png", category: General, aliases: [developer, dev] }
   Client: { file: "General/Client.png", category: General, aliases: [client, browser, mobileclient] }
 
 # ---- Containers: frame styles (colors are sensible defaults; align to the official deck) ----
+# drawioShape values (where set) are draw.io's official AWS4 "Groups" palette
+# entries (container=1 already baked in, so resizing in draw.io never rescales
+# children - see sec8.14). Entries without one render as a plain rect in
+# export-drawio, using borderColor/fillColor/dashed below.
 groups:
-  cloud: { label: "AWS Cloud", borderColor: "#232F3E", dashed: false, labelPosition: top-left, icon: "General/aws-cloud-badge.png" }
-  vpc: { label: "VPC", borderColor: "#8C4FFF", dashed: false, labelPosition: top-left }
-  az: { label: "Availability Zone", borderColor: "#00A4A6", dashed: true, labelPosition: top-left }
-  subnet: { label: "Subnet", borderColor: "#7AA116", fillColor: "#F2F8E8", labelPosition: top-left }
-  region: { label: "Region", borderColor: "#00A4A6", dashed: true, labelPosition: top-left }
-  account: { label: "AWS Account", borderColor: "#E7157B", dashed: false, labelPosition: top-left }
-  group: { label: "", borderColor: "#5A6B86", dashed: false, labelPosition: top-left }
+  cloud: { label: "AWS Cloud", borderColor: "#232F3E", dashed: false, labelPosition: top-left, icon: "General/aws-cloud-badge.png", drawioShape: "sketch=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;container=1;collapsible=0;recursiveResize=0;strokeColor=#232F3E;fillColor=none;dashed=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#232F3E;" }
+  vpc: { label: "VPC", borderColor: "#8C4FFF", dashed: false, labelPosition: top-left, drawioShape: "sketch=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc2;container=1;collapsible=0;recursiveResize=0;strokeColor=#8C4FFF;fillColor=none;dashed=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#AAB7B8;" }
+  az: { label: "Availability Zone", borderColor: "#00A4A6", dashed: true, labelPosition: top-left, drawioShape: "sketch=0;container=1;collapsible=0;recursiveResize=0;strokeColor=#147EBA;fillColor=none;dashed=1;verticalAlign=top;fontColor=#147EBA;whiteSpace=wrap;html=1;" }
+  subnet: { label: "Subnet", borderColor: "#7AA116", fillColor: "#F2F8E8", labelPosition: top-left, drawioShape: "sketch=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;container=1;collapsible=0;recursiveResize=0;strokeColor=#7AA116;fillColor=#F2F6E8;dashed=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#248814;" }
+  region: { label: "Region", borderColor: "#00A4A6", dashed: true, labelPosition: top-left, drawioShape: "sketch=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_region;container=1;collapsible=0;recursiveResize=0;strokeColor=#00A4A6;fillColor=none;dashed=1;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;" }
+  account: { label: "AWS Account", borderColor: "#E7157B", dashed: false, labelPosition: top-left, drawioShape: "sketch=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;container=1;collapsible=0;recursiveResize=0;strokeColor=#CD2264;fillColor=none;dashed=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#CD2264;" }
+  group: { label: "", borderColor: "#5A6B86", dashed: false, labelPosition: top-left, drawioShape: "sketch=0;container=1;collapsible=0;recursiveResize=0;strokeColor=#5A6C86;fillColor=none;dashed=1;verticalAlign=top;fontColor=#5A6C86;whiteSpace=wrap;html=1;" }
