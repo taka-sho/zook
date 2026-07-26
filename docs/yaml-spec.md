@@ -82,11 +82,15 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 | `x`,`y` | | number | — | 絶対位置（両方セットで指定） |
 | `width`,`height` | | number > 0 | — | アイコンサイズ。省略時は `size`、それも無ければ既定サイズ |
 | `size` | | number > 0 | — | `width`/`height` を同時に設定するショートハンド。片方の軸だけ `width`/`height` を明示した場合、その軸では無視される |
-| `style` | | object | — | ラベル位置（`labelPosition`: below/above/right/none）・ラベル間隔（`labelGap`）・ラベル文字サイズ（`labelFontSize`） |
+| `style` | | object | — | ラベル位置（`labelPosition`: below/above/right/none）・ラベル間隔（`labelGap`）・ラベル文字サイズ（`labelFontSize`）・プレーン図形化（`shape`/`fillColor`/`borderColor`、後述） |
 
 `style.labelGap`（number ≥ 0、既定 4、論理単位）：アイコンとラベルの間隔。`labelPosition: none` のときは効果なし。狭いレイアウトでラベル同士・リンクラベルとの重なりを避けたい場合に個別調整できる。
 
 `style.labelFontSize`（number > 0、既定 9、pt）：ノードのラベル文字サイズ。自動レイアウトがラベル用に確保するフットプリント（高さ）も、この値に比例して拡大/縮小する。`labelPosition: none` のときは効果なし。
+
+`style.shape`（enum: `rect`/`rounded`/`diamond`/`circle`）：指定すると、`type` によるアイコン解決を行わず、図形内部にラベルを直接描画する「プレーン図形ノード」になる（Mermaidのフローチャート記法のような、箱の中にテキストがある見た目）。`type` はスキーマ上引き続き必須だが、`shape` 指定時は実質未使用（値は何でもよい）。`labelPosition`/`labelGap` は効果なし（ラベルは常に図形中央）。
+
+`style.fillColor`/`style.borderColor`（`#RRGGBB`）：`shape` 指定時の塗り・枠線色。省略時は白背景・黒枠。`shape` 未指定時は効果なし。
 
 ### 5.3 id 規則
 

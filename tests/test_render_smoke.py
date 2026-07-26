@@ -401,6 +401,63 @@ def test_cli_preview_writes_a_png(tmp_path):
     assert out_path.stat().st_size > 0
 
 
+def test_shape_nodes_render_without_warnings():
+    raw = {
+        "version": "1.0",
+        "canvas": {"aspectRatio": "16:9"},
+        "elements": [
+            {"kind": "node", "id": "a", "type": "a", "label": "Rect", "x": 40, "y": 40, "style": {"shape": "rect"}},
+            {
+                "kind": "node",
+                "id": "b",
+                "type": "b",
+                "label": "Rounded",
+                "x": 240,
+                "y": 40,
+                "style": {"shape": "rounded", "fillColor": "#D4E6FF", "borderColor": "#2255AA"},
+            },
+            {"kind": "node", "id": "c", "type": "c", "label": "Diamond", "x": 440, "y": 40, "style": {"shape": "diamond"}},
+            {"kind": "node", "id": "d", "type": "d", "label": "Circle", "x": 640, "y": 40, "style": {"shape": "circle"}},
+        ],
+        "links": [
+            {"from": "a", "to": "b"},
+            {"from": "b", "to": "c"},
+            {"from": "c", "to": "d"},
+        ],
+    }
+    presentation, warnings = _build(raw)
+    assert warnings.messages == []
+    assert len(presentation.slides[0].shapes) > 0
+
+
+def test_shape_nodes_export_to_drawio_and_preview(tmp_path):
+    from archdiagram.drawio import export_drawio
+    from archdiagram.preview import render_preview
+
+    raw = {
+        "version": "1.0",
+        "canvas": {"aspectRatio": "16:9"},
+        "elements": [
+            {"kind": "node", "id": "a", "type": "a", "label": "Rect", "x": 40, "y": 40, "style": {"shape": "rect"}},
+            {"kind": "node", "id": "b", "type": "b", "label": "Circle", "x": 240, "y": 40, "style": {"shape": "circle"}},
+        ],
+        "links": [{"from": "a", "to": "b"}],
+    }
+    validate(raw)
+    diagram = parse_diagram(raw)
+    registry = load_registries()
+    root_box = build_layout(diagram, registry)
+
+    xml = export_drawio(diagram, root_box, registry)
+    assert 'value="Rect"' in xml
+    assert "ellipse" in xml
+
+    image = render_preview(diagram, root_box, registry)
+    out = tmp_path / "shapes.png"
+    image.save(out)
+    assert out.stat().st_size > 0
+
+
 def test_custom_size_and_font_sizes_render_and_preview_without_error(tmp_path):
     from click.testing import CliRunner
 

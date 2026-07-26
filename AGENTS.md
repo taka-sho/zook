@@ -32,6 +32,16 @@ archdiagram は、YAML で書いたインフラ構成から PowerPoint(.pptx)の
 
 見た目を調整したい場合は、YAML を直接手直しするだけでなく、`archdiagram export-drawio`/`sync` によるdraw.io連携(`docs-site/drawio-sync.md`)という選択肢もあります。
 
+## Mermaidのフローチャートから始まる依頼の場合
+
+ユーザーがすでにMermaidの`flowchart`/`graph`記法で図を持っている(あるいはAI自身がMermaidで業務フローを組み立てた)場合は、上記のYAMLを新規に書く流れの代わりに、まず変換してください。
+
+```bash
+archdiagram from-mermaid diagram.mmd -o diagram.yaml
+```
+
+変換後のYAMLはこの時点で検証済みなので、そのままステップ5の`build`に進めます。対応記法・既知の制約は`docs-site/mermaid-import.md`を参照してください。`sequenceDiagram`など`flowchart`以外のMermaid図種別には対応していません。
+
 ## 主要リファレンス
 
 | 知りたいこと | 参照先 |
@@ -41,6 +51,7 @@ archdiagram は、YAML で書いたインフラ構成から PowerPoint(.pptx)の
 | 要件別のアーキテクチャパターン | `docs/patterns/README.md` |
 | 既知の制約(自動レイアウトが解決しない重なり、GCP/Azureの制約など) | `docs-site/limitations.md` |
 | draw.io連携による継続的な図の管理 | `docs-site/drawio-sync.md` |
+| Mermaidフローチャートからの変換 | `docs-site/mermaid-import.md` |
 | pptx生成の内部設計(座標系・コネクタなど) | `docs-site/design-notes.md`、`docs/detailed-design-pptx.md` |
 
 ## 変更作業をするとき

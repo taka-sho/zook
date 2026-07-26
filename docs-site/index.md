@@ -57,6 +57,8 @@ archdiagram build diagram.yaml -o diagram.pptx
 | サイズ・文字サイズ調整 | ノードの `size` でアイコンサイズを、`labelFontSize`(ノード/コンテナ/リンク)でラベル文字サイズを個別に指定可能。自動レイアウトが確保するラベル用スペースも連動して拡大/縮小 |
 | 軽量プレビュー | `archdiagram preview` で PowerPoint も LibreOffice も使わずにPNGですぐ確認 |
 | draw.io連携 | `archdiagram export-drawio`/`sync` で draw.io 上での位置・サイズ変更をYAMLに反映。継続的な構成図管理を想定([draw.io連携](drawio-sync.md)) |
+| Mermaidインポート | `archdiagram from-mermaid` で Mermaid の `flowchart`/`graph` 記法をYAMLに変換([Mermaidフローチャートのインポート](mermaid-import.md)) |
+| プレーン図形ノード | アイコンの代わりに四角/角丸/ひし形/円の図形+内部ラベルでノードを描画(`style.shape`)。Mermaidインポートが内部的に使う汎用機能 |
 | CI/CD 対応 | 構造的な誤り(スキーマ違反・id重複・リンク参照先不在)は非ゼロ終了。`--strict` で Warning もゲート可能。`--format json`/`github` で機械可読出力。`archdiagram validate` でレンダリングなしの高速チェックも可能 |
 
 ## ドキュメント構成
@@ -66,6 +68,7 @@ archdiagram build diagram.yaml -o diagram.pptx
 - [YAML入力仕様](yaml-guide.md) — 図の書き方(コンテナ・ノード・リンク・レイアウト)
 - [アイコン・レジストリ](icons.md) — サービス語彙とアイコンの仕組み、カスタマイズ方法
 - [draw.io連携](drawio-sync.md) — 継続的な構成図管理のためのdraw.ioエクスポート・同期ワークフロー
+- [Mermaidフローチャートのインポート](mermaid-import.md) — Mermaidの`flowchart`/`graph`記法からの変換
 - [内部設計メモ](design-notes.md) — pptx生成の実装方針(グループ化・コネクタ・座標系)
 - [既知の制約](limitations.md) — v1 時点でのスコープ外事項
 

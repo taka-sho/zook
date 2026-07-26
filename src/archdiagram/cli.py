@@ -8,6 +8,7 @@ Subcommands:
   export-drawio   YAML -> .drawio, for manual editing in draw.io.
   sync            Edited .drawio -> updated YAML (position/size only; see
                   docs/detailed-design-pptx.md sec8.14).
+  from-mermaid    Mermaid flowchart (.mmd) -> archdiagram YAML.
 """
 
 from __future__ import annotations
@@ -64,12 +65,9 @@ def _emit(fmt: str, *, status: str, warning_messages: list[str], error: str | No
         print(f"Wrote {output_path}")
 
 
-def _load_and_check(input_path: str, user_registry_path: str | None) -> tuple[Diagram, Box, MultiRegistry, Warnings]:
-    """Shared by build/validate: parse, validate (raises DiagramError on
-    Fatal), lay out, and collect every Warning-class check. Never renders."""
-    with open(input_path, encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
-
+def _check_raw(raw: dict, user_registry_path: str | None) -> tuple[Diagram, Box, MultiRegistry, Warnings]:
+    """Shared by build/validate/from-mermaid: validate (raises DiagramError
+    on Fatal), lay out, and collect every Warning-class check. Never renders."""
     validate(raw)
     diagram = parse_diagram(raw)
     registry = load_registries(user_registry_path=user_registry_path)
@@ -89,6 +87,12 @@ def _load_and_check(input_path: str, user_registry_path: str | None) -> tuple[Di
         warnings.add(message)
 
     return diagram, root_box, registry, warnings
+
+
+def _load_and_check(input_path: str, user_registry_path: str | None) -> tuple[Diagram, Box, MultiRegistry, Warnings]:
+    with open(input_path, encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+    return _check_raw(raw, user_registry_path)
 
 
 _registry_option = click.option(
@@ -280,6 +284,48 @@ def sync_cmd(yaml_path: str, drawio_path: str, output_path: str | None, user_reg
 
     status = "warning" if warnings else "ok"
     _emit(fmt, status=status, warning_messages=warnings, output_path=dest)
+
+
+@main.command(name="from-mermaid")
+@click.argument("input_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("-o", "--output", "output_path", required=True, type=click.Path(dir_okay=False), help="Output YAML path.")
+@_registry_option
+@_strict_option
+@_format_option
+def from_mermaid_cmd(input_path: str, output_path: str, user_registry_path: str | None, strict: bool, fmt: str) -> None:
+    """Convert a Mermaid flowchart (INPUT_PATH, e.g. *.mmd) to archdiagram YAML.
+
+    Only `flowchart`/`graph` syntax is supported (sequenceDiagram and other
+    Mermaid diagram types are not) - see docs-site/mermaid-import.md for the
+    exact supported subset. The generated YAML is validated the same way
+    `build`/`validate` do before being written, so Fatal/Warning issues are
+    reported here; the result feeds straight into the existing
+    validate/build/export-drawio/sync pipeline.
+    """
+    from .mermaid_flowchart import parse_flowchart
+
+    with open(input_path, encoding="utf-8") as f:
+        text = f.read()
+
+    try:
+        raw = parse_flowchart(text)
+        _diagram, _root_box, _registry, warnings = _check_raw(raw, user_registry_path)
+    except DiagramError as exc:
+        _emit(fmt, status="error", warning_messages=[], error=str(exc))
+        sys.exit(1)
+
+    # yaml.safe_dump (not drawio.dump_yaml's ruamel round-trip dumper): this
+    # writes a fresh file with no existing comments/ordering to preserve, and
+    # PyYAML's resolver-aware quoting is what protects "16:9"/"yes"/"no"/etc.
+    # from being misread back as a sexagesimal int or bool - which is exactly
+    # how they're read elsewhere in this codebase (yaml.safe_load).
+    with open(output_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, sort_keys=False, allow_unicode=True)
+
+    status = "warning" if warnings.messages else "ok"
+    _emit(fmt, status=status, warning_messages=warnings.messages, output_path=output_path)
+    if strict and warnings.messages:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

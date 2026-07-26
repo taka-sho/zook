@@ -1,6 +1,6 @@
 # 使い方
 
-archdiagram は `build`/`validate`/`icons`/`preview`/`export-drawio`/`sync` の6つのサブコマンドを持ちます。
+archdiagram は `build`/`validate`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の7つのサブコマンドを持ちます。
 
 ```bash
 archdiagram --help
@@ -66,6 +66,14 @@ archdiagram export-drawio diagram.yaml -o diagram.drawio   # draw.ioで開ける
 archdiagram sync diagram.yaml diagram.drawio -o diagram.yaml # 変更をYAMLに反映
 ```
 
+## from-mermaid — Mermaidフローチャートから変換する
+
+[Mermaid](https://mermaid.js.org/)の`flowchart`/`graph`記法をarchdiagramのYAMLに変換します。詳細は[Mermaidフローチャートのインポート](mermaid-import.md)を参照してください。
+
+```bash
+archdiagram from-mermaid diagram.mmd -o diagram.yaml
+```
+
 ## 独自アイコン・スタイルで上書きする
 
 `--registry` オプション(`build`/`validate`/`icons list`/`preview`/`export-drawio`/`sync` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
@@ -118,7 +126,7 @@ Wrote out.pptx
 
 ### 機械可読な出力(`--format`)
 
-`build`/`validate`/`export-drawio`/`sync` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
+`build`/`validate`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
 
 ```bash
 $ archdiagram validate diagram.yaml --format json

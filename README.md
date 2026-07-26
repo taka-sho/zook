@@ -4,7 +4,7 @@ archdiagram は、YAML で書いたインフラ構成から PowerPoint(.pptx)の
 
 利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/archtecture-diagram-generator/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
 
-生成AIがこのツールを使って構成図を作る場合は [`AGENTS.md`](./AGENTS.md) に黄金の道(パターン選定→アイコン語彙確認→検証→生成)をまとめています。
+生成AIがこのツールを使って構成図を作る場合は [`AGENTS.md`](./AGENTS.md) に黄金の道(パターン選定→アイコン語彙確認→検証→生成)をまとめています。Mermaidの`flowchart`記法で書いた図がすでにある場合は、`archdiagram from-mermaid` で YAML に変換してから同じ流れに載せられます([Mermaidフローチャートのインポート](https://taka-sho.github.io/archtecture-diagram-generator/mermaid-import/))。
 
 ## 基本の流れ: ベースを作り、draw.io で整え、YAML に戻す
 
@@ -62,6 +62,7 @@ python3 -m venv .venv
 | `preview` | PowerPoint を使わずに軽量 PNG でプレビューする |
 | `export-drawio` | draw.io で編集できる形式に書き出す |
 | `sync` | draw.io での位置・サイズの変更を YAML に反映する |
+| `from-mermaid` | Mermaid の `flowchart`/`graph` 記法を YAML に変換する |
 
 `--registry` オプション(全サブコマンド共通)を使うと、組み込みの AWS/GCP/Azure アイコンレジストリの上に、独自のアイコンや枠スタイルを重ねられます。
 
@@ -113,7 +114,7 @@ archdiagram は CI/CD での利用を想定し、構造の破綻と描画上の�
 
 ```
 src/archdiagram/
-  cli.py        CLIエントリポイント(build/validate/icons/preview/export-drawio/sync)
+  cli.py        CLIエントリポイント(build/validate/icons/preview/export-drawio/sync/from-mermaid)
   validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照/fromSide-toSideの軸整合)
   model.py      パース後のデータモデル
   registry.py   アイコン/枠スタイルのレジストリ解決(MultiRegistry、provider別・エイリアス・上書き対応)
@@ -121,6 +122,7 @@ src/archdiagram/
   render.py     python-pptx によるスライド生成(階層グループ・コネクタ・ラベル)
   preview.py    Pillow による軽量PNGプレビュー(LibreOffice/PowerPoint不要)
   drawio.py     draw.io(mxGraph XML)へのエクスポート・同期(継続的な構成図管理向け)
+  mermaid_flowchart.py  Mermaidの`flowchart`/`graph`記法のパーサ(from-mermaid向け)
   schemas/      arch-diagram.schema.json / icon-registry.schema.json(docs/の写し)
   data/icons/{aws,gcp,azure}/  組み込みレジストリ + プレースホルダーアイコンPNG
 ```

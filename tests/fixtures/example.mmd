@@ -1,0 +1,10 @@
+flowchart LR
+  %% a full-line comment, ignored
+  A[Start] --> B(Process)
+  B --> C{Decision?}
+  C -->|yes| D((Done))
+
+  subgraph storage[Storage Layer]
+    E[Database]
+  end
+  D --> E
