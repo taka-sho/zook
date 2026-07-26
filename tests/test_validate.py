@@ -95,6 +95,40 @@ def test_negative_label_gap_is_fatal():
         validate(doc)
 
 
+def test_link_side_same_axis_passes():
+    doc = _base(
+        elements=[
+            {"kind": "node", "id": "a", "type": "EC2"},
+            {"kind": "node", "id": "b", "type": "S3"},
+        ],
+        links=[{"from": "a", "to": "b", "fromSide": "right", "toSide": "left"}],
+    )
+    validate(doc)
+
+
+def test_link_single_side_passes():
+    doc = _base(
+        elements=[
+            {"kind": "node", "id": "a", "type": "EC2"},
+            {"kind": "node", "id": "b", "type": "S3"},
+        ],
+        links=[{"from": "a", "to": "b", "fromSide": "bottom"}],
+    )
+    validate(doc)
+
+
+def test_link_mismatched_axis_sides_is_fatal():
+    doc = _base(
+        elements=[
+            {"kind": "node", "id": "a", "type": "EC2"},
+            {"kind": "node", "id": "b", "type": "S3"},
+        ],
+        links=[{"from": "a", "to": "b", "fromSide": "bottom", "toSide": "left"}],
+    )
+    with pytest.raises(DiagramError, match="same axis"):
+        validate(doc)
+
+
 def test_canvas_overlap_margin_passes():
     doc = _base(canvas={"aspectRatio": "16:9", "overlapMargin": 20})
     validate(doc)

@@ -166,7 +166,7 @@ def _draw_arrowhead(draw: ImageDraw.ImageDraw, tip, direction, color, size=8) ->
 
 
 def _draw_link(draw: ImageDraw.ImageDraw, from_box: Box, to_box: Box, link, registry: MultiRegistry) -> None:
-    _, _, _, path = link_render_plan(from_box, to_box, link.style)
+    _, _, _, path = link_render_plan(from_box, to_box, link)
     px_path = [(_px(x), _px(y)) for x, y in path]
     draw.line(px_path, fill=LINE_COLOR, width=2)
 

@@ -44,6 +44,9 @@ def _walk_elements(elements: list[dict]):
         yield from _walk_elements(el.get("children", []))
 
 
+_SIDE_AXIS = {"top": "vertical", "bottom": "vertical", "left": "horizontal", "right": "horizontal"}
+
+
 def validate_semantics(raw: dict) -> None:
     """id uniqueness and link from/to existence. Assumes schema-valid input."""
     ids: dict[str, int] = {}
@@ -62,6 +65,17 @@ def validate_semantics(raw: dict) -> None:
             missing.append(f"link.to={link['to']!r}")
     if missing:
         raise DiagramError("Link references unknown element id(s): " + ", ".join(missing))
+
+    mismatched: list[str] = []
+    for link in raw.get("links", []):
+        from_side, to_side = link.get("fromSide"), link.get("toSide")
+        if from_side and to_side and _SIDE_AXIS[from_side] != _SIDE_AXIS[to_side]:
+            mismatched.append(f"{link['from']!r} -> {link['to']!r} (fromSide={from_side!r}, toSide={to_side!r})")
+    if mismatched:
+        raise DiagramError(
+            "link fromSide/toSide must be on the same axis (both top/bottom, or both left/right): "
+            + ", ".join(mismatched)
+        )
 
 
 def validate(raw: dict) -> None:

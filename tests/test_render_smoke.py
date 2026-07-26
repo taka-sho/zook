@@ -247,6 +247,76 @@ links:
     assert "share a collinear segment" in (result.output + result.stderr)
 
 
+def test_cli_builds_with_explicit_connection_sides(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    raw = tmp_path / "sides.yaml"
+    raw.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: a
+    type: EC2
+    x: 0
+    y: 0
+  - kind: node
+    id: b
+    type: S3
+    x: 300
+    y: 100
+links:
+  - from: a
+    to: b
+    fromSide: bottom
+"""
+    )
+    runner = CliRunner()
+    out_path = tmp_path / "out.pptx"
+    result = runner.invoke(main, ["build", str(raw), "-o", str(out_path)])
+    assert result.exit_code == 0
+    assert out_path.exists()
+
+
+def test_cli_rejects_mismatched_axis_connection_sides(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    raw = tmp_path / "bad-sides.yaml"
+    raw.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: node
+    id: a
+    type: EC2
+    x: 0
+    y: 0
+  - kind: node
+    id: b
+    type: S3
+    x: 300
+    y: 100
+links:
+  - from: a
+    to: b
+    fromSide: bottom
+    toSide: left
+"""
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["build", str(raw), "-o", str(tmp_path / "out.pptx")])
+    assert result.exit_code == 1
+    assert "same axis" in (result.output + result.stderr)
+
+
 def test_cli_strict_exits_nonzero_on_warning(tmp_path):
     from click.testing import CliRunner
 

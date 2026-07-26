@@ -1,7 +1,9 @@
 from archdiagram.layout import (
+    Box,
     LABEL_BOX_HEIGHT,
     LABEL_GAP_DEFAULT,
     build_layout,
+    choose_connection_indices,
     connection_point,
     container_label_reserve,
     content_offset,
@@ -413,7 +415,7 @@ def test_diagonal_link_renders_as_elbow_end_to_end():
     diagram = _diagram([a, b], links=[Link(from_id="a", to_id="b")])
     root = build_layout(diagram, REGISTRY)
     boxes = _boxes_by_id(root)
-    _, _, eff_style, path = link_render_plan(boxes["a"], boxes["b"], "straight")
+    _, _, eff_style, path = link_render_plan(boxes["a"], boxes["b"], Link(from_id="a", to_id="b"))
     assert eff_style == "elbow"
     assert len(path) == 4  # two right-angle bends, matching bentConnector3
 
@@ -685,6 +687,55 @@ def test_unrelated_links_with_disjoint_routes_are_not_flagged_as_aliasing():
 
     warnings = link_aliasing_warnings(root, diagram.links)
     assert warnings == []
+
+
+# --- explicit / auto connection-side selection ------------------------------
+
+
+def _plain_box(x, y, w, h):
+    el = Element(kind="node", id="n", type="EC2", provider="aws", x=x, y=y, width=w, height=h, style={"labelPosition": "none"})
+    return Box(el, w, h, w, h, local_x=x, local_y=y, abs_x=x, abs_y=y)
+
+
+def test_auto_prefers_the_dominant_axis_on_an_exact_tie():
+    # Square boxes -> horizontal-pair and vertical-pair paths are exactly
+    # equal length; dx dominates (300 > 100), so the dominant axis should
+    # win rather than an arbitrary/other tie-break.
+    a = _plain_box(0, 0, 64, 64)
+    b = _plain_box(300, 100, 64, 64)
+    assert choose_connection_indices(a, b, Link(from_id="a", to_id="b")) == (3, 1)
+
+
+def test_auto_switches_off_the_dominant_axis_when_the_other_is_meaningfully_shorter():
+    # Tall, narrow boxes: dx (300) still dominates dy (150), but the
+    # vertical-pair path is genuinely ~32% shorter once the boxes' own
+    # height/width asymmetry is factored in - past the switch margin.
+    a = _plain_box(0, 0, 10, 150)
+    b = _plain_box(300, 150, 10, 150)
+    assert choose_connection_indices(a, b, Link(from_id="a", to_id="b")) == (2, 0)
+
+
+def test_explicit_both_sides_override_the_auto_choice():
+    a = _plain_box(0, 0, 10, 150)
+    b = _plain_box(300, 150, 10, 150)
+    # auto would pick (2, 0) here (previous test) - explicit sides win regardless.
+    link = Link(from_id="a", to_id="b", from_side="right", to_side="left")
+    assert choose_connection_indices(a, b, link) == (3, 1)
+
+
+def test_explicit_from_side_only_auto_completes_to_side_on_the_same_axis():
+    a = _plain_box(0, 0, 64, 64)
+    b = _plain_box(300, 300, 64, 64)  # below and to the right
+    link = Link(from_id="a", to_id="b", from_side="bottom")
+    # from_side fixes the vertical axis; to_side auto-picks "top" since b is below a.
+    assert choose_connection_indices(a, b, link) == (2, 0)
+
+
+def test_explicit_to_side_only_auto_completes_from_side_on_the_same_axis():
+    a = _plain_box(0, 0, 64, 64)
+    b = _plain_box(300, 300, 64, 64)
+    link = Link(from_id="a", to_id="b", to_side="top")
+    assert choose_connection_indices(a, b, link) == (2, 0)
 
 
 def test_workaround_from_bug_report_no_longer_shares_an_edge_and_is_not_flagged():

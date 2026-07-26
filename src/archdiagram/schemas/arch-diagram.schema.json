@@ -221,6 +221,14 @@
           "exclusiveMinimum": 0,
           "default": 8,
           "description": "Point size of the link's label text, and of the midpoint label box it's drawn in. No effect without `label`."
+        },
+        "fromSide": {
+          "enum": ["top", "bottom", "left", "right"],
+          "description": "Force the connector to exit `from` on this side. If omitted, chosen automatically. If only one of fromSide/toSide is set, the other is auto-chosen on the same axis (top/bottom vs left/right) as the one given."
+        },
+        "toSide": {
+          "enum": ["top", "bottom", "left", "right"],
+          "description": "Force the connector to enter `to` on this side. Same auto-completion rule as fromSide. Setting both to sides on different axes (e.g. fromSide: bottom with toSide: left) is a Fatal error - see sec9."
         }
       }
     }

@@ -366,14 +366,68 @@ def overlap_warnings(root_box: Box, registry: MultiRegistry, margin: float = 0) 
     return messages
 
 
-def choose_connection_indices(from_box: Box, to_box: Box) -> tuple[int, int]:
-    """sec8.2: idx 0=top, 1=left, 2=bottom, 3=right. Pick the edge facing the other shape."""
+_SIDE_TO_IDX = {"top": 0, "left": 1, "bottom": 2, "right": 3}
+_IDX_AXIS = {0: "vertical", 2: "vertical", 1: "horizontal", 3: "horizontal"}
+
+# How much shorter the non-dominant axis's path must be, relative to the
+# dominant axis's, before auto-selection switches to it (sec8.2). Without
+# this, a near-tie (a couple of percent, easily produced by label-avoidance
+# offsets) could flip the axis choice on what's visually an obviously
+# horizontal- or vertical-leaning pair, which read as unstable/unnatural.
+_AXIS_SWITCH_MARGIN = 0.2
+
+
+def _path_length(path: list[tuple[float, float]]) -> float:
+    return sum(math.dist(p1, p2) for p1, p2 in zip(path, path[1:]))
+
+
+def choose_connection_indices(from_box: Box, to_box: Box, link: Optional[Link] = None) -> tuple[int, int]:
+    """sec8.2: idx 0=top, 1=left, 2=bottom, 3=right.
+
+    - Both `link.from_side`/`link.to_side` set: used as-is (validate.py has
+      already rejected any axis-mismatched combination as Fatal, so this
+      always yields a same-axis pair).
+    - Only one set: it fixes the axis (top/bottom = vertical, left/right =
+      horizontal); the other endpoint auto-picks its side on that same
+      axis from the two boxes' relative position, same rule as the fully
+      automatic case below.
+    - Neither set (default): the dominant axis (whichever of |dx|/|dy| is
+      larger) is used unless the *other* axis's actual rendered path
+      (connection points, label-avoidance offsets, and elbow routing all
+      included) is shorter by more than _AXIS_SWITCH_MARGIN - a plain
+      "always pick whichever is shorter" flips on near-ties (a couple of
+      percent, easily produced by label offsets) in cases that read as
+      obviously horizontal- or vertical-leaning, which looked unstable and
+      unnatural in practice.
+    """
+    from_side = link.from_side if link else None
+    to_side = link.to_side if link else None
     fcx, fcy = from_box.abs_x + from_box.width / 2, from_box.abs_y + from_box.height / 2
     tcx, tcy = to_box.abs_x + to_box.width / 2, to_box.abs_y + to_box.height / 2
     dx, dy = tcx - fcx, tcy - fcy
-    if abs(dx) >= abs(dy):
-        return (3, 1) if dx >= 0 else (1, 3)
-    return (2, 0) if dy >= 0 else (0, 2)
+    horizontal_pair = (3, 1) if dx >= 0 else (1, 3)
+    vertical_pair = (2, 0) if dy >= 0 else (0, 2)
+
+    if from_side and to_side:
+        return _SIDE_TO_IDX[from_side], _SIDE_TO_IDX[to_side]
+    if from_side:
+        from_idx = _SIDE_TO_IDX[from_side]
+        return (from_idx, horizontal_pair[1]) if _IDX_AXIS[from_idx] == "horizontal" else (from_idx, vertical_pair[1])
+    if to_side:
+        to_idx = _SIDE_TO_IDX[to_side]
+        return (horizontal_pair[0], to_idx) if _IDX_AXIS[to_idx] == "horizontal" else (vertical_pair[0], to_idx)
+
+    style = link.style if link else "straight"
+
+    def path_length(idx_pair: tuple[int, int]) -> float:
+        p1, p2 = connection_point(from_box, idx_pair[0]), connection_point(to_box, idx_pair[1])
+        eff_style = effective_connector_style(style, p1, p2)
+        return _path_length(connector_path(eff_style, p1, p2, idx_pair[0]))
+
+    dominant, other = (horizontal_pair, vertical_pair) if abs(dx) >= abs(dy) else (vertical_pair, horizontal_pair)
+    if path_length(other) < path_length(dominant) * (1 - _AXIS_SWITCH_MARGIN):
+        return other
+    return dominant
 
 
 def connection_point(box: Box, idx: int) -> tuple[float, float]:
@@ -490,15 +544,15 @@ def link_label_size(font_size: float) -> tuple[float, float]:
     return base_w * ratio, base_h * ratio
 
 
-def link_render_plan(from_box: Box, to_box: Box, style: str) -> tuple[int, int, str, list[tuple[float, float]]]:
+def link_render_plan(from_box: Box, to_box: Box, link: Link) -> tuple[int, int, str, list[tuple[float, float]]]:
     """Single source of truth for how a link will actually be drawn: which
     connection-point indices, the effective style (straight auto-upgrades
     to elbow when diagonal), and the resulting waypoints. render.py and
     link_crossing_warnings() both call this so the check can never drift
     from what's actually rendered."""
-    s_idx, e_idx = choose_connection_indices(from_box, to_box)
+    s_idx, e_idx = choose_connection_indices(from_box, to_box, link)
     p1, p2 = connection_point(from_box, s_idx), connection_point(to_box, e_idx)
-    eff_style = effective_connector_style(style, p1, p2)
+    eff_style = effective_connector_style(link.style, p1, p2)
     path = connector_path(eff_style, p1, p2, s_idx)
     return s_idx, e_idx, eff_style, path
 
@@ -555,7 +609,7 @@ def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegi
         if from_box is None or to_box is None:
             paths[i] = None  # dangling refs are Fatal elsewhere; defensive only
             continue
-        _, _, _, path = link_render_plan(from_box, to_box, link.style)
+        _, _, _, path = link_render_plan(from_box, to_box, link)
         paths[i] = path
 
     label_rects: dict[int, tuple[float, float, float, float]] = {}
@@ -696,7 +750,7 @@ def link_aliasing_warnings(root_box: Box, links: list[Link]) -> list[str]:
         if from_box is None or to_box is None:
             paths.append(None)  # dangling refs are Fatal elsewhere; defensive only
             continue
-        _, _, _, path = link_render_plan(from_box, to_box, link.style)
+        _, _, _, path = link_render_plan(from_box, to_box, link)
         paths.append(path)
 
     messages: list[str] = []

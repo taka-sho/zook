@@ -66,6 +66,8 @@ class Link:
     style: str = "straight"
     label: Optional[str] = None
     label_font_size: float = 8
+    from_side: Optional[str] = None  # "top"|"bottom"|"left"|"right"; None -> auto
+    to_side: Optional[str] = None
 
 
 @dataclass
@@ -114,6 +116,8 @@ def _parse_link(raw: dict) -> Link:
         style=raw.get("style", "straight"),
         label=raw.get("label"),
         label_font_size=raw.get("labelFontSize", 8),
+        from_side=raw.get("fromSide"),
+        to_side=raw.get("toSide"),
     )
 
 
