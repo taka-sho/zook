@@ -1,0 +1,56 @@
+version: "1.0"
+# GCPでのサーバーレスAPI構成(serverless-api.yamlのGCP版)。
+# API GatewayでHTTPSリクエストを受け、Cloud Functionsで処理し、Firestoreに永続化する。
+# 認証はIdentity Platformで行う。GCPを指定された場合の土台に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+
+  - kind: container
+    id: gcp
+    type: cloud
+    provider: gcp
+    label: "Google Cloud"
+    layout:
+      direction: vertical
+      gap: 48
+    children:
+      - kind: node
+        id: idp
+        type: IdentityPlatform
+        provider: gcp
+        label: "Identity Platform"
+      - kind: node
+        id: apigw
+        type: APIGateway
+        provider: gcp
+        label: "API Gateway"
+      - kind: node
+        id: func
+        type: CloudFunctions
+        provider: gcp
+        label: "Business Logic"
+      - kind: node
+        id: store
+        type: Firestore
+        provider: gcp
+        label: "Document Store"
+
+links:
+  - from: user
+    to: apigw
+    label: "HTTPS + JWT"
+  - from: apigw
+    to: idp
+    label: "authorize"
+  - from: apigw
+    to: func
+  - from: func
+    to: store

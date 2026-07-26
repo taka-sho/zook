@@ -4,6 +4,8 @@ archdiagram は、YAML で書いたインフラ構成から PowerPoint(.pptx)の
 
 利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/archtecture-diagram-generator/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
 
+生成AIがこのツールを使って構成図を作る場合は [`AGENTS.md`](./AGENTS.md) に黄金の道(パターン選定→アイコン語彙確認→検証→生成)をまとめています。
+
 ## 基本の流れ: ベースを作り、draw.io で整え、YAML に戻す
 
 archdiagram でのアーキテクチャ図づくりは、次の4ステップを繰り返す形で進みます。図を直すたびにこの流れへ戻ってくる運用を想定しています。

@@ -1,0 +1,51 @@
+version: "1.0"
+# サーバーレスAPIの構成。
+# API GatewayでHTTPSリクエストを受け、Lambdaで処理し、DynamoDBに永続化する。
+# 認証はCognitoで行う。「サーバー管理をしたくない」「まず小さく作って伸ばしたい」に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+
+  - kind: container
+    id: aws
+    type: cloud
+    label: "AWS Cloud"
+    layout:
+      direction: vertical
+      gap: 48
+    children:
+      - kind: node
+        id: cognito
+        type: Cognito
+        label: "User Pool"
+      - kind: node
+        id: apigw
+        type: APIGateway
+        label: "REST API"
+      - kind: node
+        id: lambda
+        type: Lambda
+        label: "Business Logic"
+      - kind: node
+        id: ddb
+        type: DynamoDB
+        label: "Table"
+
+links:
+  - from: user
+    to: apigw
+    label: "HTTPS + JWT"
+  - from: apigw
+    to: cognito
+    label: "authorize"
+  - from: apigw
+    to: lambda
+  - from: lambda
+    to: ddb

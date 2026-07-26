@@ -1,0 +1,60 @@
+version: "1.0"
+# コンテナ基盤(Fargate)の構成。
+# ALB配下でECS(Fargate)がアプリを実行し、Auroraに永続化・ElastiCacheでキャッシュする。
+# 「サーバー管理は減らしたいがコンテナのまま動かしたい」に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+
+  - kind: container
+    id: vpc
+    type: vpc
+    label: "Production VPC"
+    layout:
+      direction: vertical
+      gap: 48
+    children:
+      - kind: node
+        id: alb
+        type: ELB
+        label: "ALB"
+      - kind: node
+        id: service
+        type: ECS
+        label: "Fargate Service"
+
+      - kind: container
+        id: data-row
+        type: group
+        layout:
+          direction: horizontal
+          gap: 64
+        children:
+          - kind: node
+            id: aurora
+            type: Aurora
+            label: "Aurora Cluster"
+          - kind: node
+            id: cache
+            type: ElastiCache
+            label: "Session Cache"
+
+links:
+  - from: user
+    to: alb
+    label: "HTTPS"
+  - from: alb
+    to: service
+  - from: service
+    to: aurora
+    label: "read/write"
+  - from: service
+    to: cache
+    label: "session"

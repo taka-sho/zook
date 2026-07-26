@@ -1,0 +1,74 @@
+version: "1.0"
+# 3層Webアプリケーションの定番構成。
+# ALB配下に複数AZのEC2 Webサーバーを並べ、各AZにRDSを置いた冗長構成。
+# 「Webアプリを新しく作りたい」「まずは王道構成から」という要件に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+
+  - kind: container
+    id: vpc
+    type: vpc
+    label: "Production VPC"
+    layout:
+      direction: vertical
+      gap: 48
+    children:
+      - kind: node
+        id: alb
+        type: ELB
+        label: "ALB"
+
+      - kind: container
+        id: web-row
+        type: group
+        layout:
+          direction: horizontal
+          gap: 64
+        children:
+          - kind: node
+            id: web-a
+            type: EC2
+            label: "Web Server (AZ-a)"
+          - kind: node
+            id: web-c
+            type: EC2
+            label: "Web Server (AZ-c)"
+
+      - kind: container
+        id: db-row
+        type: group
+        layout:
+          direction: horizontal
+          gap: 64
+        children:
+          - kind: node
+            id: db-a
+            type: RDS
+            label: "DB Primary (AZ-a)"
+          - kind: node
+            id: db-c
+            type: RDS
+            label: "DB Standby (AZ-c)"
+
+links:
+  - from: user
+    to: alb
+    label: "HTTPS"
+  - from: alb
+    to: web-a
+  - from: alb
+    to: web-c
+  - from: web-a
+    to: db-a
+    label: "3306"
+  - from: web-c
+    to: db-c
+    label: "3306"

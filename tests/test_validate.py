@@ -31,6 +31,15 @@ def test_x_without_y_is_fatal():
         validate(doc)
 
 
+def test_x_without_y_error_names_the_specific_dependency():
+    # A bare "is not valid under any of the given schemas" (jsonschema's
+    # generic oneOf message) gives no actionable hint for self-correction.
+    # validate_schema() should surface the specific sub-error instead.
+    doc = _base(elements=[{"kind": "node", "id": "a", "type": "EC2", "x": 10}])
+    with pytest.raises(DiagramError, match="dependency"):
+        validate(doc)
+
+
 def test_unknown_top_level_field_is_fatal():
     doc = _base(bogus="nope")
     with pytest.raises(DiagramError):

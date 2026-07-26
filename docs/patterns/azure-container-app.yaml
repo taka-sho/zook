@@ -1,0 +1,56 @@
+version: "1.0"
+# Azureでのコンテナアプリ構成(container-platform.yamlのAzure版)。
+# Front DoorでHTTPSを受け、Container Appsでアプリを実行し、Cosmos DBに永続化する。
+# 認証はEntra IDで行う。Azureを指定された場合の土台に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+
+  - kind: container
+    id: azure
+    type: cloud
+    provider: azure
+    label: "Microsoft Azure"
+    layout:
+      direction: vertical
+      gap: 48
+    children:
+      - kind: node
+        id: entra
+        type: EntraID
+        provider: azure
+        label: "Entra ID"
+      - kind: node
+        id: frontdoor
+        type: FrontDoor
+        provider: azure
+        label: "Front Door"
+      - kind: node
+        id: app
+        type: ContainerApps
+        provider: azure
+        label: "Container App"
+      - kind: node
+        id: cosmos
+        type: CosmosDB
+        provider: azure
+        label: "Cosmos DB"
+
+links:
+  - from: user
+    to: frontdoor
+    label: "HTTPS"
+  - from: frontdoor
+    to: entra
+    label: "authorize"
+  - from: frontdoor
+    to: app
+  - from: app
+    to: cosmos

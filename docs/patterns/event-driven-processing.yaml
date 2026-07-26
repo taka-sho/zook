@@ -1,0 +1,59 @@
+version: "1.0"
+# 非同期・疎結合な処理パイプライン。
+# S3へのアップロードをEventBridgeで検知し、SQSでバッファしてからLambdaが処理する。
+# 「同期応答が不要」「後続処理が詰まっても受付側を止めたくない」に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: container
+    id: aws
+    type: cloud
+    label: "AWS Cloud"
+    layout:
+      direction: horizontal
+      gap: 56
+    children:
+      - kind: node
+        id: bucket
+        type: S3
+        label: "Upload Bucket"
+      - kind: node
+        id: events
+        type: EventBridge
+        label: "Event Bus"
+      - kind: node
+        id: queue
+        type: SQS
+        label: "Processing Queue"
+      - kind: node
+        id: worker
+        type: Lambda
+        label: "Worker"
+      - kind: node
+        id: table
+        type: DynamoDB
+        label: "Result Table"
+      - kind: node
+        id: notify
+        type: SNS
+        label: "Completion Topic"
+
+links:
+  - from: bucket
+    to: events
+    label: "ObjectCreated"
+  - from: events
+    to: queue
+  - from: queue
+    to: worker
+    label: "poll"
+  - from: worker
+    to: table
+    label: "store"
+  - from: worker
+    to: notify
+    fromSide: bottom
+    toSide: bottom

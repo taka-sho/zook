@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 import jsonschema
+from jsonschema.exceptions import best_match
 
 from .errors import DiagramError
 
@@ -23,7 +24,15 @@ def _load_schema() -> dict:
 
 
 def validate_schema(raw: dict) -> None:
-    """Raise DiagramError with all violations if `raw` does not match the JSON Schema."""
+    """Raise DiagramError with all violations if `raw` does not match the JSON Schema.
+
+    `element` is a `oneOf: [container, node]`, so a violation's top-level
+    message is jsonschema's generic "is not valid under any of the given
+    schemas" - useless for self-correction (by a human or an AI) since it
+    doesn't say which of the two branches was closer or why. `err.context`
+    holds the per-branch sub-errors in that case; `best_match()` picks the
+    most relevant one (e.g. "'y' is a dependency of 'x'") and we append it.
+    """
     schema = _load_schema()
     validator = jsonschema.Draft202012Validator(schema)
     errors = sorted(validator.iter_errors(raw), key=lambda e: list(e.absolute_path))
@@ -34,7 +43,11 @@ def validate_schema(raw: dict) -> None:
         path = "$" + "".join(
             f"[{p!r}]" if isinstance(p, str) else f"[{p}]" for p in err.absolute_path
         )
-        lines.append(f"  {path}: {err.message}")
+        message = err.message
+        if err.context:
+            detail = best_match(err.context)
+            message = f"{message} (closest match: {detail.message})"
+        lines.append(f"  {path}: {message}")
     raise DiagramError("Schema validation failed:\n" + "\n".join(lines))
 
 

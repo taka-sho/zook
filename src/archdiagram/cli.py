@@ -188,7 +188,7 @@ def icons_list(provider: str | None, user_registry_path: str | None, fmt: str) -
             registry = multi.registries[p]
             payload[p] = {
                 "icons": [
-                    {"type": e.name, "aliases": e.aliases, "category": e.category, "file": str(e.file)}
+                    {"type": e.name, "aliases": e.aliases, "category": e.category}
                     for e in unique_entries(registry.icons)
                 ],
                 "groups": [

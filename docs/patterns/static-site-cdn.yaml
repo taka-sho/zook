@@ -1,0 +1,54 @@
+version: "1.0"
+# 静的サイト配信の構成。
+# Route53でドメインを解決し、CloudFront経由でS3に置いた静的ファイルを配信する。
+# 「サーバーレスで静的サイト/SPAを配信したい」に向く。
+
+canvas:
+  aspectRatio: "16:9"
+  padding: 40
+
+elements:
+  - kind: node
+    id: user
+    type: User
+    label: "End User"
+
+  - kind: container
+    id: aws
+    type: cloud
+    label: "AWS Cloud"
+    layout:
+      direction: vertical
+      gap: 48
+    children:
+      - kind: node
+        id: dns
+        type: Route53
+        label: "Hosted Zone"
+
+      - kind: container
+        id: delivery-row
+        type: group
+        layout:
+          direction: horizontal
+          gap: 64
+        children:
+          - kind: node
+            id: cdn
+            type: CloudFront
+            label: "Distribution"
+          - kind: node
+            id: bucket
+            type: S3
+            label: "Static Assets"
+
+links:
+  - from: user
+    to: cdn
+    label: "HTTPS"
+  - from: dns
+    to: cdn
+    label: "alias"
+  - from: cdn
+    to: bucket
+    label: "origin"
