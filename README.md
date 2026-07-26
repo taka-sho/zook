@@ -1,37 +1,111 @@
 # archdiagram
 
-YAML で書いたアーキテクチャ構成から PowerPoint(.pptx)を生成するCLIツール。
+archdiagram は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアーキテクチャ図を生成する CLI ツールです。draw.io で整えた見た目の変更を YAML に書き戻しながら図を育てていく運用を主眼に置いています。
 
-利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/archtecture-diagram-generator/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。
+利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/archtecture-diagram-generator/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
 
-設計・仕様は `docs/README-index.md` を参照(要件定義・YAML入力仕様・JSON Schema・アイコンレジストリ仕様・pptx詳細設計の一式)。本ディレクトリはその実装。
+## 基本の流れ: ベースを作り、draw.io で整え、YAML に戻す
+
+archdiagram でのアーキテクチャ図づくりは、次の4ステップを繰り返す形で進みます。図を直すたびにこの流れへ戻ってくる運用を想定しています。
+
+1. **YAML からベースの構成図を作る**。VPC・AZ・サービスといった構成要素を YAML で記述し、`build` で PowerPoint を生成します。座標を指定しなければ自動でレイアウトされるので、最初は構造を書くことだけに集中できます。
+
+   ```bash
+   archdiagram build diagram.yaml -o diagram.pptx
+   ```
+
+2. **見た目を draw.io で整える**。自動レイアウトのままでは間隔や配置が意図通りにならないことがあります。`export-drawio` で draw.io 形式に書き出し、要素の位置・サイズを実際に動かしながら調整します。
+
+   ```bash
+   archdiagram export-drawio diagram.yaml -o diagram.drawio
+   ```
+
+3. **draw.io での調整を YAML に書き戻す**。動かしていない要素は自動配置のまま維持され、実際に動かした要素だけ座標が YAML に加わります。ノードの追加・削除や色の変更は同期の対象外です。PowerPoint ではなく draw.io を経由するのは、draw.io のコンテナ図形はリサイズしても子要素の座標が変わらず、座標変換なしにそのまま YAML へ書き戻せるためです(PowerPoint のグループ図形は子要素の座標を独自スケールで保持しており、変換の読み戻しが煩雑になります)。
+
+   ```bash
+   archdiagram sync diagram.yaml diagram.drawio -o diagram.yaml
+   ```
+
+4. **整えた YAML から PowerPoint を出力し直す**。draw.io での配置を保ったまま PowerPoint が生成されます。構成そのものを変えたくなったら 1 に戻って YAML を編集し、また同じ4ステップを回します。
+
+   ```bash
+   archdiagram build diagram.yaml -o diagram.pptx
+   ```
+
+このループは CI に載せて自動化することもできます。draw.io 側で `.drawio` ファイルを保存すると、CI が `sync` を実行して更新後の YAML を Pull Request として自動作成する仕組みも用意しています(`.github/workflows/drawio-sync.yml`)。詳しい運用は[ドキュメントサイトの draw.io連携ページ](https://taka-sho.github.io/archtecture-diagram-generator/drawio-sync/)にまとめています。
 
 ## セットアップ
 
 ```bash
+git clone https://github.com/taka-sho/archtecture-diagram-generator.git
+cd archtecture-diagram-generator
+
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-## 使い方
-
-`build`(生成)/`validate`(検証のみ)/`icons list`(登録済みアイコン一覧)/`preview`(軽量PNG)/`export-drawio`(draw.io書き出し)/`sync`(draw.ioの変更をYAMLに反映)の6サブコマンド。
+同梱のサンプルから生成できることを確認してください。`Wrote example.pptx` と表示され、終了コード `0` なら成功です。
 
 ```bash
-.venv/bin/archdiagram build docs/example.yaml -o out.pptx
-.venv/bin/archdiagram validate docs/example.yaml --strict --format json
-.venv/bin/archdiagram icons list --provider gcp
-.venv/bin/archdiagram preview docs/example.yaml -o out.png
-.venv/bin/archdiagram export-drawio docs/example.yaml -o out.drawio
-.venv/bin/archdiagram sync docs/example.yaml out.drawio -o updated.yaml
+.venv/bin/archdiagram build docs/example.yaml -o example.pptx
+```
 
-# 独自アイコン/枠スタイルで組み込みレジストリを上書きする場合
+## サブコマンド一覧
+
+| コマンド | 役割 |
+|---|---|
+| `build` | YAML から PowerPoint(.pptx)を生成する |
+| `validate` | レンダリングせずにスキーマ・重なりなどを検証する |
+| `icons list` | 登録済みのアイコン・コンテナ種別を一覧表示する |
+| `preview` | PowerPoint を使わずに軽量 PNG でプレビューする |
+| `export-drawio` | draw.io で編集できる形式に書き出す |
+| `sync` | draw.io での位置・サイズの変更を YAML に反映する |
+
+`--registry` オプション(全サブコマンド共通)を使うと、組み込みの AWS/GCP/Azure アイコンレジストリの上に、独自のアイコンや枠スタイルを重ねられます。
+
+```bash
 .venv/bin/archdiagram build diagram.yaml -o out.pptx --registry my-registry.yaml
 ```
 
-- スキーマ違反・id重複・リンク参照先不在などの構造破綻は Fatal(標準エラー出力 + 非ゼロ終了)。
-- 未知の`type`・キャンバス範囲外の座標・要素/ラベルの重なりなどは Warning(標準エラー出力に出して継続。`--strict` で非ゼロ終了に変更可能)。
-- `--format json`/`github` で機械可読出力(CI連携向け)。
+各コマンドの詳しいオプションは[使い方ページ](https://taka-sho.github.io/archtecture-diagram-generator/usage/)を参照してください。
+
+## エラー処理の考え方
+
+archdiagram は CI/CD での利用を想定し、構造の破綻と描画上の軽微な問題を区別します。スキーマ違反・id 重複・リンク参照先の不在といった構造的な誤りは Fatal として即座にエラー終了しますが、未知のアイコン種別や要素同士の重なりといった描画上の問題は Warning として出力しつつ生成を続けます(`--strict` を付けると Warning も非ゼロ終了に切り替わります)。`--format json`/`github` にも対応しており、CI のゲートへそのまま組み込めます。
+
+## アイコンについて
+
+同梱の PNG は各社の公式アイコンではなく、`scripts/generate_placeholder_icons.py` で生成した自作のプレースホルダーです(カテゴリ別の配色とサービス名の略称)。ライセンス上の理由から、AWS/GCP/Azure の公式アイコンはリポジトリに含めていません。実際の公式アイコンに差し替える場合は、各 `registry.<provider>.yaml` の `file` パスに合わせて画像を配置するだけで済み、コードの変更は不要です。
+
+`export-drawio` は AWS のアイコン・コンテナに限り、draw.io 公式の AWS4 シェイプライブラリで書き出します。GCP/Azure は対応表がまだ無く、このツール自身のプレースホルダー PNG が埋め込まれます。
+
+## テスト
+
+```bash
+.venv/bin/pytest tests/ -v
+```
+
+## 既知の制約(v1)
+
+- 自動レイアウトが解消する重なりは、自動配置の要素が明示座標の兄弟要素と重なるケースに限られます(単純な「真下に押し出す」処理)。それ以外の重なりは Warning として検出されるのみで自動修正はされず、生成後の手編集を前提としています。
+- 組み込みのアイコンレジストリは Tier-1 語彙(AWS26・GCP19・Azure18 サービス)のみで、それ以外は `--registry` によるユーザー拡張を想定しています。
+- リンクの接続辺(`fromSide`/`toSide`)は水平ペア・垂直ペアの組み合わせのみ対応しており、軸をまたぐ指定は Fatal エラーになります。
+
+詳しい制約一覧は[ドキュメントサイトの既知の制約ページ](https://taka-sho.github.io/archtecture-diagram-generator/limitations/)にまとめています。
+
+## ドキュメントサイトと CI
+
+利用者向けドキュメントは [Zensical](https://zensical.org/) で `docs-site/` から生成し、`main` への push で GitHub Actions が GitHub Pages へ自動デプロイします。
+
+```bash
+.venv/bin/pip install zensical
+.venv/bin/zensical serve          # http://localhost:8000 でプレビュー
+.venv/bin/zensical build --clean  # site/ に静的サイトを生成(コミット対象外)
+```
+
+- `.github/workflows/tests.yml` — push/PR で `pytest` を実行
+- `.github/workflows/docs.yml` — `main` への push で docs-site を GitHub Pages へデプロイ
+- `.github/workflows/drawio-sync.yml` — `.drawio` ファイルの push をトリガーに `sync` を実行し、差分があれば更新後の YAML を PR として自動作成
 
 ## 構成
 
@@ -48,40 +122,3 @@ src/archdiagram/
   schemas/      arch-diagram.schema.json / icon-registry.schema.json(docs/の写し)
   data/icons/{aws,gcp,azure}/  組み込みレジストリ + プレースホルダーアイコンPNG
 ```
-
-## アイコンについて
-
-`src/archdiagram/data/icons/{aws,gcp,azure}/` のPNGは各社公式アイコンではなく、`scripts/generate_placeholder_icons.py` で生成した自作プレースホルダー(カテゴリ別配色+略称)。
-
-実際の公式アイコンに差し替える場合は、各 `registry.<provider>.yaml` の `file` パスに合わせて画像を配置するだけでよい(コード変更不要)。ラスタライズ解像度は表示pxの4倍が目安(`docs/detailed-design-pptx.md` §8.6)。
-
-## テスト
-
-```bash
-.venv/bin/pytest tests/ -v
-```
-
-## 既知の制約(v1)
-
-- 自動レイアウトは、自動配置の要素が明示座標の兄弟要素と重なる場合のみ自動でずらす(単純な「真下に押し出す」処理)。それ以外の重なりはWarningとして検出されるのみで自動修正はされないため、生成後の手編集を前提とする(`docs/yaml-spec.md` §6)。
-- AWS/GCP/Azureの組み込みレジストリはTier-1語彙(AWS26・GCP19・Azure18サービス)のみ。それ以外は `--registry` でのユーザー拡張を想定。
-- リンクの接続辺(`fromSide`/`toSide`)は水平ペア・垂直ペアの組み合わせのみ対応。軸をまたぐ組み合わせはFatalエラー(`docs/detailed-design-pptx.md` §8.15)。
-- `archdiagram export-drawio` の公式シェイプ対応はAWSのみ。GCP/Azureは現状プレースホルダーPNGの埋め込みにフォールバック(`docs-site/drawio-sync.md`)。
-
-詳細な制約一覧は[ドキュメントサイトの既知の制約ページ](https://taka-sho.github.io/archtecture-diagram-generator/limitations/)を参照。
-
-## ドキュメントサイト(docs-site/)
-
-利用者向けドキュメントは [Zensical](https://zensical.org/) で `docs-site/` から生成し、`main` への push で GitHub Actions(`.github/workflows/docs.yml`)が GitHub Pages に自動デプロイします。
-
-```bash
-.venv/bin/pip install zensical
-.venv/bin/zensical serve      # http://localhost:8000 でプレビュー
-.venv/bin/zensical build --clean  # site/ に静的サイトを生成(コミット対象外)
-```
-
-## CI
-
-- `.github/workflows/tests.yml` — push/PR で `pytest` を実行
-- `.github/workflows/docs.yml` — `main` への push で docs-site を GitHub Pages へデプロイ
-- `.github/workflows/drawio-sync.yml` — `.drawio` ファイルの push をトリガーに `archdiagram sync` を実行し、差分があれば更新後のYAMLをPRとして自動作成(詳細は `docs-site/drawio-sync.md`)
