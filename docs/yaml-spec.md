@@ -61,8 +61,10 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 | `x`,`y` | | number | — | 絶対位置（両方セットで指定。片方だけは不可） |
 | `width`,`height` | | number > 0 | — | 明示サイズ。省略時は子に合わせ自動 |
 | `layout` | | object | — | 子の自動配置ルール（§7） |
-| `style` | | object | — | 枠線色・塗り・線幅・ラベル位置 |
+| `style` | | object | — | 枠線色・塗り・線幅・ラベル位置・ラベル文字サイズ |
 | `children` | | element[] | — | 入れ子（再帰） |
+
+`style.labelFontSize`（number > 0、既定 10、pt）：コンテナ自身のラベル文字サイズ。自動レイアウトがラベル用に確保する上下スペースも、この値に比例して拡大/縮小する。
 
 ### 5.2 node（アイコン：EC2 / Lambda / RDS / S3 など）
 
@@ -74,10 +76,13 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 | `provider` | | enum | `aws` | `aws`/`gcp`/`azure`/`custom` |
 | `label` | | string | — | アイコンのラベル |
 | `x`,`y` | | number | — | 絶対位置（両方セットで指定） |
-| `width`,`height` | | number > 0 | — | アイコンサイズ。省略時は既定サイズ |
-| `style` | | object | — | ラベル位置（`labelPosition`: below/above/right/none）とラベル間隔（`labelGap`） |
+| `width`,`height` | | number > 0 | — | アイコンサイズ。省略時は `size`、それも無ければ既定サイズ |
+| `size` | | number > 0 | — | `width`/`height` を同時に設定するショートハンド。片方の軸だけ `width`/`height` を明示した場合、その軸では無視される |
+| `style` | | object | — | ラベル位置（`labelPosition`: below/above/right/none）・ラベル間隔（`labelGap`）・ラベル文字サイズ（`labelFontSize`） |
 
 `style.labelGap`（number ≥ 0、既定 4、論理単位）：アイコンとラベルの間隔。`labelPosition: none` のときは効果なし。狭いレイアウトでラベル同士・リンクラベルとの重なりを避けたい場合に個別調整できる。
+
+`style.labelFontSize`（number > 0、既定 9、pt）：ノードのラベル文字サイズ。自動レイアウトがラベル用に確保するフットプリント（高さ）も、この値に比例して拡大/縮小する。`labelPosition: none` のときは効果なし。
 
 ### 5.3 id 規則
 
@@ -90,6 +95,7 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 - `x`/`y` を省略 → 親の `layout` に従って自動配置。
 - `x` と `y` は**セット必須**（片方だけの指定はスキーマエラー）。
 - `width`/`height` 省略時：コンテナは子に合わせ自動サイズ、ノードは既定アイコンサイズ。
+- ノードの `size` は `width`/`height` を同時に設定するショートハンド。`width`/`height` を軸ごとに明示した場合はそちらが優先され、`size` はその軸で無視される（例：`size: 80, width: 40` → 幅40・高さ80）。
 - 同一コンテナ内で「座標指定の子」と「自動配置の子」は混在可。自動配置は指定済みの子を避けずに詰める第一版仕様（重なりは後編集で調整）。
 
 ## 7. 自動レイアウト（layout）
@@ -117,6 +123,7 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 | `arrow` | | enum(`end`,`both`,`none`) | `end` | 矢じり。`none` は素の線 |
 | `style` | | enum(`straight`,`elbow`,`curved`) | `straight` | 線の取り回し |
 | `label` | | string | — | 線に載せるラベル（例：ポート番号） |
+| `labelFontSize` | | number > 0 | 8 | ラベル文字サイズ（pt）。中点に置くラベルボックス自体もこの値に比例して拡大/縮小する。`label` が無ければ無効 |
 
 - `links` を丸ごと省略すれば「線なし、エリア内に配置するだけ」の図になる。
 - `from`/`to` はノードでもコンテナでも参照可。

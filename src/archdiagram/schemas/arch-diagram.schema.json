@@ -127,8 +127,9 @@
         "label": { "type": "string", "description": "Display label under/near the icon." },
         "x": { "$ref": "#/$defs/coord", "description": "Absolute x. If omitted, auto-placed by parent." },
         "y": { "$ref": "#/$defs/coord", "description": "Absolute y. If omitted, auto-placed by parent." },
-        "width": { "$ref": "#/$defs/dimension", "description": "Icon width. If omitted, uses default icon size." },
-        "height": { "$ref": "#/$defs/dimension", "description": "Icon height. If omitted, uses default icon size." },
+        "width": { "$ref": "#/$defs/dimension", "description": "Icon width. If omitted, falls back to `size`, then the default icon size." },
+        "height": { "$ref": "#/$defs/dimension", "description": "Icon height. If omitted, falls back to `size`, then the default icon size." },
+        "size": { "$ref": "#/$defs/dimension", "description": "Shorthand that sets both width and height at once. Ignored on an axis where width/height is given explicitly." },
         "style": { "$ref": "#/$defs/nodeStyle" }
       }
     },
@@ -168,7 +169,13 @@
         "borderColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
         "fillColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
         "borderWidth": { "type": "number", "minimum": 0, "default": 1 },
-        "labelPosition": { "enum": ["top-left", "top-center", "bottom-left"], "default": "top-left" }
+        "labelPosition": { "enum": ["top-left", "top-center", "bottom-left"], "default": "top-left" },
+        "labelFontSize": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 10,
+          "description": "Point size of the container's own label text. Also scales the top/bottom space auto-layout reserves for it."
+        }
       }
     },
     "nodeStyle": {
@@ -181,6 +188,12 @@
           "minimum": 0,
           "default": 4,
           "description": "Spacing between the icon and its label (logical units). No effect when labelPosition is 'none'."
+        },
+        "labelFontSize": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 9,
+          "description": "Point size of the node's label text. Also scales the footprint space auto-layout reserves for it. No effect when labelPosition is 'none'."
         }
       }
     },
@@ -202,7 +215,13 @@
           "default": "straight",
           "description": "Connector routing style."
         },
-        "label": { "type": "string", "description": "Optional label carried on the connector." }
+        "label": { "type": "string", "description": "Optional label carried on the connector." },
+        "labelFontSize": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 8,
+          "description": "Point size of the link's label text, and of the midpoint label box it's drawn in. No effect without `label`."
+        }
       }
     }
   }

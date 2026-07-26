@@ -26,11 +26,13 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from .layout import (
-    LABEL_BOX_HEIGHT,
     Box,
     content_offset,
+    label_box_height,
     label_gap,
+    link_label_size,
     link_render_plan,
+    node_label_font_size,
     resolve_container_style,
 )
 from .model import Diagram, Link
@@ -80,7 +82,7 @@ def _add_container_rect(shapes, box: Box, registry: MultiRegistry):
     tf.text = style.label_text
     _apply_label_position(tf, style.label_position)
     for p in tf.paragraphs:
-        p.font.size = Pt(10)
+        p.font.size = Pt(style.label_font_size)
         p.font.color.rgb = RGBColor.from_string(style.border_color.lstrip("#"))
 
     # Corner badge (e.g. the AWS Cloud logo) marks visually where a boundary
@@ -102,13 +104,15 @@ def _add_container_rect(shapes, box: Box, registry: MultiRegistry):
 
 def _add_node_label(shapes, box: Box, text: str, position: str) -> None:
     gap = label_gap(box.element)
+    font_size = node_label_font_size(box.element)
+    box_height = label_box_height(font_size)
     dx, dy = content_offset(box)
     footprint_x, footprint_y = box.abs_x - dx, box.abs_y - dy
     if position == "below":
-        tb = shapes.add_textbox(E(footprint_x), E(box.abs_y + box.height + gap), E(box.footprint_w), E(LABEL_BOX_HEIGHT))
+        tb = shapes.add_textbox(E(footprint_x), E(box.abs_y + box.height + gap), E(box.footprint_w), E(box_height))
         align = PP_ALIGN.CENTER
     elif position == "above":
-        tb = shapes.add_textbox(E(footprint_x), E(footprint_y), E(box.footprint_w), E(LABEL_BOX_HEIGHT))
+        tb = shapes.add_textbox(E(footprint_x), E(footprint_y), E(box.footprint_w), E(box_height))
         align = PP_ALIGN.CENTER
     else:  # right
         tb = shapes.add_textbox(
@@ -122,7 +126,7 @@ def _add_node_label(shapes, box: Box, text: str, position: str) -> None:
     tf.word_wrap = True
     tf.paragraphs[0].text = text
     tf.paragraphs[0].alignment = align
-    tf.paragraphs[0].font.size = Pt(9)
+    tf.paragraphs[0].font.size = Pt(font_size)
 
 
 def _add_node(shapes, box: Box, registry: MultiRegistry):
@@ -162,10 +166,11 @@ def _render_element(shapes, box: Box, registry: MultiRegistry, shape_index: dict
         shape_index[element.id] = (pic, box)
 
 
-def _add_link_label(shapes, conn, text: str) -> None:
+def _add_link_label(shapes, conn, text: str, font_size: float) -> None:
     """sec8.3: p:cxnSp cannot carry txBody; use a separate midpoint textbox."""
     mx, my = (conn.begin_x + conn.end_x) / 2, (conn.begin_y + conn.end_y) / 2
-    w, h = E(60), E(18)
+    label_w, label_h = link_label_size(font_size)
+    w, h = E(label_w), E(label_h)
     tb = shapes.add_textbox(Emu(int(mx - w / 2)), Emu(int(my - h / 2)), w, h)
     tb.fill.solid()
     tb.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
@@ -174,7 +179,7 @@ def _add_link_label(shapes, conn, text: str) -> None:
     tf.margin_top = tf.margin_bottom = 0
     tf.paragraphs[0].text = text
     tf.paragraphs[0].alignment = PP_ALIGN.CENTER
-    tf.paragraphs[0].font.size = Pt(8)
+    tf.paragraphs[0].font.size = Pt(font_size)
 
 
 _CONNECTOR_TYPES = {"straight": MSO_CONNECTOR.STRAIGHT, "elbow": MSO_CONNECTOR.ELBOW, "curved": MSO_CONNECTOR.CURVE}
@@ -204,7 +209,7 @@ def _render_link(shapes, link: Link, shape_index: dict) -> None:
             ln.append(ln.makeelement(qn("a:headEnd"), {"type": "triangle", "w": "med", "len": "med"}))
 
     if link.label:
-        _add_link_label(shapes, conn, link.label)
+        _add_link_label(shapes, conn, link.label, link.label_font_size)
 
 
 def render(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> Presentation:

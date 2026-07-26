@@ -198,6 +198,19 @@
 - **軽量PNGプレビュー**(`preview.py`):LibreOffice/PowerPoint を使わず、同じ `Box` 木・`link_render_plan()` を Pillow で直接描画する第二のレンダラー。`render.py` の `resolve_container_style()`(新設。枠色・塗り・破線・ラベル位置・隅アイコンをまとめて解決する共有関数で、従来 `_add_container_rect()` に直書きされていたロジックを抽出したもの)を共用し、2つのレンダラーが見た目の解決ロジックで乖離しないようにしている。
 - **マルチクラウド**:`registry.gcp.yaml`/`registry.azure.yaml` を追加し、`Registry` を複数保持して要素の `provider` でディスパッチする `MultiRegistry` を導入した。既存の `resolve_icon`/`resolve_group` 呼び出しは全て `element.provider` を渡すよう更新(`layout.py`/`render.py`)。コンテナの `groups` はプロバイダ自身に定義がなければ AWS レジストリへフォールバックする(§8.10 で確定した `container_label_rect()` 等、ラベル位置解決も含めて一貫してこの経路を通る)。
 
+### 8.12 アイコンサイズ・文字サイズの設定可能化(実装時に追加)
+
+要求:出力のアイコンサイズや文字サイズ(ノード/コンテナ/リンクの各ラベル)を YAML から指定できるようにしたい。
+
+- **ノードの `size`**:`width`/`height` を同時に設定するショートハンド(`node.size`)。`_measure_node()` で `element.width or element.size or default_size` として解決するため、軸ごとに `width`/`height` を明示すればそちらが優先され、`size` はその軸でのみ無視される(混在可)。
+- **ラベル文字サイズと自動配置の反比例しない連動**:`nodeStyle.labelFontSize`(既定9pt)・`containerStyle.labelFontSize`(既定10pt)・`link.labelFontSize`(既定8pt)を追加した。文字サイズだけを大きくしてラベルの表示領域(フットプリント高さ・コンテナの上下余白・リンクラベルボックス)がそのままだと文字がはみ出すため、これらの自動配置予約量も同じ倍率で連動してスケールするようにした。
+  - `label_box_height(font_size) = font_size * 2`:1pt = 4/3論理単位、かつ行送り係数1.5を掛けた値(`4/3 * 1.5 = 2`)。ノードのフットプリント計算(`_label_reserve()`)はこの関数を使う。既定値(9pt)では `18`(旧 `LABEL_BOX_HEIGHT` 定数と完全一致)。
+  - `container_label_reserve(font_size) = CONTAINER_LABEL_RESERVE * (font_size / CONTAINER_LABEL_FONT_SIZE_DEFAULT)`:既定10ptを基準に比例配分。
+  - `link_label_size(font_size)`:既定8pt時の `LINK_LABEL_SIZE = (60, 18)` を基準に、幅・高さとも `font_size / LINK_LABEL_FONT_SIZE_DEFAULT` 倍する。
+  - いずれも既定値を代入すると変更前の固定定数と厳密に一致するため、`labelFontSize` を省略した既存の図(`example.yaml`/`example-cloud-actors.yaml`含む)はレイアウト結果が一切変わらない。
+- **`render.py`/`preview.py` 両方を更新**:pptx版は `Pt(font_size)` を各テキストフレームに設定し、テキストボックスの寸法にも `label_box_height()`/`link_label_size()` を使う。PNG プレビュー版も同じ解決関数(`node_label_font_size()`/`resolve_container_style().label_font_size`/`link.label_font_size`)を参照し、フォントサイズと矩形サイズが2つのレンダラー間で乖離しないようにした(§8.11 で確立した「共有関数で解決ロジックを1箇所にまとめる」方針を踏襲)。
+- LibreOffice レンダリングと `archdiagram preview` の両方で、コンテナラベル・ノードアイコン+ラベル・リンクラベルそれぞれを既定値/拡大値で比較し、両レンダラーの見た目が一致することを目視確認済み。
+
 ## 9. 次アクション
 
 - [x] python-pptx で「VPC枠＋AZ＋アイコン＋ラベル」を階層グループ化する最小プロトタイプを作成(`prototype/build_prototype.py`)

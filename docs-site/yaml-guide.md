@@ -34,11 +34,15 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
   type: vpc               # 自由文字列。cloud/vpc/az/subnet/region/account/group など
   provider: aws            # 既定 generic
   label: "Production VPC"
+  style:
+    labelFontSize: 10       # 枠自身のラベル文字サイズ(pt、既定10)
   layout:                  # 子の自動配置ルール(下記参照)
     direction: horizontal
     gap: 48
   children: [...]           # 入れ子(再帰)
 ```
+
+`style.labelFontSize` を大きくすると、自動レイアウトがそのラベル用に確保する上下スペースも比例して広がります。
 
 ### node(アイコン:EC2 / Lambda / RDS / S3 など)
 
@@ -47,19 +51,22 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
   id: web
   type: EC2                # アイコン解決キー。詳細は「アイコン・レジストリ」参照
   label: "WebServer"
+  size: 64                  # アイコンの幅・高さを同時に指定するショートハンド(論理単位)
   style:
     labelPosition: below    # below(既定) / above / right / none
     labelGap: 4              # アイコンとラベルの間隔(論理単位、既定4)
+    labelFontSize: 9          # ラベル文字サイズ(pt、既定9)
 ```
 
-`labelGap` を大きくすると、狭いレイアウトでラベル同士やリンクのラベルとの重なりを避けやすくなります(重なりは[既知の制約](limitations.md)にある通り警告されますが、自動では回避されません)。
+`labelGap` を大きくすると、狭いレイアウトでラベル同士やリンクのラベルとの重なりを避けやすくなります(重なりは[既知の制約](limitations.md)にある通り警告されますが、自動では回避されません)。`labelFontSize` を大きくすると、自動レイアウトがラベル用に確保するフットプリント(高さ)も比例して広がります。
 
 ## 座標とサイズ
 
 - `x`/`y` を指定 → 親コンテナ内での絶対配置(左上原点からの相対座標)。**両方セットで指定**(片方だけはスキーマエラー)。
 - `x`/`y` を省略 → 親の `layout` に従って自動配置。
 - 同一コンテナ内で座標指定の子と自動配置の子は混在可能。
-- `width`/`height` 省略時:コンテナは子に合わせて自動サイズ、ノードは既定アイコンサイズ。
+- `width`/`height` 省略時:コンテナは子に合わせて自動サイズ、ノードは `size`(指定があれば)、それも無ければ既定アイコンサイズ。
+- ノードの `size` は `width`/`height` を同時に設定するショートハンドです。軸ごとに `width`/`height` を明示すればそちらが優先され、`size` はその軸で無視されます。
 
 ## 自動レイアウト(`layout`)
 
@@ -82,6 +89,7 @@ links:
   - from: web
     to: db
     label: "3306"       # 任意
+    labelFontSize: 8      # ラベル文字サイズ(pt、既定8)。label が無ければ無効
     arrow: end            # end(既定) / both / none
     style: straight        # straight(既定) / elbow / curved
 ```

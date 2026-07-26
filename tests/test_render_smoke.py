@@ -264,3 +264,53 @@ def test_cli_preview_writes_a_png(tmp_path):
     assert result.exit_code == 0
     assert out_path.exists()
     assert out_path.stat().st_size > 0
+
+
+def test_custom_size_and_font_sizes_render_and_preview_without_error(tmp_path):
+    from click.testing import CliRunner
+
+    from archdiagram.cli import main
+
+    raw = tmp_path / "sizes.yaml"
+    raw.write_text(
+        """
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  - kind: container
+    id: vpc
+    type: vpc
+    provider: aws
+    label: VPC
+    style:
+      labelFontSize: 24
+    children:
+      - kind: node
+        id: a
+        type: EC2
+        size: 100
+        style:
+          labelFontSize: 18
+      - kind: node
+        id: b
+        type: S3
+        size: 40
+links:
+  - from: a
+    to: b
+    label: talks to
+    labelFontSize: 16
+"""
+    )
+    runner = CliRunner()
+    pptx_out = tmp_path / "out.pptx"
+    result = runner.invoke(main, ["build", str(raw), "-o", str(pptx_out)])
+    assert result.exit_code == 0
+    assert pptx_out.exists()
+
+    png_out = tmp_path / "out.png"
+    result = runner.invoke(main, ["preview", str(raw), "-o", str(png_out)])
+    assert result.exit_code == 0
+    assert png_out.exists()
+    assert png_out.stat().st_size > 0

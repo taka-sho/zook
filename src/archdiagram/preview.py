@@ -13,7 +13,16 @@ import math
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .layout import Box, content_offset, iter_boxes, label_gap, link_render_plan, resolve_container_style
+from .layout import (
+    Box,
+    content_offset,
+    iter_boxes,
+    label_gap,
+    link_label_size,
+    link_render_plan,
+    node_label_font_size,
+    resolve_container_style,
+)
 from .model import Diagram
 from .registry import MultiRegistry
 
@@ -89,7 +98,7 @@ def _draw_container(draw: ImageDraw.ImageDraw, box: Box, registry: MultiRegistry
         draw.rectangle([x0, y0, x1, y1], outline=border, width=width)
 
     if style.label_text:
-        font = _font(13)
+        font = _font(round(style.label_font_size))
         label_y = y0 + 4 if "top" in style.label_position else y1 - 20
         label_x = (x0 + x1) / 2 if "center" in style.label_position else x0 + 6
         if "center" in style.label_position:
@@ -120,7 +129,8 @@ def _draw_node(image: Image.Image, draw: ImageDraw.ImageDraw, box: Box, registry
     label_text = element.label if element.label is not None else (
         icon_entry.label if icon_entry and icon_entry.label else element.type
     )
-    font = _font(11)
+    font_size = node_label_font_size(element)
+    font = _font(round(font_size))
     gap = label_gap(element)
     dx, dy = content_offset(box)
     footprint_x = _px(box.abs_x - dx)
@@ -168,13 +178,14 @@ def _draw_link(draw: ImageDraw.ImageDraw, from_box: Box, to_box: Box, link, regi
         _draw_arrowhead(draw, p1, (p1[0] - p0[0], p1[1] - p0[1]), LINE_COLOR)
 
     if link.label:
-        font = _font(10)
+        font = _font(round(link.label_font_size))
         p1, p2 = path[0], path[-1]
         mx, my = _px((p1[0] + p2[0]) / 2), _px((p1[1] + p2[1]) / 2)
-        w, h = _text_size(draw, link.label, font)
-        pad = 3
-        draw.rectangle([mx - w / 2 - pad, my - h / 2 - pad, mx + w / 2 + pad, my + h / 2 + pad], fill=LABEL_BG)
-        draw.text((mx - w / 2, my - h / 2), link.label, font=font, fill=TEXT_COLOR)
+        label_w, label_h = link_label_size(link.label_font_size)
+        w, h = _px(label_w), _px(label_h)
+        draw.rectangle([mx - w / 2, my - h / 2, mx + w / 2, my + h / 2], fill=LABEL_BG)
+        text_w, text_h = _text_size(draw, link.label, font)
+        draw.text((mx - text_w / 2, my - text_h / 2), link.label, font=font, fill=TEXT_COLOR)
 
 
 def render_preview(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> Image.Image:

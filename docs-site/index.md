@@ -53,6 +53,7 @@ archdiagram build diagram.yaml -o diagram.pptx
 | アイコン解決 | エイリアス込み・大小文字無視でサービス名からアイコンを解決。未知のサービスは警告付きプレースホルダーで継続。`archdiagram icons list` で一覧表示 |
 | レジストリ上書き | 組み込みレジストリの上にユーザー独自のアイコン/スタイル定義を重ねられる |
 | 重なり検知 | 計算済みの座標から、兄弟要素同士・コンテナのラベル文字・矢印の経路・リンクラベルが互いに重なっていないかを機械的に検出し Warning で通知。`overlapMargin` で近接判定のバッファも設定可能 |
+| サイズ・文字サイズ調整 | ノードの `size` でアイコンサイズを、`labelFontSize`(ノード/コンテナ/リンク)でラベル文字サイズを個別に指定可能。自動レイアウトが確保するラベル用スペースも連動して拡大/縮小 |
 | 軽量プレビュー | `archdiagram preview` で PowerPoint も LibreOffice も使わずにPNGですぐ確認 |
 | CI/CD 対応 | 構造的な誤り(スキーマ違反・id重複・リンク参照先不在)は非ゼロ終了。`--strict` で Warning もゲート可能。`--format json`/`github` で機械可読出力。`archdiagram validate` でレンダリングなしの高速チェックも可能 |
 

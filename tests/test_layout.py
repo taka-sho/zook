@@ -3,12 +3,16 @@ from archdiagram.layout import (
     LABEL_GAP_DEFAULT,
     build_layout,
     connection_point,
+    container_label_reserve,
     content_offset,
     effective_connector_style,
+    label_box_height,
     link_crossing_warnings,
+    link_label_size,
     link_render_plan,
     out_of_canvas_warnings,
     overlap_warnings,
+    resolve_container_style,
 )
 from archdiagram.model import Canvas, Diagram, Element, Layout, Link
 from archdiagram.registry import load_registries
@@ -587,3 +591,64 @@ def test_link_path_does_not_cross_ancestor_label_when_routed_below_it():
 
     warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert not any("label of container" in w for w in warnings)
+
+
+# --- node.size shorthand -----------------------------------------------------
+
+
+def test_node_size_shorthand_sets_both_dimensions():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, size=80)
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert box.width == 80
+    assert box.height == 80
+
+
+def test_node_size_is_ignored_on_an_axis_with_an_explicit_dimension():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, size=80, width=40)
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert box.width == 40
+    assert box.height == 80
+
+
+# --- configurable font sizes -------------------------------------------------
+
+
+def test_custom_node_label_font_size_scales_the_label_box_and_footprint():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0, style={"labelFontSize": 18})
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert label_box_height(18) == 36
+    assert box.footprint_h == box.height + LABEL_GAP_DEFAULT + 36
+
+
+def test_default_node_label_font_size_matches_LABEL_BOX_HEIGHT():
+    el = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=0)
+    diagram = _diagram([el])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["a"]
+    assert box.footprint_h == box.height + LABEL_GAP_DEFAULT + LABEL_BOX_HEIGHT
+
+
+def test_custom_container_label_font_size_scales_the_reserve():
+    child = Element(kind="node", id="c", type="EC2", provider="aws")
+    vpc = Element(
+        kind="container", id="vpc", type="vpc", provider="aws", label="VPC",
+        style={"labelFontSize": 20}, children=[child],
+    )
+    diagram = _diagram([vpc])
+    root = build_layout(diagram, REGISTRY)
+    box = _boxes_by_id(root)["vpc"]
+    style = resolve_container_style(box.element, REGISTRY)
+    assert style.label_font_size == 20
+    assert container_label_reserve(20) == container_label_reserve(10) * 2
+
+
+def test_custom_link_label_font_size_scales_the_label_rect():
+    default_w, default_h = link_label_size(8)
+    big_w, big_h = link_label_size(16)
+    assert (big_w, big_h) == (default_w * 2, default_h * 2)

@@ -43,6 +43,7 @@ class Element:
     y: Optional[float] = None
     width: Optional[float] = None
     height: Optional[float] = None
+    size: Optional[float] = None  # node-only shorthand for width+height; ignored on an axis width/height sets explicitly
     style: dict[str, Any] = field(default_factory=dict)
     layout: Optional[Layout] = None
     children: list["Element"] = field(default_factory=list)
@@ -64,6 +65,7 @@ class Link:
     arrow: str = "end"
     style: str = "straight"
     label: Optional[str] = None
+    label_font_size: float = 8
 
 
 @dataclass
@@ -96,6 +98,7 @@ def _parse_element(raw: dict) -> Element:
         y=raw.get("y"),
         width=raw.get("width"),
         height=raw.get("height"),
+        size=raw.get("size"),
         style=raw.get("style", {}),
         layout=_parse_layout(raw.get("layout")),
         children=[_parse_element(c) for c in raw.get("children", [])],
@@ -110,6 +113,7 @@ def _parse_link(raw: dict) -> Link:
         arrow=raw.get("arrow", "end"),
         style=raw.get("style", "straight"),
         label=raw.get("label"),
+        label_font_size=raw.get("labelFontSize", 8),
     )
 
 

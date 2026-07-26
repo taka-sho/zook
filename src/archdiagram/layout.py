@@ -23,9 +23,26 @@ from .model import Diagram, Element, Layout, Link
 from .registry import MultiRegistry
 
 LABEL_GAP_DEFAULT = 4  # default spacing between an icon and its label; overridable per-node via style.labelGap
-LABEL_BOX_HEIGHT = 18  # height of a node's label textbox
+NODE_LABEL_FONT_SIZE_DEFAULT = 9  # points; overridable per-node via style.labelFontSize
+CONTAINER_LABEL_FONT_SIZE_DEFAULT = 10  # points; overridable per-container via style.labelFontSize
+LINK_LABEL_FONT_SIZE_DEFAULT = 8  # points; overridable per-link via labelFontSize
 LABEL_MIN_WIDTH = 90  # footprint width floor so labels have room to sit under an icon
-CONTAINER_LABEL_RESERVE = 28  # extra top space inside a container that has its own label
+CONTAINER_LABEL_RESERVE = 28  # extra top space inside a container that has its own label, at the default font size
+
+
+def label_box_height(font_size: float) -> float:
+    """Height of a label textbox sized for `font_size` (points).
+
+    1 point = 4/3 logical units (render.py's LOGICAL_TO_PT = 0.75, i.e. 1
+    logical unit = 1px @ 96dpi = 0.75pt), and a label box needs roughly
+    1.5x the font's point size as line-height-plus-padding, so
+    height = font_size * (4/3) * 1.5 = font_size * 2. At the default 9pt
+    this returns 18, matching the fixed constant this formula replaced.
+    """
+    return font_size * 2
+
+
+LABEL_BOX_HEIGHT = label_box_height(NODE_LABEL_FONT_SIZE_DEFAULT)  # 18, for callers that want the default
 
 
 @dataclass
@@ -47,8 +64,26 @@ def label_gap(element: Element) -> float:
     return element.style.get("labelGap", LABEL_GAP_DEFAULT)
 
 
+def node_label_font_size(element: Element) -> float:
+    """style.labelFontSize (points): a node's own label text size."""
+    return element.style.get("labelFontSize", NODE_LABEL_FONT_SIZE_DEFAULT)
+
+
+def container_label_font_size(element: Element) -> float:
+    """style.labelFontSize (points): a container's own label text size."""
+    return element.style.get("labelFontSize", CONTAINER_LABEL_FONT_SIZE_DEFAULT)
+
+
+def container_label_reserve(font_size: float) -> float:
+    """Top/bottom space a labeled container reserves for its own label,
+    scaled proportionally from CONTAINER_LABEL_RESERVE (defined at
+    CONTAINER_LABEL_FONT_SIZE_DEFAULT) so a bigger labelFontSize gets
+    proportionally more room."""
+    return CONTAINER_LABEL_RESERVE * (font_size / CONTAINER_LABEL_FONT_SIZE_DEFAULT)
+
+
 def _label_reserve(element: Element) -> float:
-    return label_gap(element) + LABEL_BOX_HEIGHT
+    return label_gap(element) + label_box_height(node_label_font_size(element))
 
 
 def content_offset(box: Box) -> tuple[float, float]:
@@ -64,8 +99,8 @@ def content_offset(box: Box) -> tuple[float, float]:
 def _measure_node(element: Element, registry: MultiRegistry) -> Box:
     icon_entry = registry.resolve_icon(element.type, element.provider)
     default_size = icon_entry.size if (icon_entry and icon_entry.size) else registry.default_size(element.provider)
-    width = element.width or default_size
-    height = element.height or default_size
+    width = element.width or element.size or default_size
+    height = element.height or element.size or default_size
     label_position = element.style.get("labelPosition", "below")
     footprint_w = width if label_position == "none" else max(width, LABEL_MIN_WIDTH)
     footprint_h = height + (_label_reserve(element) if label_position in ("below", "above") else 0)
@@ -171,7 +206,8 @@ def measure(element: Element, registry: MultiRegistry) -> Box:
 
     layout = element.layout or Layout()
     children = [measure(c, registry) for c in element.children]
-    content_top = layout.padding + (CONTAINER_LABEL_RESERVE if element.label else 0)
+    reserve = container_label_reserve(container_label_font_size(element)) if element.label else 0
+    content_top = layout.padding + reserve
     _arrange_children(children, layout, content_top)
 
     if element.width is not None and element.height is not None:
@@ -251,6 +287,7 @@ class ResolvedContainerStyle:
     dashed: bool
     label_position: str
     label_text: str
+    label_font_size: float
     corner_icon: Optional[object]  # Path | None; typed loosely to avoid importing pathlib here
 
 
@@ -268,18 +305,19 @@ def resolve_container_style(element: Element, registry: MultiRegistry) -> Resolv
         dashed=group_style.dashed if group_style else False,
         label_position=resolve_container_label_position(element, registry),
         label_text=element.label if element.label is not None else (group_style.label if group_style else ""),
+        label_font_size=container_label_font_size(element),
         corner_icon=group_style.icon if group_style else None,
     )
 
 
 def container_label_rect(box: Box, registry: MultiRegistry) -> tuple[float, float, float, float] | None:
-    """Where a container's own label text is drawn: a CONTAINER_LABEL_RESERVE-
-    tall strip spanning the full width, at the top or bottom edge per
+    """Where a container's own label text is drawn: a container_label_reserve()
+    -tall strip spanning the full width, at the top or bottom edge per
     resolve_container_label_position(). None if the container has no label."""
     if box.element.kind != "container" or not box.element.label:
         return None
     position = resolve_container_label_position(box.element, registry)
-    label_h = min(CONTAINER_LABEL_RESERVE, box.height)
+    label_h = min(container_label_reserve(container_label_font_size(box.element)), box.height)
     y = box.abs_y + box.height - label_h if "bottom" in position else box.abs_y
     return (box.abs_x, y, box.width, label_h)
 
@@ -438,7 +476,18 @@ def _segment_intersects_rect(
     return any(_segments_intersect(p1, p2, a, b) for a, b in edges)
 
 
-LINK_LABEL_SIZE = (60, 18)  # logical units; matches render.py's midpoint label textbox
+LINK_LABEL_SIZE = (60, 18)  # logical units at LINK_LABEL_FONT_SIZE_DEFAULT; matches render.py's midpoint label textbox
+
+
+def link_label_size(font_size: float) -> tuple[float, float]:
+    """(width, height) of a link's midpoint label box for `font_size`
+    (points), scaled proportionally from LINK_LABEL_SIZE (defined at
+    LINK_LABEL_FONT_SIZE_DEFAULT). Width isn't measured from the actual
+    text (no font metrics available here) - it's a proportional estimate,
+    same as the fixed value it replaces."""
+    base_w, base_h = LINK_LABEL_SIZE
+    ratio = font_size / LINK_LABEL_FONT_SIZE_DEFAULT
+    return base_w * ratio, base_h * ratio
 
 
 def link_render_plan(from_box: Box, to_box: Box, style: str) -> tuple[int, int, str, list[tuple[float, float]]]:
@@ -510,13 +559,13 @@ def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegi
         paths[i] = path
 
     label_rects: dict[int, tuple[float, float, float, float]] = {}
-    lw, lh = LINK_LABEL_SIZE
     for i, link in enumerate(links):
         path = paths[i]
         if not link.label or path is None:
             continue
         p1, p2 = path[0], path[-1]
         mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+        lw, lh = link_label_size(link.label_font_size)
         label_rects[i] = _inflate_rect((mx - lw / 2, my - lh / 2, lw, lh), margin)
 
     messages: list[str] = []
