@@ -211,6 +211,20 @@
           "exclusiveMinimum": 0,
           "default": 9,
           "description": "Point size of the node's label text. Also scales the footprint space auto-layout reserves for it. No effect when labelPosition is 'none'."
+        },
+        "shape": {
+          "enum": ["rect", "rounded", "diamond", "circle"],
+          "description": "Renders the node as a plain shape with its label drawn inside, instead of resolving `type` to an icon. `type` is still required by the schema but is otherwise unused when `shape` is set. labelPosition/labelGap have no effect in this mode (the label is centered inside the shape, not placed beside it)."
+        },
+        "fillColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Fill color for a `shape` node. Defaults to white. No effect without `shape`."
+        },
+        "borderColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Border color for a `shape` node. Defaults to black. No effect without `shape`."
         }
       }
     },

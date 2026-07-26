@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 from .layout import (
     Box,
     content_offset,
+    is_shape_node,
     iter_boxes,
     label_gap,
     link_label_size,
@@ -107,8 +108,59 @@ def _draw_container(draw: ImageDraw.ImageDraw, box: Box, registry: MultiRegistry
             draw.text((label_x, label_y), style.label_text, font=font, fill=border)
 
 
+def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: float) -> list[str]:
+    words = text.split()
+    if not words:
+        return [text]
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        trial = f"{current} {word}"
+        w, _ = _text_size(draw, trial, font)
+        if w <= max_width:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _draw_shape_node(draw: ImageDraw.ImageDraw, box: Box) -> None:
+    element = box.element
+    x0, y0 = _px(box.abs_x), _px(box.abs_y)
+    x1, y1 = _px(box.abs_x + box.width), _px(box.abs_y + box.height)
+    fill = _hex_to_rgba(element.style.get("fillColor", "#FFFFFF"))
+    outline = _hex_to_rgba(element.style.get("borderColor", "#000000"))
+
+    shape = element.style["shape"]
+    if shape == "diamond":
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        draw.polygon([(cx, y0), (x1, cy), (cx, y1), (x0, cy)], fill=fill, outline=outline, width=2)
+    elif shape == "circle":
+        draw.ellipse([x0, y0, x1, y1], fill=fill, outline=outline, width=2)
+    elif shape == "rounded":
+        draw.rounded_rectangle([x0, y0, x1, y1], radius=12, fill=fill, outline=outline, width=2)
+    else:  # rect
+        draw.rectangle([x0, y0, x1, y1], fill=fill, outline=outline, width=2)
+
+    label_text = element.label if element.label is not None else element.type
+    font = _font(round(node_label_font_size(element)))
+    lines = _wrap_text(draw, label_text, font, x1 - x0 - 8)
+    line_heights = [_text_size(draw, line, font)[1] for line in lines]
+    total_h = sum(line_heights) + max(0, len(lines) - 1) * 2
+    cy = (y0 + y1) / 2 - total_h / 2
+    for line, lh in zip(lines, line_heights):
+        _draw_centered_text(draw, (x0 + x1) / 2, cy, line, font, TEXT_COLOR)
+        cy += lh + 2
+
+
 def _draw_node(image: Image.Image, draw: ImageDraw.ImageDraw, box: Box, registry: MultiRegistry) -> None:
     element = box.element
+    if is_shape_node(element):
+        _draw_shape_node(draw, box)
+        return
+
     icon_entry = registry.resolve_icon(element.type, element.provider)
     icon_path = icon_entry.file if (icon_entry and icon_entry.file.exists()) else registry.placeholder_icon
 

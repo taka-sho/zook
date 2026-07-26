@@ -28,7 +28,7 @@ from xml.sax.saxutils import escape
 
 from ruamel.yaml import YAML
 
-from .layout import Box, build_layout, iter_boxes
+from .layout import Box, build_layout, is_shape_node, iter_boxes
 from .model import Diagram, Element, parse_diagram
 from .registry import MultiRegistry
 
@@ -40,7 +40,26 @@ _DEFAULT_NODE_STYLE = "sketch=0;outlineConnect=0;fontColor=#232F3E;verticalLabel
 _DEFAULT_CONTAINER_STYLE = "container=1;collapsible=0;recursiveResize=0;verticalAlign=top;align=left;html=1;whiteSpace=wrap;"
 
 
+_SHAPE_STYLE_BASE = {
+    "rect": "rounded=0;whiteSpace=wrap;html=1;",
+    "rounded": "rounded=1;whiteSpace=wrap;html=1;",
+    "diamond": "rhombus;whiteSpace=wrap;html=1;",
+    "circle": "ellipse;whiteSpace=wrap;html=1;",
+}
+
+
+def _shape_node_style(element: Element) -> str:
+    # mxGraph natively centers `value=` text inside these shapes (unlike
+    # _DEFAULT_NODE_STYLE's verticalLabelPosition=bottom, which places the
+    # label below an icon) - no extra label plumbing needed here.
+    fill = element.style.get("fillColor", "#FFFFFF").lstrip("#")
+    stroke = element.style.get("borderColor", "#000000").lstrip("#")
+    return _SHAPE_STYLE_BASE[element.style["shape"]] + f"fillColor=#{fill};strokeColor=#{stroke};"
+
+
 def _node_style(element: Element, registry: MultiRegistry) -> str:
+    if is_shape_node(element):
+        return _shape_node_style(element)
     icon_entry = registry.resolve_icon(element.type, element.provider)
     if icon_entry and icon_entry.drawio_shape:
         # The registry's drawioShape is just the icon's own visual style
@@ -69,6 +88,8 @@ def _label_for(element: Element, registry: MultiRegistry) -> str:
     if element.label is not None:
         return element.label
     if element.kind == "node":
+        if is_shape_node(element):
+            return element.type
         icon_entry = registry.resolve_icon(element.type, element.provider)
         return icon_entry.label if (icon_entry and icon_entry.label) else element.type
     group_style = registry.resolve_group(element.type, element.provider)

@@ -86,9 +86,28 @@ def _label_reserve(element: Element) -> float:
     return label_gap(element) + label_box_height(node_label_font_size(element))
 
 
+# Default (width, height) for a `shape` node (logical units), per shape:
+# rect/rounded default to a landscape box (typical flowchart look); diamond/
+# circle default a bit larger since their usable interior for text is
+# smaller than their bounding box.
+SHAPE_DEFAULT_SIZE = {
+    "rect": (140, 60),
+    "rounded": (140, 60),
+    "diamond": (120, 90),
+    "circle": (120, 90),
+}
+
+
+def is_shape_node(element: Element) -> bool:
+    """True for a node rendered as a plain shape (rect/rounded/diamond/
+    circle) with its label centered inside, instead of resolving `type` to
+    an icon with a separate label below/above/beside it."""
+    return element.kind == "node" and element.style.get("shape") is not None
+
+
 def content_offset(box: Box) -> tuple[float, float]:
     """Offset from a node's footprint top-left to its icon's top-left."""
-    if box.element.kind != "node":
+    if box.element.kind != "node" or is_shape_node(box.element):
         return (0.0, 0.0)
     label_position = box.element.style.get("labelPosition", "below")
     dx = (box.footprint_w - box.width) / 2
@@ -97,6 +116,12 @@ def content_offset(box: Box) -> tuple[float, float]:
 
 
 def _measure_node(element: Element, registry: MultiRegistry) -> Box:
+    if is_shape_node(element):
+        default_w, default_h = SHAPE_DEFAULT_SIZE[element.style["shape"]]
+        width = element.width or element.size or default_w
+        height = element.height or element.size or default_h
+        return Box(element, width, height, width, height)
+
     icon_entry = registry.resolve_icon(element.type, element.provider)
     default_size = icon_entry.size if (icon_entry and icon_entry.size) else registry.default_size(element.provider)
     width = element.width or element.size or default_size
@@ -442,14 +467,15 @@ def connection_point(box: Box, idx: int) -> tuple[float, float]:
     x, y, cx, cy = box.abs_x, box.abs_y, box.width, box.height
     icon_cx, icon_cy = x + cx / 2, y + cy / 2
 
+    is_labeled_node = box.element.kind == "node" and not is_shape_node(box.element)
     if idx == 0:
         top = y
-        if box.element.kind == "node" and box.element.style.get("labelPosition", "below") == "above":
+        if is_labeled_node and box.element.style.get("labelPosition", "below") == "above":
             top = y - _label_reserve(box.element)
         return (icon_cx, top)
     if idx == 2:
         bottom = y + cy
-        if box.element.kind == "node" and box.element.style.get("labelPosition", "below") == "below":
+        if is_labeled_node and box.element.style.get("labelPosition", "below") == "below":
             bottom = y + cy + _label_reserve(box.element)
         return (icon_cx, bottom)
     if idx == 1:
@@ -789,7 +815,7 @@ def icon_resolution_warnings(root_box: Box, registry: MultiRegistry) -> list[str
     messages: list[str] = []
     for box in iter_boxes(root_box):
         element = box.element
-        if element.kind != "node":
+        if element.kind != "node" or is_shape_node(element):
             continue
         icon_entry = registry.resolve_icon(element.type, element.provider)
         if icon_entry is None:

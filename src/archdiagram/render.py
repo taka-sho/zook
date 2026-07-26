@@ -28,6 +28,7 @@ from pptx.util import Emu, Pt
 from .layout import (
     Box,
     content_offset,
+    is_shape_node,
     label_box_height,
     label_gap,
     link_label_size,
@@ -129,12 +130,42 @@ def _add_node_label(shapes, box: Box, text: str, position: str) -> None:
     tf.paragraphs[0].font.size = Pt(font_size)
 
 
+_SHAPE_MSO = {
+    "rect": MSO_SHAPE.RECTANGLE,
+    "rounded": MSO_SHAPE.ROUNDED_RECTANGLE,
+    "diamond": MSO_SHAPE.DIAMOND,
+    "circle": MSO_SHAPE.OVAL,
+}
+
+
+def _add_shape_node(shapes, box: Box):
+    element = box.element
+    shape = shapes.add_shape(_SHAPE_MSO[element.style["shape"]], E(box.abs_x), E(box.abs_y), E(box.width), E(box.height))
+
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor.from_string(element.style.get("fillColor", "FFFFFF").lstrip("#").upper())
+    shape.line.color.rgb = RGBColor.from_string(element.style.get("borderColor", "000000").lstrip("#").upper())
+
+    tf = shape.text_frame
+    tf.word_wrap = True
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    label_text = element.label if element.label is not None else element.type
+    tf.paragraphs[0].text = label_text
+    tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+    tf.paragraphs[0].font.size = Pt(node_label_font_size(element))
+    tf.paragraphs[0].font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+    return shape
+
+
 def _add_node(shapes, box: Box, registry: MultiRegistry):
     # Unresolved type / missing icon file are reported by
     # layout.icon_resolution_warnings() (run once, before rendering, so
     # `validate` sees the same warnings `build` would) - fall back to the
     # placeholder silently here rather than reporting it a second time.
     element = box.element
+    if is_shape_node(element):
+        return _add_shape_node(shapes, box)
+
     icon_entry = registry.resolve_icon(element.type, element.provider)
     if icon_entry is None or not icon_entry.file.exists():
         icon_path = registry.placeholder_icon
@@ -185,14 +216,31 @@ def _add_link_label(shapes, conn, text: str, font_size: float) -> None:
 _CONNECTOR_TYPES = {"straight": MSO_CONNECTOR.STRAIGHT, "elbow": MSO_CONNECTOR.ELBOW, "curved": MSO_CONNECTOR.CURVE}
 
 
+_NON_RECT_SHAPES = {"diamond", "circle"}
+
+
+def _is_non_rect_shape_node(box: Box) -> bool:
+    # diamond/circle prstGeom connection sites aren't laid out top/left/
+    # bottom/right in bounding-box order the way rect/rounded/pictures/
+    # containers are - PowerPoint/LibreOffice snap a glued (stCxn/endCxn)
+    # connector to the shape's own site for that index, silently overriding
+    # the literal begin_x/y we write below (python-pptx's begin_connect/
+    # end_connect docstring warns of exactly this for non-rectangular
+    # shapes). Skipping the glue for these keeps the literal, geometrically
+    # correct point instead.
+    return is_shape_node(box.element) and box.element.style.get("shape") in _NON_RECT_SHAPES
+
+
 def _render_link(shapes, link: Link, shape_index: dict) -> None:
     from_shape, from_box = shape_index[link.from_id]
     to_shape, to_box = shape_index[link.to_id]
     start_idx, end_idx, eff_style, path = link_render_plan(from_box, to_box, link)
 
     conn = shapes.add_connector(_CONNECTOR_TYPES[eff_style], E(0), E(0), E(1), E(1))
-    conn.begin_connect(from_shape, start_idx)
-    conn.end_connect(to_shape, end_idx)
+    if not _is_non_rect_shape_node(from_box):
+        conn.begin_connect(from_shape, start_idx)
+    if not _is_non_rect_shape_node(to_box):
+        conn.end_connect(to_shape, end_idx)
     # begin_connect/end_connect snap to the connected shape's own edge; override
     # with our (possibly label-aware, sec "connection_point") points so a
     # bottom/top exit past a below/above label, and the auto-elbow bend for a
