@@ -189,11 +189,11 @@
 
 要求:CIワークフロー改善・アイコン発見性・描画品質・マルチクラウド対応をまとめて追加したい。
 
-- **CLI をサブコマンド構成に再設計**:`archdiagram <file> -o <out>` の単一コマンドから、`build`/`validate`/`icons list`/`preview` の click Group 構成に変更した(破壊的変更。呼び出しは `archdiagram build <file> -o <out>` になる)。`_load_and_check()` を共通処理として切り出し、`build`/`validate` はレンダリング以外の全チェック(スキーマ・意味検証・アイコン解決・座標範囲・重なり・リンク経路)を共有する。
+- **CLI をサブコマンド構成に再設計**:`zook <file> -o <out>` の単一コマンドから、`build`/`validate`/`icons list`/`preview` の click Group 構成に変更した(破壊的変更。呼び出しは `zook build <file> -o <out>` になる)。`_load_and_check()` を共通処理として切り出し、`build`/`validate` はレンダリング以外の全チェック(スキーマ・意味検証・アイコン解決・座標範囲・重なり・リンク経路)を共有する。
   - `--strict`:Warning が1件でもあれば非ゼロ終了。
   - `--format {text,json,github}`:CI 連携用の機械可読出力(`github` は `::warning::`/`::error::` アノテーション)。
   - この再設計の過程で、**`validate` が `build` と同じ Warning を検出できていなかったバグ**を発見・修正した。「未知アイコン type」の Warning は従来 `render.py` の中でのみ発生しており、レンダリングをスキップする `validate` では検出できなかった。`icon_resolution_warnings()` として `layout.py` 側の純粋なチェックに切り出し、`_load_and_check()` から呼ぶことで解消。`render.py` 側の重複した警告発行は削除した。
-- **アイコン発見性**:`archdiagram icons list` で登録済みの全 `type`・エイリアス・グループを一覧表示。表示用に `IconEntry`/`GroupEntry` へ元の大文字小文字を保持した `name` フィールドを追加(内部の lookup キーは引き続き小文字化)。
+- **アイコン発見性**:`zook icons list` で登録済みの全 `type`・エイリアス・グループを一覧表示。表示用に `IconEntry`/`GroupEntry` へ元の大文字小文字を保持した `name` フィールドを追加(内部の lookup キーは引き続き小文字化)。
 - **自動配置の重複回避**(`_avoid_explicit_overlaps()`):自動配置の子要素が明示座標の兄弟要素と重なる場合、自動配置側だけを真下に押し出して回避する。単純な1軸方向への押し出しのみ(複数の明示座標要素が積み重なっている場合は複数回押し出す、上限 `len(explicit)+1` 回)。明示座標同士・自動配置同士は対象外(前者は著者の意図、後者は既存アルゴリズムで衝突しない)。`overlap_warnings()` は回避後も引き続き実行され、それでも解消しない重なりを検出する。
 - **軽量PNGプレビュー**(`preview.py`):LibreOffice/PowerPoint を使わず、同じ `Box` 木・`link_render_plan()` を Pillow で直接描画する第二のレンダラー。`render.py` の `resolve_container_style()`(新設。枠色・塗り・破線・ラベル位置・隅アイコンをまとめて解決する共有関数で、従来 `_add_container_rect()` に直書きされていたロジックを抽出したもの)を共用し、2つのレンダラーが見た目の解決ロジックで乖離しないようにしている。
 - **マルチクラウド**:`registry.gcp.yaml`/`registry.azure.yaml` を追加し、`Registry` を複数保持して要素の `provider` でディスパッチする `MultiRegistry` を導入した。既存の `resolve_icon`/`resolve_group` 呼び出しは全て `element.provider` を渡すよう更新(`layout.py`/`render.py`)。コンテナの `groups` はプロバイダ自身に定義がなければ AWS レジストリへフォールバックする(§8.10 で確定した `container_label_rect()` 等、ラベル位置解決も含めて一貫してこの経路を通る)。
@@ -209,7 +209,7 @@
   - `link_label_size(font_size)`:既定8pt時の `LINK_LABEL_SIZE = (60, 18)` を基準に、幅・高さとも `font_size / LINK_LABEL_FONT_SIZE_DEFAULT` 倍する。
   - いずれも既定値を代入すると変更前の固定定数と厳密に一致するため、`labelFontSize` を省略した既存の図(`example.yaml`/`example-cloud-actors.yaml`含む)はレイアウト結果が一切変わらない。
 - **`render.py`/`preview.py` 両方を更新**:pptx版は `Pt(font_size)` を各テキストフレームに設定し、テキストボックスの寸法にも `label_box_height()`/`link_label_size()` を使う。PNG プレビュー版も同じ解決関数(`node_label_font_size()`/`resolve_container_style().label_font_size`/`link.label_font_size`)を参照し、フォントサイズと矩形サイズが2つのレンダラー間で乖離しないようにした(§8.11 で確立した「共有関数で解決ロジックを1箇所にまとめる」方針を踏襲)。
-- LibreOffice レンダリングと `archdiagram preview` の両方で、コンテナラベル・ノードアイコン+ラベル・リンクラベルそれぞれを既定値/拡大値で比較し、両レンダラーの見た目が一致することを目視確認済み。
+- LibreOffice レンダリングと `zook preview` の両方で、コンテナラベル・ノードアイコン+ラベル・リンクラベルそれぞれを既定値/拡大値で比較し、両レンダラーの見た目が一致することを目視確認済み。
 
 ### 8.13 Z ルートの false edge aliasing 検出(外部バグ報告により追加)
 
@@ -229,11 +229,11 @@
 要求:構成図を継続的に管理したい。ツールで生成したベース構成図を draw.io(self-hosted)で手直しし、その変更を再びYAMLに反映したい。
 
 - **PowerPointではなくdraw.ioを選定した理由**:PowerPointのグループ(コンテナ)は `chOff`/`chExt` という子座標系のオフセット・スケールを持ち、グループをリサイズすると子要素の座標が暗黙にスケーリングされる(§8.4)。これをpptxから読み取って正しく座標復元するには、ネストしたグループ変換を再帰的に解決するロジックが要る。draw.io(mxGraph)のコンテナ(`container=1`)は子要素の座標が親からの単純な相対オフセットのままで、リサイズしても子はスケールされない設計であることを `jgraph/drawio` の公式ソース(後述)で確認済みで、この罠がそもそも存在しない。加えてmxGraph XMLはテキスト形式でgit diffが取れ、self-hostも可能(構成図を社外クラウドに預けずに完結できる)。
-- **`archdiagram export-drawio`**(`drawio.py: export_drawio()`):`Box` 木を mxGraph XML に変換する。座標変換は不要 — `Box.local_x/local_y`(親相対のcontent位置)は mxGraph の子要素 `<mxGeometry>` の座標系とまったく同じ意味論(親からの単純な相対オフセット)なので、そのまま使える。コンテナは `parent` 属性を実際の親要素idにし `container=1` を付与、ノードのラベルは別テキストボックスを作らず mxCell自身の `value` + `verticalLabelPosition=bottom` に任せる(draw.io側の慣習に合わせた簡略化。pptx/preview用の footprint 計算とは無関係)。
+- **`zook export-drawio`**(`drawio.py: export_drawio()`):`Box` 木を mxGraph XML に変換する。座標変換は不要 — `Box.local_x/local_y`(親相対のcontent位置)は mxGraph の子要素 `<mxGeometry>` の座標系とまったく同じ意味論(親からの単純な相対オフセット)なので、そのまま使える。コンテナは `parent` 属性を実際の親要素idにし `container=1` を付与、ノードのラベルは別テキストボックスを作らず mxCell自身の `value` + `verticalLabelPosition=bottom` に任せる(draw.io側の慣習に合わせた簡略化。pptx/preview用の footprint 計算とは無関係)。
 - **公式シェイプライブラリの検証**:`jgraph/drawio` リポジトリ(`dev`ブランチ)の `Sidebar-AWS4.js` を直接取得し、実際に使われている `resIcon`/`grIcon` 識別子を(推測ではなく)ソースから確認した上で、既存のAWSレジストリ(26アイコン+7グループ)の `drawioShape` フィールドに投入した。GCP2/Azure2は識別子が複数ファイル・複数ヘルパー関数に分散しており、今回の実装時間内では確実な検証ができなかったため見送り、`drawioShape` 未設定分は既存のPNGをbase64データURIとして埋め込むフォールバックに委ねている(3プロバイダ共通の仕組みなので、GCP/Azureへの拡張は後日の追加作業で対応可能)。
-- **`archdiagram sync`**(`drawio.py: sync_from_drawio()`):元のYAMLを`build_layout()`にかけ「本来の自動配置座標」をベースラインとして計算し、編集後の`.drawio`から同idのセルの座標を読み取って比較する。差分がある要素だけ明示 `x`/`y`/`width`/`height` を書き込み、触れていない要素は自動配置のまま維持する。ruamel.yaml(round-trip)でYAMLを読み書きするため、コメント・キー順序を保持する。未知セル(id不一致)・見つからないセル(削除された可能性)はいずれもWarningのみで、ノード/コンテナの追加・削除・色変更は同期対象外(§8.8/§8.10/§8.13で確立した「機械的検出+手直しは利用者側」の方針を踏襲)。
+- **`zook sync`**(`drawio.py: sync_from_drawio()`):元のYAMLを`build_layout()`にかけ「本来の自動配置座標」をベースラインとして計算し、編集後の`.drawio`から同idのセルの座標を読み取って比較する。差分がある要素だけ明示 `x`/`y`/`width`/`height` を書き込み、触れていない要素は自動配置のまま維持する。ruamel.yaml(round-trip)でYAMLを読み書きするため、コメント・キー順序を保持する。未知セル(id不一致)・見つからないセル(削除された可能性)はいずれもWarningのみで、ノード/コンテナの追加・削除・色変更は同期対象外(§8.8/§8.10/§8.13で確立した「機械的検出+手直しは利用者側」の方針を踏襲)。
 - **`.drawio`の圧縮形式**:draw.io本体が保存すると `<diagram>` 要素の中身は既定で `encodeURIComponent → raw deflate → base64` により圧縮される。一方 `export_drawio()` が書き出す形式は非圧縮(`<mxGraphModel>` を生のXML子要素としてそのまま埋め込む)。`_diagram_model_root()` は両方の形式を判別して読めるようにしている(圧縮側のみ実装が必要 — 非圧縮側はXMLとしてそのまま子要素になる)。
-- **CI自動PR**(`.github/workflows/drawio-sync.yml`):`**/*.drawio` の変更をトリガーに起動。同名ファイル規約(`X.yaml`⇔`X.drawio`)で対応するYAMLを特定し `archdiagram sync` を実行、差分があれば `peter-evans/create-pull-request` でPRを自動作成する。直接コミットではなくPR作成なので、保護ブランチのポリシーと衝突しない。
+- **CI自動PR**(`.github/workflows/drawio-sync.yml`):`**/*.drawio` の変更をトリガーに起動。同名ファイル規約(`X.yaml`⇔`X.drawio`)で対応するYAMLを特定し `zook sync` を実行、差分があれば `peter-evans/create-pull-request` でPRを自動作成する。直接コミットではなくPR作成なので、保護ブランチのポリシーと衝突しない。
 
 ### 8.15 接続辺の明示指定 + 経路長ベースの自動選択
 
@@ -252,7 +252,7 @@
 - [x] python-pptx で「VPC枠＋AZ＋アイコン＋ラベル」を階層グループ化する最小プロトタイプを作成(`prototype/build_prototype.py`)
 - [x] コネクタ接続＋図形移動追従、および txBody ラベル注入の実挙動を確認 → txBody は不可、中点テキストボックスに確定
 - [x] SVG→PNG 変換(cairosvg)を組み込み、適正 DPI を確定 → 表示px数の4倍
-- [ ] YAML スキーマ(JSON Schema)の正式定義 → `arch-diagram.schema.json` で完了済み(要件定義フェーズ、`README-index.md` 参照)
+- [ ] YAML スキーマ(JSON Schema)の正式定義 → `zook.schema.json` で完了済み(要件定義フェーズ、`README-index.md` 参照)
 - [ ] アイコン実ファイル(AWS公式アセット)の調達・配置は未着手。本プロトタイプはライセンス上の理由から自作プレースホルダSVGのみで技術検証した。
 
 ---

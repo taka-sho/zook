@@ -135,8 +135,8 @@ def export_drawio(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> s
     _emit_edges(lines, diagram)
     body = "".join(lines)
     return (
-        '<mxfile host="archdiagram">'
-        '<diagram id="archdiagram" name="Page-1">'
+        '<mxfile host="zook">'
+        '<diagram id="zook" name="Page-1">'
         f'<mxGraphModel dx="800" dy="600" grid="0" guides="1" tooltips="1" connect="1" arrows="1" '
         f'fold="1" page="1" pageScale="1" math="0" shadow="0"><root>{body}</root></mxGraphModel>'
         "</diagram></mxfile>"

@@ -3,8 +3,8 @@ from pathlib import Path
 import yaml
 from pptx import Presentation
 
-from archdiagram.errors import Warnings
-from archdiagram.layout import (
+from zook.errors import Warnings
+from zook.layout import (
     build_layout,
     icon_resolution_warnings,
     link_aliasing_warnings,
@@ -12,10 +12,10 @@ from archdiagram.layout import (
     out_of_canvas_warnings,
     overlap_warnings,
 )
-from archdiagram.model import parse_diagram
-from archdiagram.registry import load_registries
-from archdiagram.render import render
-from archdiagram.validate import validate
+from zook.model import parse_diagram
+from zook.registry import load_registries
+from zook.render import render
+from zook.validate import validate
 
 FIXTURE = Path(__file__).parent / "fixtures" / "example.yaml"
 CLOUD_ACTORS_FIXTURE = Path(__file__).parent / "fixtures" / "example-cloud-actors.yaml"
@@ -75,7 +75,7 @@ def test_unresolved_icon_produces_warning_not_error():
 def test_cli_exits_nonzero_on_fatal_error(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     bad_yaml = tmp_path / "bad.yaml"
     bad_yaml.write_text(
@@ -101,7 +101,7 @@ elements:
 def test_cli_succeeds_on_example_yaml(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     out_path = tmp_path / "out.pptx"
     runner = CliRunner()
@@ -121,7 +121,7 @@ def test_example_cloud_actors_renders_without_warnings():
 def test_cli_succeeds_on_example_cloud_actors(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     out_path = tmp_path / "out.pptx"
     runner = CliRunner()
@@ -133,7 +133,7 @@ def test_cli_succeeds_on_example_cloud_actors(tmp_path):
 def test_cli_reports_overlapping_elements_as_warning_not_error(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     overlapping_yaml = tmp_path / "overlap.yaml"
     overlapping_yaml.write_text(
@@ -163,7 +163,7 @@ elements:
 def test_cli_reports_link_crossing_as_warning_not_error(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     crossing_yaml = tmp_path / "crossing.yaml"
     crossing_yaml.write_text(
@@ -201,7 +201,7 @@ links:
 def test_cli_reports_link_aliasing_as_warning_not_error(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     # Reproduces the reported "Z-route false edge aliasing": alb->vpc and
     # vpc->s3 both pick VPC's top-center connection point, so their Z-routes
@@ -250,7 +250,7 @@ links:
 def test_cli_builds_with_explicit_connection_sides(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     raw = tmp_path / "sides.yaml"
     raw.write_text(
@@ -285,7 +285,7 @@ links:
 def test_cli_rejects_mismatched_axis_connection_sides(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     raw = tmp_path / "bad-sides.yaml"
     raw.write_text(
@@ -320,7 +320,7 @@ links:
 def test_cli_strict_exits_nonzero_on_warning(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     unknown_yaml = tmp_path / "unknown.yaml"
     unknown_yaml.write_text(
@@ -345,7 +345,7 @@ elements:
 def test_cli_validate_does_not_write_a_file(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
@@ -357,7 +357,7 @@ def test_cli_validate_does_not_write_a_file(tmp_path):
 def test_cli_validate_catches_unresolved_icon_without_rendering():
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -380,7 +380,7 @@ elements:
 def test_cli_icons_list_includes_builtin_aws_service():
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     runner = CliRunner()
     result = runner.invoke(main, ["icons", "list", "--provider", "aws"])
@@ -391,7 +391,7 @@ def test_cli_icons_list_includes_builtin_aws_service():
 def test_cli_preview_writes_a_png(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     out_path = tmp_path / "out.png"
     runner = CliRunner()
@@ -431,8 +431,8 @@ def test_shape_nodes_render_without_warnings():
 
 
 def test_shape_nodes_export_to_drawio_and_preview(tmp_path):
-    from archdiagram.drawio import export_drawio
-    from archdiagram.preview import render_preview
+    from zook.drawio import export_drawio
+    from zook.preview import render_preview
 
     raw = {
         "version": "1.0",
@@ -461,7 +461,7 @@ def test_shape_nodes_export_to_drawio_and_preview(tmp_path):
 def test_custom_size_and_font_sizes_render_and_preview_without_error(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     raw = tmp_path / "sizes.yaml"
     raw.write_text(

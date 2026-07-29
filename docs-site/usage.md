@@ -1,15 +1,15 @@
 # 使い方
 
-archdiagram は `build`/`validate`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の7つのサブコマンドを持ちます。
+zook は `build`/`validate`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の7つのサブコマンドを持ちます。
 
 ```bash
-archdiagram --help
+zook --help
 ```
 
 ## build — PowerPoint を生成する
 
 ```bash
-archdiagram build <input.yaml> -o <output.pptx>
+zook build <input.yaml> -o <output.pptx>
 ```
 
 - `input.yaml` — [YAML入力仕様](yaml-guide.md)に従った構成定義ファイル
@@ -23,17 +23,17 @@ archdiagram build <input.yaml> -o <output.pptx>
 `build` から実際の pptx 生成(python-pptx 呼び出し)を除いたものです。スキーマ検証・意味検証・重なり検知はすべて行われるため、LLM が生成した YAML を素早く検証するループに向いています。
 
 ```bash
-archdiagram validate diagram.yaml
-archdiagram validate diagram.yaml --strict          # Warningも失敗扱いにする
-archdiagram validate diagram.yaml --format json      # CI向けの機械可読出力
+zook validate diagram.yaml
+zook validate diagram.yaml --strict          # Warningも失敗扱いにする
+zook validate diagram.yaml --format json      # CI向けの機械可読出力
 ```
 
 ## icons list — 登録済みアイコン・コンテナ種別を一覧表示
 
 ```bash
-archdiagram icons list                  # aws/gcp/azure すべて
-archdiagram icons list --provider gcp    # 特定プロバイダのみ
-archdiagram icons list --format json
+zook icons list                  # aws/gcp/azure すべて
+zook icons list --provider gcp    # 特定プロバイダのみ
+zook icons list --format json
 ```
 
 ```text
@@ -53,7 +53,7 @@ archdiagram icons list --format json
 PowerPoint も LibreOffice も使わずに、構成をすぐに目で確認できます(Pillow による簡易描画。実際の pptx とは見た目が多少異なります)。
 
 ```bash
-archdiagram preview diagram.yaml -o diagram.png
+zook preview diagram.yaml -o diagram.png
 ```
 
 ## export-drawio / sync — draw.ioで手直しして継続的に管理する
@@ -61,17 +61,17 @@ archdiagram preview diagram.yaml -o diagram.png
 生成した構成図を[draw.io](https://www.diagrams.net/)で手直しし、その位置・サイズの変更をYAMLに機械的に反映できます。詳細な運用フローは[draw.io連携](drawio-sync.md)を参照してください。
 
 ```bash
-archdiagram export-drawio diagram.yaml -o diagram.drawio   # draw.ioで開ける形式で書き出す
+zook export-drawio diagram.yaml -o diagram.drawio   # draw.ioで開ける形式で書き出す
 # ... draw.io で位置・サイズを調整して保存 ...
-archdiagram sync diagram.yaml diagram.drawio -o diagram.yaml # 変更をYAMLに反映
+zook sync diagram.yaml diagram.drawio -o diagram.yaml # 変更をYAMLに反映
 ```
 
 ## from-mermaid — Mermaidフローチャートから変換する
 
-[Mermaid](https://mermaid.js.org/)の`flowchart`/`graph`記法をarchdiagramのYAMLに変換します。詳細は[Mermaidフローチャートのインポート](mermaid-import.md)を参照してください。
+[Mermaid](https://mermaid.js.org/)の`flowchart`/`graph`記法をzookのYAMLに変換します。詳細は[Mermaidフローチャートのインポート](mermaid-import.md)を参照してください。
 
 ```bash
-archdiagram from-mermaid diagram.mmd -o diagram.yaml
+zook from-mermaid diagram.mmd -o diagram.yaml
 ```
 
 ## 独自アイコン・スタイルで上書きする
@@ -79,14 +79,14 @@ archdiagram from-mermaid diagram.mmd -o diagram.yaml
 `--registry` オプション(`build`/`validate`/`icons list`/`preview`/`export-drawio`/`sync` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
 
 ```bash
-archdiagram build diagram.yaml -o diagram.pptx --registry my-registry.yaml
+zook build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 ```
 
-`my-registry.yaml` は [`icon-registry.schema.json`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry.schema.json) に従った形式です。詳細は[アイコン・レジストリ](icons.md)を参照してください。
+`my-registry.yaml` は [`icon-registry.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry.schema.json) に従った形式です。詳細は[アイコン・レジストリ](icons.md)を参照してください。
 
 ## エラーハンドリング {: #error-handling }
 
-archdiagram は「構造的な破綻」と「描画上の軽微な問題」を明確に区別します(CI/CD での利用を想定した設計)。
+zook は「構造的な破綻」と「描画上の軽微な問題」を明確に区別します(CI/CD での利用を想定した設計)。
 
 ### Fatal(標準エラー出力 + 非ゼロ終了)
 
@@ -98,7 +98,7 @@ archdiagram は「構造的な破綻」と「描画上の軽微な問題」を�
 - `link.fromSide`/`toSide` を両方指定し、かつ軸(`top`/`bottom` の垂直と `left`/`right` の水平)が矛盾している
 
 ```bash
-$ archdiagram build broken.yaml -o out.pptx
+$ zook build broken.yaml -o out.pptx
 Error: Duplicate element id(s): web
 $ echo $?
 1
@@ -118,7 +118,7 @@ $ echo $?
 いずれも `canvas.overlapMargin`([YAML入力仕様](yaml-guide.md#canvas)参照)を設定すると、文字通りの重なりだけでなく「近すぎる」状態も検知対象にできます。
 
 ```bash
-$ archdiagram build diagram.yaml -o out.pptx
+$ zook build diagram.yaml -o out.pptx
 Warning: unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon
 Warning: element 'web' overlaps element 'cache'
 Wrote out.pptx
@@ -129,7 +129,7 @@ Wrote out.pptx
 `build`/`validate`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
 
 ```bash
-$ archdiagram validate diagram.yaml --format json
+$ zook validate diagram.yaml --format json
 {"status": "warning", "warnings": ["unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon"]}
 ```
 

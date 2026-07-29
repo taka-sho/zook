@@ -17,8 +17,8 @@
 実際に登録されているアイコン・コンテナ種別は `icons list` サブコマンドで確認できます。
 
 ```bash
-archdiagram icons list                # aws/gcp/azure すべて
-archdiagram icons list --provider gcp  # 特定プロバイダのみ
+zook icons list                # aws/gcp/azure すべて
+zook icons list --provider gcp  # 特定プロバイダのみ
 ```
 
 ## 組み込み Tier-1 語彙
@@ -66,7 +66,7 @@ General(User/Admin/Developer/Client)カテゴリのアイコンはクラウド�
   label: "End User"
 ```
 
-定義は `docs/registry.aws.yaml` / `docs/registry.gcp.yaml` / `docs/registry.azure.yaml` にあります(実装が読み込むコピーはそれぞれ `src/archdiagram/data/icons/<provider>/registry.<provider>.yaml`)。
+定義は `docs/registry.aws.yaml` / `docs/registry.gcp.yaml` / `docs/registry.azure.yaml` にあります(実装が読み込むコピーはそれぞれ `src/zook/data/icons/<provider>/registry.<provider>.yaml`)。
 
 ## 解決アルゴリズム
 
@@ -115,18 +115,18 @@ groups:
 ```
 
 ```bash
-archdiagram build diagram.yaml -o diagram.pptx --registry my-registry.yaml
+zook build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 ```
 
-形式は [`icon-registry.schema.json`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry.schema.json) で検証されます。詳細仕様は [`docs/icon-registry-and-vocabulary.md`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/icon-registry-and-vocabulary.md) を参照してください。
+形式は [`icon-registry.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry.schema.json) で検証されます。詳細仕様は [`docs/icon-registry-and-vocabulary.md`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry-and-vocabulary.md) を参照してください。
 
 ## draw.io連携でのアイコン表示
 
-`archdiagram export-drawio`(詳細は[draw.io連携](drawio-sync.md))で書き出す際、レジストリの各エントリに任意で `drawioShape` フィールドを設定できます。設定されていれば draw.io 公式のシェイプ(AWS4等)として書き出され、未設定ならこのツール自身のPNGアイコンをそのまま埋め込みます。現時点では組み込みのAWSレジストリのみ `drawioShape` を設定済みです(GCP/Azureは未設定 → PNGフォールバック)。
+`zook export-drawio`(詳細は[draw.io連携](drawio-sync.md))で書き出す際、レジストリの各エントリに任意で `drawioShape` フィールドを設定できます。設定されていれば draw.io 公式のシェイプ(AWS4等)として書き出され、未設定ならこのツール自身のPNGアイコンをそのまま埋め込みます。現時点では組み込みのAWSレジストリのみ `drawioShape` を設定済みです(GCP/Azureは未設定 → PNGフォールバック)。
 
 ## アイコン画像について {: #icon-assets }
 
 !!! warning "同梱アイコンは各社の公式アイコンではありません"
-    `src/archdiagram/data/icons/<provider>/` に同梱されている PNG は、`scripts/generate_placeholder_icons.py` で生成した**自作のプレースホルダー**(カテゴリ別配色 + サービス名の略称)です。ライセンス上の理由から AWS/GCP/Azure の公式アイコンはリポジトリに含めていません。
+    `src/zook/data/icons/<provider>/` に同梱されている PNG は、`scripts/generate_placeholder_icons.py` で生成した**自作のプレースホルダー**(カテゴリ別配色 + サービス名の略称)です。ライセンス上の理由から AWS/GCP/Azure の公式アイコンはリポジトリに含めていません。
 
 実際の公式アイコンに差し替える場合は、各 `registry.<provider>.yaml` の `file` パスに合わせて画像を配置するだけで済みます(コード変更不要)。ラスタライズする場合は、表示ピクセル数の **4倍**の解像度で PNG 化することを推奨します(理由は[内部設計メモ](design-notes.md#icon-raster-resolution)を参照)。

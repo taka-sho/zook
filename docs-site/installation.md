@@ -10,23 +10,23 @@
 リポジトリを clone し、仮想環境を作成してインストールします。
 
 ```bash
-git clone https://github.com/taka-sho/archtecture-diagram-generator.git
-cd archtecture-diagram-generator
+git clone https://github.com/taka-sho/zook.git
+cd zook
 
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-`archdiagram` コマンドが使えるようになります。
+`zook` コマンドが使えるようになります。
 
 ```bash
-.venv/bin/archdiagram --help
+.venv/bin/zook --help
 ```
 
 ```text
-Usage: archdiagram [OPTIONS] COMMAND [ARGS]...
+Usage: zook [OPTIONS] COMMAND [ARGS]...
 
-  archdiagram: generate PowerPoint architecture diagrams from a YAML
+  zook: generate PowerPoint architecture diagrams from a YAML
   definition.
 
 Options:
@@ -48,7 +48,7 @@ Commands:
 同梱のサンプル YAML(`docs/example.yaml`)から pptx を生成できることを確認してください。
 
 ```bash
-.venv/bin/archdiagram build docs/example.yaml -o example.pptx
+.venv/bin/zook build docs/example.yaml -o example.pptx
 ```
 
 `Wrote example.pptx` と表示され、終了コード `0` であれば成功です。

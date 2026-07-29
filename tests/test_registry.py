@@ -1,4 +1,4 @@
-from archdiagram.registry import load_registries, load_registry
+from zook.registry import load_registries, load_registry
 
 
 def test_builtin_aws_resolves_primary_key():

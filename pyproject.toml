@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "archdiagram"
+name = "zook"
 version = "0.1.0"
 description = "Generate PowerPoint architecture diagrams from a YAML definition."
 requires-python = ">=3.10"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-archdiagram = "archdiagram.cli:main"
+zook = "zook.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
@@ -27,7 +27,7 @@ dev = ["pytest>=8.0"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-archdiagram = [
+zook = [
     "schemas/*.json",
     "data/icons/aws/**/*.png",
     "data/icons/aws/*.yaml",

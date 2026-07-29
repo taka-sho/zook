@@ -6,10 +6,10 @@ from xml.etree import ElementTree as ET
 
 import yaml
 
-from archdiagram.drawio import _diagram_model_root, _find_element_node, dump_yaml, export_drawio, sync_from_drawio
-from archdiagram.layout import build_layout
-from archdiagram.model import parse_diagram
-from archdiagram.registry import load_registries
+from zook.drawio import _diagram_model_root, _find_element_node, dump_yaml, export_drawio, sync_from_drawio
+from zook.layout import build_layout
+from zook.model import parse_diagram
+from zook.registry import load_registries
 
 FIXTURE = Path(__file__).parent / "fixtures" / "example.yaml"
 REGISTRY = load_registries()

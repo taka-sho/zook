@@ -10,7 +10,7 @@ defaults:
 # Key = the `type` used in the diagram YAML. Extend by adding entries + files.
 # drawioShape values were extracted verbatim from jgraph/drawio's own
 # Sidebar-AWS4.js (dev branch) - see docs/detailed-design-pptx.md sec8.14.
-# Entries without a verified official shape are left unset; `archdiagram
+# Entries without a verified official shape are left unset; `zook
 # export-drawio` falls back to embedding the PNG in `file` for those.
 icons:
   # Compute

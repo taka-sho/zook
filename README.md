@@ -1,46 +1,46 @@
-# archdiagram
+# ZOOK
 
-archdiagram は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアーキテクチャ図を生成する CLI ツールです。draw.io で整えた見た目の変更を YAML に書き戻しながら図を育てていく運用を主眼に置いています。
+zook は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアーキテクチャ図を生成する CLI ツールです。draw.io で整えた見た目の変更を YAML に書き戻しながら図を育てていく運用を主眼に置いています。
 
-利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/archtecture-diagram-generator/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
+利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/zook/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
 
-生成AIがこのツールを使って構成図を作る場合は [`AGENTS.md`](./AGENTS.md) に黄金の道(パターン選定→アイコン語彙確認→検証→生成)をまとめています。Mermaidの`flowchart`記法で書いた図がすでにある場合は、`archdiagram from-mermaid` で YAML に変換してから同じ流れに載せられます([Mermaidフローチャートのインポート](https://taka-sho.github.io/archtecture-diagram-generator/mermaid-import/))。
+生成AIがこのツールを使って構成図を作る場合は [`AGENTS.md`](./AGENTS.md) に黄金の道(パターン選定→アイコン語彙確認→検証→生成)をまとめています。Mermaidの`flowchart`記法で書いた図がすでにある場合は、`zook from-mermaid` で YAML に変換してから同じ流れに載せられます([Mermaidフローチャートのインポート](https://taka-sho.github.io/zook/mermaid-import/))。
 
 ## 基本の流れ: ベースを作り、draw.io で整え、YAML に戻す
 
-archdiagram でのアーキテクチャ図づくりは、次の4ステップを繰り返す形で進みます。図を直すたびにこの流れへ戻ってくる運用を想定しています。
+zook でのアーキテクチャ図づくりは、次の4ステップを繰り返す形で進みます。図を直すたびにこの流れへ戻ってくる運用を想定しています。
 
 1. **YAML からベースの構成図を作る**。VPC・AZ・サービスといった構成要素を YAML で記述し、`build` で PowerPoint を生成します。座標を指定しなければ自動でレイアウトされるので、最初は構造を書くことだけに集中できます。
 
    ```bash
-   archdiagram build diagram.yaml -o diagram.pptx
+   zook build diagram.yaml -o diagram.pptx
    ```
 
 2. **見た目を draw.io で整える**。自動レイアウトのままでは間隔や配置が意図通りにならないことがあります。`export-drawio` で draw.io 形式に書き出し、要素の位置・サイズを実際に動かしながら調整します。
 
    ```bash
-   archdiagram export-drawio diagram.yaml -o diagram.drawio
+   zook export-drawio diagram.yaml -o diagram.drawio
    ```
 
 3. **draw.io での調整を YAML に書き戻す**。動かしていない要素は自動配置のまま維持され、実際に動かした要素だけ座標が YAML に加わります。ノードの追加・削除や色の変更は同期の対象外です。PowerPoint ではなく draw.io を経由するのは、draw.io のコンテナ図形はリサイズしても子要素の座標が変わらず、座標変換なしにそのまま YAML へ書き戻せるためです(PowerPoint のグループ図形は子要素の座標を独自スケールで保持しており、変換の読み戻しが煩雑になります)。
 
    ```bash
-   archdiagram sync diagram.yaml diagram.drawio -o diagram.yaml
+   zook sync diagram.yaml diagram.drawio -o diagram.yaml
    ```
 
 4. **整えた YAML から PowerPoint を出力し直す**。draw.io での配置を保ったまま PowerPoint が生成されます。構成そのものを変えたくなったら 1 に戻って YAML を編集し、また同じ4ステップを回します。
 
    ```bash
-   archdiagram build diagram.yaml -o diagram.pptx
+   zook build diagram.yaml -o diagram.pptx
    ```
 
-このループは CI に載せて自動化することもできます。draw.io 側で `.drawio` ファイルを保存すると、CI が `sync` を実行して更新後の YAML を Pull Request として自動作成する仕組みも用意しています(`.github/workflows/drawio-sync.yml`)。詳しい運用は[ドキュメントサイトの draw.io連携ページ](https://taka-sho.github.io/archtecture-diagram-generator/drawio-sync/)にまとめています。
+このループは CI に載せて自動化することもできます。draw.io 側で `.drawio` ファイルを保存すると、CI が `sync` を実行して更新後の YAML を Pull Request として自動作成する仕組みも用意しています(`.github/workflows/drawio-sync.yml`)。詳しい運用は[ドキュメントサイトの draw.io連携ページ](https://taka-sho.github.io/zook/drawio-sync/)にまとめています。
 
 ## セットアップ
 
 ```bash
-git clone https://github.com/taka-sho/archtecture-diagram-generator.git
-cd archtecture-diagram-generator
+git clone https://github.com/taka-sho/zook.git
+cd zook
 
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
@@ -49,7 +49,7 @@ python3 -m venv .venv
 同梱のサンプルから生成できることを確認してください。`Wrote example.pptx` と表示され、終了コード `0` なら成功です。
 
 ```bash
-.venv/bin/archdiagram build docs/example.yaml -o example.pptx
+.venv/bin/zook build docs/example.yaml -o example.pptx
 ```
 
 ## サブコマンド一覧
@@ -67,14 +67,14 @@ python3 -m venv .venv
 `--registry` オプション(全サブコマンド共通)を使うと、組み込みの AWS/GCP/Azure アイコンレジストリの上に、独自のアイコンや枠スタイルを重ねられます。
 
 ```bash
-.venv/bin/archdiagram build diagram.yaml -o out.pptx --registry my-registry.yaml
+.venv/bin/zook build diagram.yaml -o out.pptx --registry my-registry.yaml
 ```
 
-各コマンドの詳しいオプションは[使い方ページ](https://taka-sho.github.io/archtecture-diagram-generator/usage/)を参照してください。
+各コマンドの詳しいオプションは[使い方ページ](https://taka-sho.github.io/zook/usage/)を参照してください。
 
 ## エラー処理の考え方
 
-archdiagram は CI/CD での利用を想定し、構造の破綻と描画上の軽微な問題を区別します。スキーマ違反・id 重複・リンク参照先の不在といった構造的な誤りは Fatal として即座にエラー終了しますが、未知のアイコン種別や要素同士の重なりといった描画上の問題は Warning として出力しつつ生成を続けます(`--strict` を付けると Warning も非ゼロ終了に切り替わります)。`--format json`/`github` にも対応しており、CI のゲートへそのまま組み込めます。
+zook は CI/CD での利用を想定し、構造の破綻と描画上の軽微な問題を区別します。スキーマ違反・id 重複・リンク参照先の不在といった構造的な誤りは Fatal として即座にエラー終了しますが、未知のアイコン種別や要素同士の重なりといった描画上の問題は Warning として出力しつつ生成を続けます(`--strict` を付けると Warning も非ゼロ終了に切り替わります)。`--format json`/`github` にも対応しており、CI のゲートへそのまま組み込めます。
 
 ## アイコンについて
 
@@ -94,7 +94,7 @@ archdiagram は CI/CD での利用を想定し、構造の破綻と描画上の�
 - 組み込みのアイコンレジストリは Tier-1 語彙(AWS26・GCP19・Azure18 サービス)のみで、それ以外は `--registry` によるユーザー拡張を想定しています。
 - リンクの接続辺(`fromSide`/`toSide`)は水平ペア・垂直ペアの組み合わせのみ対応しており、軸をまたぐ指定は Fatal エラーになります。
 
-詳しい制約一覧は[ドキュメントサイトの既知の制約ページ](https://taka-sho.github.io/archtecture-diagram-generator/limitations/)にまとめています。
+詳しい制約一覧は[ドキュメントサイトの既知の制約ページ](https://taka-sho.github.io/zook/limitations/)にまとめています。
 
 ## ドキュメントサイトと CI
 
@@ -113,7 +113,7 @@ archdiagram は CI/CD での利用を想定し、構造の破綻と描画上の�
 ## 構成
 
 ```
-src/archdiagram/
+src/zook/
   cli.py        CLIエントリポイント(build/validate/icons/preview/export-drawio/sync/from-mermaid)
   validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照/fromSide-toSideの軸整合)
   model.py      パース後のデータモデル
@@ -123,6 +123,6 @@ src/archdiagram/
   preview.py    Pillow による軽量PNGプレビュー(LibreOffice/PowerPoint不要)
   drawio.py     draw.io(mxGraph XML)へのエクスポート・同期(継続的な構成図管理向け)
   mermaid_flowchart.py  Mermaidの`flowchart`/`graph`記法のパーサ(from-mermaid向け)
-  schemas/      arch-diagram.schema.json / icon-registry.schema.json(docs/の写し)
+  schemas/      zook.schema.json / icon-registry.schema.json(docs/の写し)
   data/icons/{aws,gcp,azure}/  組み込みレジストリ + プレースホルダーアイコンPNG
 ```

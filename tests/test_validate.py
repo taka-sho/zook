@@ -1,7 +1,7 @@
 import pytest
 
-from archdiagram.errors import DiagramError
-from archdiagram.validate import validate
+from zook.errors import DiagramError
+from zook.validate import validate
 
 
 def _base(**overrides):

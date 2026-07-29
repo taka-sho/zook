@@ -2,7 +2,7 @@ name: draw.io sync
 
 # Triggered when a `.drawio` file is pushed (typically via draw.io's own
 # GitHub/GitLab storage integration - a user edits the diagram and "Save"
-# commits it directly). Runs `archdiagram sync` for each changed .drawio
+# commits it directly). Runs `zook sync` for each changed .drawio
 # against its same-named .yaml sibling (X.drawio <-> X.yaml, same
 # directory) and opens a PR with the updated YAML if anything changed. If
 # a sync run produces no diff (e.g. the edit only touched color/added a
@@ -47,7 +47,7 @@ jobs:
               continue
             fi
             echo "Syncing ${drawio} -> ${yaml}"
-            archdiagram sync "$yaml" "$drawio" -o "$yaml"
+            zook sync "$yaml" "$drawio" -o "$yaml"
           done
 
       - name: Check for changes
@@ -67,8 +67,8 @@ jobs:
           title: "Sync draw.io position/size changes"
           body: >
             Position/size changes made in draw.io, synced back into the
-            diagram YAML by `archdiagram sync`. Structural edits (added/
+            diagram YAML by `zook sync`. Structural edits (added/
             removed shapes, color/style changes) are out of scope and were
             not applied - see docs/detailed-design-pptx.md sec8.14.
-          branch: archdiagram-sync/${{ github.run_id }}
+          branch: zook-sync/${{ github.run_id }}
           base: ${{ github.ref_name }}

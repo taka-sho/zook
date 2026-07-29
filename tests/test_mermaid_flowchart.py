@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from archdiagram.errors import DiagramError
-from archdiagram.mermaid_flowchart import parse_flowchart
-from archdiagram.model import parse_diagram
-from archdiagram.validate import validate
+from zook.errors import DiagramError
+from zook.mermaid_flowchart import parse_flowchart
+from zook.model import parse_diagram
+from zook.validate import validate
 
 FIXTURE = Path(__file__).parent / "fixtures" / "example.mmd"
 
@@ -167,7 +167,7 @@ def test_output_conforms_to_schema_and_parses_into_a_diagram():
 def test_cli_from_mermaid_writes_valid_yaml(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     out_path = tmp_path / "out.yaml"
     runner = CliRunner()
@@ -186,7 +186,7 @@ def test_cli_from_mermaid_writes_valid_yaml(tmp_path):
 def test_cli_from_mermaid_rejects_sequence_diagram(tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     src = tmp_path / "in.mmd"
     src.write_text("sequenceDiagram\n  A->>B: hi\n")

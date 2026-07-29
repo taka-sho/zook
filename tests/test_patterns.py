@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from archdiagram.errors import Warnings
-from archdiagram.layout import (
+from zook.errors import Warnings
+from zook.layout import (
     build_layout,
     icon_resolution_warnings,
     link_aliasing_warnings,
@@ -19,10 +19,10 @@ from archdiagram.layout import (
     out_of_canvas_warnings,
     overlap_warnings,
 )
-from archdiagram.model import parse_diagram
-from archdiagram.registry import load_registries
-from archdiagram.render import render
-from archdiagram.validate import validate
+from zook.model import parse_diagram
+from zook.registry import load_registries
+from zook.render import render
+from zook.validate import validate
 
 PATTERNS_DIR = Path(__file__).parent.parent / "docs" / "patterns"
 PATTERN_FILES = sorted(PATTERNS_DIR.glob("*.yaml"))
@@ -63,7 +63,7 @@ def test_pattern_renders_without_warnings(path: Path):
 def test_pattern_builds_via_cli(path: Path, tmp_path):
     from click.testing import CliRunner
 
-    from archdiagram.cli import main
+    from zook.cli import main
 
     out_path = tmp_path / f"{path.stem}.pptx"
     runner = CliRunner()

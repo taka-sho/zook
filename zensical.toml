@@ -1,13 +1,13 @@
 [project]
-site_name = "archdiagram"
+site_name = "ZOOK"
 site_description = "YAML から PowerPoint アーキテクチャ図を生成する CLI ツール"
 site_author = "taka-sho"
-site_url = "https://taka-sho.github.io/archtecture-diagram-generator/"
+site_url = "https://taka-sho.github.io/zook/"
 docs_dir = "docs-site"
 copyright = "Copyright &copy; 2026 taka-sho"
 
-repo_url = "https://github.com/taka-sho/archtecture-diagram-generator"
-repo_name = "taka-sho/archtecture-diagram-generator"
+repo_url = "https://github.com/taka-sho/zook"
+repo_name = "taka-sho/zook"
 edit_uri = "edit/main/docs-site/"
 
 nav = [
@@ -59,7 +59,7 @@ toggle.name = "Switch to light mode"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/taka-sho/archtecture-diagram-generator"
+link = "https://github.com/taka-sho/zook"
 
 [project.markdown_extensions.abbr]
 [project.markdown_extensions.admonition]

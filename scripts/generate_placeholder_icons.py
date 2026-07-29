@@ -87,7 +87,7 @@ def _rasterize(svg_text: str, out_path: Path, size_logical_units: float) -> None
 
 
 def _generate_for_provider(provider: str) -> None:
-    registry_path = REPO_ROOT / f"src/archdiagram/data/icons/{provider}/registry.{provider}.yaml"
+    registry_path = REPO_ROOT / f"src/zook/data/icons/{provider}/registry.{provider}.yaml"
     out_dir = registry_path.parent
     registry = yaml.safe_load(registry_path.read_text())
     default_size = registry.get("defaults", {}).get("size", 64)

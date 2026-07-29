@@ -1,6 +1,6 @@
 # YAML入力仕様
 
-archdiagram の入力 YAML は [`arch-diagram.schema.json`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/arch-diagram.schema.json)(JSON Schema Draft 2020-12)で厳密に定義されています。本ページはその要点をまとめたものです。完全な仕様は [`docs/yaml-spec.md`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/yaml-spec.md) を参照してください。
+zook の入力 YAML は [`zook.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/zook.schema.json)(JSON Schema Draft 2020-12)で厳密に定義されています。本ページはその要点をまとめたものです。完全な仕様は [`docs/yaml-spec.md`](https://github.com/taka-sho/zook/blob/main/docs/yaml-spec.md) を参照してください。
 
 ## トップレベル構造
 
@@ -98,7 +98,7 @@ links: [...]            # 任意。接続線。省略すれば線なしの図
 | `padding` | 32 | コンテナ内側の余白 |
 
 !!! note "v1の制約"
-    自動配置は既に座標指定された子を避けずに詰める第一版仕様です。重なりが生じた場合は archdiagram が Warning として検出しますが、自動では回避しません。PowerPoint 上で手直ししてください(詳細は[既知の制約](limitations.md))。
+    自動配置は既に座標指定された子を避けずに詰める第一版仕様です。重なりが生じた場合は zook が Warning として検出しますが、自動では回避しません。PowerPoint 上で手直ししてください(詳細は[既知の制約](limitations.md))。
 
 ## links(接続線)
 
@@ -200,4 +200,4 @@ links:
     arrow: none
 ```
 
-このサンプルは [`docs/example.yaml`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/example.yaml) としてリポジトリに同梱されており、JSON Schema 検証済みです。
+このサンプルは [`docs/example.yaml`](https://github.com/taka-sho/zook/blob/main/docs/example.yaml) としてリポジトリに同梱されており、JSON Schema 検証済みです。

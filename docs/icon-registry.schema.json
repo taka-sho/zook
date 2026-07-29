@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/arch-diagram/icon-registry.v1.schema.json",
+  "$id": "https://example.com/zook/icon-registry.v1.schema.json",
   "title": "Icon Registry",
   "description": "Maps diagram element types to icon files (nodes) and frame styles (containers), per provider.",
   "type": "object",
@@ -61,7 +61,7 @@
         "size": { "type": "number", "exclusiveMinimum": 0, "description": "Per-icon default size override." },
         "drawioShape": {
           "type": "string",
-          "description": "draw.io mxGraph style string for this icon (e.g. an official AWS4/GCP2/Azure shape library reference). If omitted, `archdiagram export-drawio` embeds the icon's own PNG as a data URI instead."
+          "description": "draw.io mxGraph style string for this icon (e.g. an official AWS4/GCP2/Azure shape library reference). If omitted, `zook export-drawio` embeds the icon's own PNG as a data URI instead."
         }
       }
     },
@@ -79,7 +79,7 @@
         "aliases": { "type": "array", "items": { "type": "string" } },
         "drawioShape": {
           "type": "string",
-          "description": "draw.io mxGraph style string for this container's frame (e.g. an official AWS4/GCP2/Azure group shape). If omitted, `archdiagram export-drawio` renders a plain rectangle using borderColor/fillColor/dashed."
+          "description": "draw.io mxGraph style string for this container's frame (e.g. an official AWS4/GCP2/Azure group shape). If omitted, `zook export-drawio` renders a plain rectangle using borderColor/fillColor/dashed."
         }
       }
     }

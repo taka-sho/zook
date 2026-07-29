@@ -8,7 +8,7 @@ Subcommands:
   export-drawio   YAML -> .drawio, for manual editing in draw.io.
   sync            Edited .drawio -> updated YAML (position/size only; see
                   docs/detailed-design-pptx.md sec8.14).
-  from-mermaid    Mermaid flowchart (.mmd) -> archdiagram YAML.
+  from-mermaid    Mermaid flowchart (.mmd) -> zook YAML.
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ _format_option = click.option(
 
 @click.group()
 def main() -> None:
-    """archdiagram: generate PowerPoint architecture diagrams from a YAML definition."""
+    """zook: generate PowerPoint architecture diagrams from a YAML definition."""
 
 
 @main.command()
@@ -293,7 +293,7 @@ def sync_cmd(yaml_path: str, drawio_path: str, output_path: str | None, user_reg
 @_strict_option
 @_format_option
 def from_mermaid_cmd(input_path: str, output_path: str, user_registry_path: str | None, strict: bool, fmt: str) -> None:
-    """Convert a Mermaid flowchart (INPUT_PATH, e.g. *.mmd) to archdiagram YAML.
+    """Convert a Mermaid flowchart (INPUT_PATH, e.g. *.mmd) to zook YAML.
 
     Only `flowchart`/`graph` syntax is supported (sequenceDiagram and other
     Mermaid diagram types are not) - see docs-site/mermaid-import.md for the

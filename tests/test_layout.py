@@ -1,4 +1,4 @@
-from archdiagram.layout import (
+from zook.layout import (
     Box,
     LABEL_BOX_HEIGHT,
     LABEL_GAP_DEFAULT,
@@ -17,8 +17,8 @@ from archdiagram.layout import (
     overlap_warnings,
     resolve_container_style,
 )
-from archdiagram.model import Canvas, Diagram, Element, Layout, Link
-from archdiagram.registry import load_registries
+from zook.model import Canvas, Diagram, Element, Layout, Link
+from zook.registry import load_registries
 
 REGISTRY = load_registries()
 
@@ -28,7 +28,7 @@ def _diagram(elements, links=None, aspect_ratio="16:9"):
 
 
 def _boxes_by_id(root_box):
-    from archdiagram.layout import iter_boxes
+    from zook.layout import iter_boxes
 
     return {b.element.id: b for b in iter_boxes(root_box)}
 
@@ -111,7 +111,7 @@ def test_avoidance_never_moves_the_explicit_sibling_itself():
 
 
 def test_avoidance_does_not_move_auto_children_that_were_never_overlapping():
-    from archdiagram.layout import measure
+    from zook.layout import measure
 
     auto_alone = Element(kind="node", id="auto", type="S3", provider="aws")
     container_alone = Element(kind="container", id="c", type="vpc", provider="aws", children=[auto_alone])

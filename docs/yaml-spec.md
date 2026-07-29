@@ -3,7 +3,7 @@
 **バージョン:** 1.0
 **作成日:** 2026-07-25
 **対象:** 要求仕様書 §7.1 / §9 の具体化、および §14-1（スキーマ正式定義）の確定
-**関連ファイル:** `arch-diagram.schema.json`（JSON Schema）, `example.yaml`（サンプル）
+**関連ファイル:** `zook.schema.json`（JSON Schema）, `example.yaml`（サンプル）
 
 ---
 
@@ -184,7 +184,7 @@ links: [...]          # 任意。接続線。無ければ線なしの図
 
 ## 12. 確定状況
 
-- 本仕様は JSON Schema（`arch-diagram.schema.json`）として形式化済み。
+- 本仕様は JSON Schema（`zook.schema.json`）として形式化済み。
 - スキーマ自体が Draft 2020-12 準拠であること、サンプルが適合すること、不正入力が棄却されることを検証済み。
 - 実装（Claude Code 側）はこのスキーマをバリデーションの単一の真実源として使用する。
 

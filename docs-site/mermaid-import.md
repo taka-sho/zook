@@ -1,15 +1,15 @@
 # Mermaidフローチャートのインポート
 
-[Mermaid](https://mermaid.js.org/)の`flowchart`/`graph`記法で書いた図を、archdiagramのYAMLに変換できます。ノード・矢印・入れ子グループというMermaidフローチャートの構造は、archdiagram自体のコンテナ・ノード・リンクという基盤エンジンとほぼそのまま対応するため、変換後は`validate`/`build`/`export-drawio`/`sync`という既存のパイプラインにそのまま接続できます。
+[Mermaid](https://mermaid.js.org/)の`flowchart`/`graph`記法で書いた図を、zookのYAMLに変換できます。ノード・矢印・入れ子グループというMermaidフローチャートの構造は、zook自体のコンテナ・ノード・リンクという基盤エンジンとほぼそのまま対応するため、変換後は`validate`/`build`/`export-drawio`/`sync`という既存のパイプラインにそのまま接続できます。
 
 対応するのは`flowchart`のみです。`sequenceDiagram`のような縦のライフライン・時系列メッセージを描く図は、まったく別の描画エンジンが必要になるため、現時点では対象外です。
 
 ## 基本フロー
 
 ```bash
-archdiagram from-mermaid diagram.mmd -o diagram.yaml
-archdiagram validate diagram.yaml
-archdiagram build diagram.yaml -o diagram.pptx
+zook from-mermaid diagram.mmd -o diagram.yaml
+zook validate diagram.yaml
+zook build diagram.yaml -o diagram.pptx
 ```
 
 `from-mermaid`は変換後のYAMLを`build`/`validate`と同じ検証(スキーマ・重なり・リンク経路など)にかけてから書き出すため、Fatal/Warningはこの時点で分かります。`--format json`/`github`にも対応しています。

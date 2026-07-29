@@ -18,7 +18,7 @@ from .errors import DiagramError
 
 def _load_schema() -> dict:
     schema_text = (
-        resources.files("archdiagram.schemas").joinpath("arch-diagram.schema.json").read_text()
+        resources.files("zook.schemas").joinpath("zook.schema.json").read_text()
     )
     return json.loads(schema_text)
 

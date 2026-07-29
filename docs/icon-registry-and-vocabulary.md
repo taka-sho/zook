@@ -68,7 +68,7 @@
 - `label`：要素側でラベル省略時の既定表示名
 - `aliases`：別名リスト(大小文字無視でマッチ)
 - `size`：このアイコン固有のサイズ上書き
-- `drawioShape`：`archdiagram export-drawio`(`detailed-design-pptx.md` sec8.14参照)が使うdraw.io公式シェイプのstyle文字列。省略時はPNG(`file`)をそのまま埋め込む
+- `drawioShape`：`zook export-drawio`(`detailed-design-pptx.md` sec8.14参照)が使うdraw.io公式シェイプのstyle文字列。省略時はPNG(`file`)をそのまま埋め込む
 
 ### 3.3 groups エントリ（コンテナ枠）
 
@@ -108,8 +108,8 @@
 - `registry.gcp.yaml` / `registry.azure.yaml` を同形式で追加済み(Tier-1 でGCP 19サービス・Azure 18サービス + `cloud`/`vpc`/固有アカウント概念の groups)。
 - スキーマ(`icon-registry.schema.json`)は共通。`provider` 値と `icons`/`groups` の中身が変わるだけ。
 - 図 YAML 側はノードに `provider: gcp` を付けるだけで切り替わる。1つの図の中で複数プロバイダを混在させることも可能(要素ごとに `provider` を個別指定できるため)。
-- 解決は `MultiRegistry`(`src/archdiagram/registry.py`)が担当。`aws`/`gcp`/`azure` を常にすべて読み込み、`--registry` で指定したユーザーレジストリはその **ファイル自身が宣言する `provider`** に重ねる(未知の値、例えば `custom` を宣言すれば独立した新しいプロバイダとして追加される)。
-- `archdiagram icons list [--provider <name>]` で、実際に解決可能な語彙を一覧確認できる。
+- 解決は `MultiRegistry`(`src/zook/registry.py`)が担当。`aws`/`gcp`/`azure` を常にすべて読み込み、`--registry` で指定したユーザーレジストリはその **ファイル自身が宣言する `provider`** に重ねる(未知の値、例えば `custom` を宣言すれば独立した新しいプロバイダとして追加される)。
+- `zook icons list [--provider <name>]` で、実際に解決可能な語彙を一覧確認できる。
 
 ## 8. 確定状況 & 申し送り
 

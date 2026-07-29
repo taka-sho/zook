@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/arch-diagram/v1.schema.json",
+  "$id": "https://example.com/zook/v1.schema.json",
   "title": "Architecture Diagram Definition",
   "description": "YAML/JSON definition for generating a single architecture diagram slide.",
   "type": "object",

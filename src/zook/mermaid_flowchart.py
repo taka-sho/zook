@@ -103,7 +103,7 @@ def _reject_unsupported_diagram_type(text: str) -> None:
         first_word = re.split(r"\s", line, maxsplit=1)[0]
         if first_word.lower() in _OTHER_DIAGRAM_TYPES:
             raise DiagramError(
-                f"Unsupported Mermaid diagram type '{first_word}' - archdiagram only "
+                f"Unsupported Mermaid diagram type '{first_word}' - zook only "
                 "supports 'flowchart'/'graph' (flowchart syntax) in this version. "
                 "See docs-site/mermaid-import.md."
             )
@@ -173,8 +173,8 @@ def _register_or_get(ref_text: str, children: list, id_map: dict[str, str], used
 
 def parse_flowchart(text: str) -> dict:
     """Parse Mermaid `flowchart`/`graph` source into a dict conforming to
-    arch-diagram.schema.json (version/canvas/elements/links), ready for
-    `archdiagram.validate.validate()`."""
+    zook.schema.json (version/canvas/elements/links), ready for
+    `zook.validate.validate()`."""
     _reject_unsupported_diagram_type(text)
 
     used_ids: set[str] = set()

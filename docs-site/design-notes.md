@@ -1,6 +1,6 @@
 # 内部設計メモ
 
-archdiagram の PowerPoint 生成部分([python-pptx](https://python-pptx.readthedocs.io/)を使用)は、実装前にプロトタイプで検証したいくつかの技術的決定に基づいています。詳細は [`docs/detailed-design-pptx.md`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/docs/detailed-design-pptx.md) にありますが、要点は以下の通りです。
+zook の PowerPoint 生成部分([python-pptx](https://python-pptx.readthedocs.io/)を使用)は、実装前にプロトタイプで検証したいくつかの技術的決定に基づいています。詳細は [`docs/detailed-design-pptx.md`](https://github.com/taka-sho/zook/blob/main/docs/detailed-design-pptx.md) にありますが、要点は以下の通りです。
 
 ## 座標系
 
@@ -42,7 +42,7 @@ SVG アイコンを PNG 化する際は、**表示ピクセル数の4倍**の解
 
 ## 軽量PNGプレビューとの見た目の一貫性
 
-`archdiagram preview` は python-pptx を使わず、同じレイアウト計算結果(`Box` 木・接続点計算)を Pillow で直接描画する第二のレンダラーです。枠線色・塗り・破線・ラベル位置・隅アイコンといったコンテナの見た目は `resolve_container_style()` という共有関数で1箇所にまとめて解決しており、pptx用レンダラーとPNGプレビューが見た目のロジックで食い違わないようにしています。
+`zook preview` は python-pptx を使わず、同じレイアウト計算結果(`Box` 木・接続点計算)を Pillow で直接描画する第二のレンダラーです。枠線色・塗り・破線・ラベル位置・隅アイコンといったコンテナの見た目は `resolve_container_style()` という共有関数で1箇所にまとめて解決しており、pptx用レンダラーとPNGプレビューが見た目のロジックで食い違わないようにしています。
 
 ## マルチクラウドの解決
 
@@ -50,10 +50,10 @@ SVG アイコンを PNG 化する際は、**表示ピクセル数の4倍**の解
 
 ## draw.io連携
 
-`archdiagram export-drawio`/`sync`(詳細は[draw.io連携](drawio-sync.md))は、pptxとは別のもう一つの出力先としてdraw.io(mxGraph XML)を扱います。PowerPointのグループとは異なり、draw.ioのコンテナ(`container=1`)は子要素の座標が親からの単純な相対オフセットのままで、リサイズしても子要素の座標がスケールされません。これは `jgraph/drawio` の公式ソースで確認済みの挙動で、pptxのグループが持つ `chOff`/`chExt` のスケーリングの罠がそもそも存在しないため、座標変換なしにレイアウト計算結果(`Box.local_x`/`local_y`)をそのままmxGraphの子座標として使えます。
+`zook export-drawio`/`sync`(詳細は[draw.io連携](drawio-sync.md))は、pptxとは別のもう一つの出力先としてdraw.io(mxGraph XML)を扱います。PowerPointのグループとは異なり、draw.ioのコンテナ(`container=1`)は子要素の座標が親からの単純な相対オフセットのままで、リサイズしても子要素の座標がスケールされません。これは `jgraph/drawio` の公式ソースで確認済みの挙動で、pptxのグループが持つ `chOff`/`chExt` のスケーリングの罠がそもそも存在しないため、座標変換なしにレイアウト計算結果(`Box.local_x`/`local_y`)をそのままmxGraphの子座標として使えます。
 
-AWSのアイコン・コンテナは、draw.io公式のAWS4シェイプライブラリの識別子(`resIcon`/`grIcon`)を実際のソースコードから直接確認した上でレジストリに追加しており(推測ではありません)、draw.io上でも見慣れた公式の見た目で表示されます。GCP/Azureは同様の対応表がまだ無く、archdiagram自身のプレースホルダーPNGにフォールバックします([既知の制約](limitations.md)参照)。
+AWSのアイコン・コンテナは、draw.io公式のAWS4シェイプライブラリの識別子(`resIcon`/`grIcon`)を実際のソースコードから直接確認した上でレジストリに追加しており(推測ではありません)、draw.io上でも見慣れた公式の見た目で表示されます。GCP/Azureは同様の対応表がまだ無く、zook自身のプレースホルダーPNGにフォールバックします([既知の制約](limitations.md)参照)。
 
 ## 検証方法
 
-これらの決定は、`prototype/build_prototype.py` で実際に pptx を生成し、LibreOffice headless(`soffice --convert-to pdf` → `pdftoppm`)で画像化して目視確認しています。再現手順は [`prototype/README.md`](https://github.com/taka-sho/archtecture-diagram-generator/blob/main/prototype/README.md) を参照してください。
+これらの決定は、`prototype/build_prototype.py` で実際に pptx を生成し、LibreOffice headless(`soffice --convert-to pdf` → `pdftoppm`)で画像化して目視確認しています。再現手順は [`prototype/README.md`](https://github.com/taka-sho/zook/blob/main/prototype/README.md) を参照してください。

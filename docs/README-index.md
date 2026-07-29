@@ -15,7 +15,7 @@
 | 1 | `architecture-diagram-tool-requirements.md` | 要求仕様書 | 目的・スコープ・ペルソナ・機能/非機能要件 |
 | 2 | `detailed-design-pptx.md` | 詳細設計メモ | python-pptx でのグループ化・コネクタ・座標系の決定事項 |
 | 3 | `yaml-spec.md` | YAML入力仕様書 | 入力YAMLの構造・座標系・レイアウト・リンク・エラー方針 |
-| 4 | `arch-diagram.schema.json` | JSON Schema | 入力YAMLの形式定義(検証の真実源) |
+| 4 | `zook.schema.json` | JSON Schema | 入力YAMLの形式定義(検証の真実源) |
 | 5 | `example.yaml` | サンプル | 主要機能を網羅した入力例(検証済み) |
 | 5b | `example-cloud-actors.yaml` | サンプル | AWS Cloud境界+User/Adminアクターを含む入力例(検証済み) |
 | 6 | `icon-registry-and-vocabulary.md` | 仕様書 | サービス語彙とアイコン解決の方針 |
@@ -56,7 +56,7 @@
 - コンテナ側にも `cloud`(境界。隅アイコン付き)を含む 7 種の枠スタイルを組み込み。
 - 解決は **エイリアス込み・大小文字無視**。ユーザーレジストリで**オーバーライド可**。
 - AWS は四半期更新 → `iconSet` にリリース記録し、キー安定・ファイル差し替え運用。
-- **マルチクラウド対応済み**(実装フェーズで追加):GCP(19サービス)・Azure(18サービス)の組み込みレジストリを追加し、要素の `provider` に応じて解決先レジストリを切り替える `MultiRegistry` を実装。コンテナの `groups` はプロバイダ自身に未定義ならAWSレジストリへフォールバック。`archdiagram icons list` で確認可能。
+- **マルチクラウド対応済み**(実装フェーズで追加):GCP(19サービス)・Azure(18サービス)の組み込みレジストリを追加し、要素の `provider` に応じて解決先レジストリを切り替える `MultiRegistry` を実装。コンテナの `groups` はプロバイダ自身に未定義ならAWSレジストリへフォールバック。`zook icons list` で確認可能。
 
 ### エラー方針
 - 構造破綻(スキーマ違反・id 重複・リンク先不在)= **Fatal で即停止**(CI/CD は非ゼロ終了。`--strict` で Warning もこの扱いに変更可能)。
@@ -68,7 +68,7 @@
 
 ## 3. 検証済みの事項
 
-- `arch-diagram.schema.json` は Draft 2020-12 準拠。`example.yaml` が適合。不正入力(x単独/不正id/未知kind/範囲外比率/余計なフィールド)は棄却を確認。
+- `zook.schema.json` は Draft 2020-12 準拠。`example.yaml` が適合。不正入力(x単独/不正id/未知kind/範囲外比率/余計なフィールド)は棄却を確認。
 - `icon-registry.schema.json` に `registry.aws.yaml`(26 icons + 7 group styles)が適合。エイリアス lookup 46 キー、衝突なし。
 
 ---
@@ -87,7 +87,7 @@
 
 ### 実装作業として残るもの
 - **アイコン実ファイルの調達・配置**：公式アセット取得 → PNG 変換 → `registry.aws.yaml` の `file` パスに合わせて配置。
-- YAML 検証の組み込み：**描画前に必ず** `arch-diagram.schema.json` で検証。
+- YAML 検証の組み込み：**描画前に必ず** `zook.schema.json` で検証。
 - 論理単位 → EMU 変換の実装(`yaml-spec.md §2` の表)。
 - 自動レイアウトは既定値で第一版実装。重なり回避の高度化は次版送り可。
 - CLI と CI/CD 連携(YAML → PPTX、Fatal は非ゼロ終了)。

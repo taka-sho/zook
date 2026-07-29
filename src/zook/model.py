@@ -124,7 +124,7 @@ def _parse_link(raw: dict) -> Link:
 def parse_diagram(raw: dict) -> Diagram:
     """Build the in-memory model from a schema-valid dict.
 
-    Caller must have already validated `raw` against arch-diagram.schema.json.
+    Caller must have already validated `raw` against zook.schema.json.
     """
     canvas_raw = raw["canvas"]
     canvas = Canvas(

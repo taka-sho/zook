@@ -112,7 +112,7 @@ def _index_groups(raw_groups: dict, base_path: Path) -> dict[str, GroupEntry]:
 
 def _load_builtin(provider: str) -> tuple[dict, Path]:
     try:
-        data_dir = resources.files(f"archdiagram.data.icons.{provider}")
+        data_dir = resources.files(f"zook.data.icons.{provider}")
         registry_file = data_dir.joinpath(f"registry.{provider}.yaml")
         raw = yaml.safe_load(registry_file.read_text())
     except (ModuleNotFoundError, FileNotFoundError):
@@ -123,7 +123,7 @@ def _load_builtin(provider: str) -> tuple[dict, Path]:
 
 def _placeholder_icon_path() -> Path:
     # A single shared "unknown icon" placeholder, regardless of provider.
-    data_dir = resources.files("archdiagram.data.icons.aws")
+    data_dir = resources.files("zook.data.icons.aws")
     return Path(str(data_dir)) / PLACEHOLDER_ICON_NAME
 
 
