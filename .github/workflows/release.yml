@@ -1,0 +1,47 @@
+name: Release
+
+# Build the package on every GitHub Release, and publish it to PyPI once PyPI
+# publishing has been enabled. Publishing uses PyPI Trusted Publishing (OIDC),
+# so no API token is stored in the repo.
+#
+# One-time setup to enable PyPI publishing:
+#   1. On https://pypi.org add a "pending publisher" for project `zook`,
+#      owner `taka-sho`, repo `zook`, workflow `release.yml`, environment `pypi`.
+#   2. In this repo's settings, add an Actions variable `PYPI_ENABLED` = `true`.
+# Until then the build job still runs and validates the artifacts; the publish
+# job is skipped, so cutting a release never fails on missing credentials.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ vars.PYPI_ENABLED == 'true' }}
+    environment: pypi
+    permissions:
+      id-token: write # required for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
