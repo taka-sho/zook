@@ -8,8 +8,9 @@ gap: it takes the same computed geometry the overlap checks run on and
 actually separates the colliding elements, emitting the new coordinates (or
 writing them straight back into the YAML with `--fix`/`-o`).
 
-Two resolution stages, in order (positions first, since link routing is
-derived from them):
+Three resolution stages, in order (each depends on the earlier ones being
+settled - link routing follows from positions, and displacing an obstacle
+follows from the routing that's left):
 
   1. Element overlaps - the element-vs-element and element-vs-container-label
      collisions that `overlap_warnings()` reports - separated by nudging
@@ -21,13 +22,20 @@ derived from them):
      attaches to. A greedy search assigns `fromSide`/`toSide` to minimise the
      total link-warning count, verified against those same checkers and only
      ever accepting a strict improvement, so it can never make routing worse.
+  3. Obstacle displacement - a link that runs straight through an unrelated
+     element, when no connection side can route around it (e.g. an obstacle
+     dead on the line between two vertically-aligned endpoints). The path can't
+     move, so the *obstacle* does: it's slid perpendicular to the crossing
+     segment until clear. Only auto-placed obstacles move (an authored position
+     is never overridden), and each move is applied, re-checked through stages
+     1-2, and kept only if the total residual strictly drops - otherwise rolled
+     back exactly - so this stage, too, never makes a diagram worse.
 
 The link stage minimises *every* link warning `link_crossing_warnings()`
 reports, which includes a link's own midpoint label colliding with an element
 or another label, so those are attempted too (re-siding a link moves its
-midpoint). What it can't help - a collision no side assignment removes (e.g.
-an obstacle dead on the line between two vertically-aligned endpoints) - is
-reported, never silently left half-fixed.
+midpoint). A collision none of the three stages can remove is reported under
+`remaining`, never silently left half-fixed.
 
 Still fully out of scope, reported under `remaining` but not auto-fixed:
 off-canvas coordinates and placeholder-icon (unknown-`type`) warnings - a
@@ -58,6 +66,7 @@ for determinism.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 
 from .drawio import _find_element_node
@@ -66,13 +75,17 @@ from .layout import (
     build_layout,
     container_label_rect,
     icon_resolution_warnings,
+    iter_boxes,
     link_aliasing_warnings,
     link_crossing_warnings,
+    link_render_plan,
     out_of_canvas_warnings,
     overlap_warnings,
+    _build_indices,
     _footprint_rect,
     _inflate_rect,
     _rects_overlap,
+    _segment_intersects_rect,
 )
 from .model import parse_diagram
 from .registry import MultiRegistry
@@ -86,6 +99,10 @@ _CLEARANCE = 8.0
 # "1 YAML = 1 slide"), so real inputs converge in far fewer passes; this only
 # stops a pathological cascade from spinning forever.
 _MAX_PASSES = 200
+
+# Safety bound on the obstacle-displacement loop. Each accepted pass strictly
+# lowers the residual count, so this only guards against a pathological input.
+_MAX_OBSTACLE_PASSES = 40
 
 Rect = tuple[float, float, float, float]
 
@@ -238,7 +255,65 @@ def _pick_movable(a: Box, b: Box, explicit: set[str], order: dict[str, int]) -> 
     return b, a
 
 
-# --- link routing: assign connection sides to clear crossings/aliasing ---
+# --- stage 1: separate overlapping elements ---
+
+
+def _resolve_element_overlaps(raw: dict, registry: MultiRegistry, author_explicit: set[str]) -> None:
+    """Separate every sibling / child-vs-label overlap by nudging elements, in
+    place. Pins the children of each broken parent first (so there's no auto
+    re-packing to fight), then moves one colliding element per pass to the
+    clear side. `author_explicit` (ids the author positioned in the original
+    file) are preferred as anchors so an authored position is disturbed last.
+
+    Idempotent on already-clean input, so it's safe to re-run after a stage-3
+    obstacle move perturbs positions."""
+    diagram = parse_diagram(raw)
+    margin = diagram.canvas.overlap_margin
+    sep = margin + _CLEARANCE
+    root = build_layout(diagram, registry)
+    order = _doc_order(raw)
+
+    pinned_parents: set[str] = set()
+    for _kind, parent, *_rest in _find_overlaps(root, registry, margin):
+        if parent.element.id not in pinned_parents:
+            _pin_children(raw, parent)
+            pinned_parents.add(parent.element.id)
+
+    for _ in range(_MAX_PASSES):
+        diagram = parse_diagram(raw)
+        root = build_layout(diagram, registry)
+        overlaps = _find_overlaps(root, registry, margin)
+        if not overlaps:
+            break
+
+        # A nudge can grow a container until it collides at a higher level,
+        # breaking a parent we hadn't pinned yet. Pin those first, then re-lay
+        # out before moving anything, so we never nudge against a still-auto
+        # container.
+        unpinned = [ov for ov in overlaps if ov[1].element.id not in pinned_parents]
+        if unpinned:
+            for _k, parent, *_r in unpinned:
+                if parent.element.id not in pinned_parents:
+                    _pin_children(raw, parent)
+                    pinned_parents.add(parent.element.id)
+            continue
+
+        kind = overlaps[0][0]
+        if kind == "pair":
+            _, _parent, a, b = overlaps[0]
+            movable, anchor = _pick_movable(a, b, author_explicit, order)
+            dx, dy = _separate_pair(_footprint_rect(movable), _footprint_rect(anchor), sep)
+        else:  # "label"
+            _, _parent, child, label_rect = overlaps[0]
+            movable = child
+            dx, dy = _separate_from_label(_footprint_rect(child), label_rect, sep)
+
+        node = _find_element_node(raw["elements"], movable.element.id)
+        node["x"] = round(movable.local_x + dx, 2)
+        node["y"] = round(movable.local_y + dy, 2)
+
+
+# --- stage 2: link routing - assign connection sides to clear crossings/aliasing ---
 
 
 def _link_routing_warnings(root_box: Box, links, registry: MultiRegistry, margin: float) -> list[str]:
@@ -316,17 +391,186 @@ def _unfixable_warnings(root_box: Box, diagram, registry: MultiRegistry) -> list
     )
 
 
+# --- stage 3: displace an element that a link routes straight through ---
+
+
+def _attempted_residual_count(raw: dict, registry: MultiRegistry) -> int:
+    """Number of problems doctor's three stages target (element overlaps + link
+    routing) in `raw`'s current state - the objective stage 3 must strictly
+    lower for a move to be worth keeping."""
+    diagram = parse_diagram(raw)
+    margin = diagram.canvas.overlap_margin
+    root = build_layout(diagram, registry)
+    return len(overlap_warnings(root, registry, margin)) + len(
+        _link_routing_warnings(root, diagram.links, registry, margin)
+    )
+
+
+def _link_element_crossings(root_box: Box, links, margin: float) -> list[tuple[Box, tuple, tuple]]:
+    """Every (obstacle_box, seg_start, seg_end) where a link's rendered path
+    runs through an unrelated element. Uses the exact routing geometry
+    link_crossing_warnings() reports on (link_render_plan), and applies the
+    same endpoint-ancestor/descendant exclusion, so a hit here is a real
+    'passes through element' warning - not a link touching its own container."""
+    by_id, parent_of = _build_indices(root_box)
+
+    def ancestors(eid: str) -> set[str]:
+        result: set[str] = set()
+        cur = parent_of.get(eid)
+        while cur is not None:
+            result.add(cur)
+            cur = parent_of.get(cur)
+        return result
+
+    def descendants(eid: str) -> set[str]:
+        box = by_id.get(eid)
+        return {b.element.id for b in iter_boxes(box)} if box else set()
+
+    crossings: list[tuple[Box, tuple, tuple]] = []
+    for link in links:
+        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
+        if from_box is None or to_box is None:
+            continue
+        _s, _e, _style, path = link_render_plan(from_box, to_box, link)
+        segments = list(zip(path, path[1:]))
+        exclude = (
+            {link.from_id, link.to_id}
+            | ancestors(link.from_id)
+            | ancestors(link.to_id)
+            | descendants(link.from_id)
+            | descendants(link.to_id)
+        )
+        for eid, box in by_id.items():
+            if eid == "__root__" or eid in exclude:
+                continue
+            rect = _inflate_rect(_footprint_rect(box), margin)
+            for p1, p2 in segments:
+                if _segment_intersects_rect(p1, p2, rect):
+                    crossings.append((box, p1, p2))
+                    break
+    return crossings
+
+
+def _displacement_targets(obox: Box, p1: tuple, p2: tuple, sep: float) -> list[tuple[float, float, float]]:
+    """Candidate (target_local_x, target_local_y, move_magnitude) that slide the
+    obstacle perpendicular to an axis-aligned crossing segment until it clears -
+    both directions, smaller move first. Empty for a diagonal segment (a rare
+    explicit `style: straight` diagonal; not displaced)."""
+    ox, oy, ow, oh = _footprint_rect(obox)
+    lx, ly = obox.local_x, obox.local_y  # a pure translation shifts footprint and content alike
+    out: list[tuple[float, float, float]] = []
+    if abs(p1[1] - p2[1]) < 0.5:  # horizontal segment at y = Y: move the obstacle up/down
+        y = (p1[1] + p2[1]) / 2
+        for dy in ((y - oy) + sep, -((oy + oh) - y + sep)):
+            out.append((round(lx, 2), round(ly + dy, 2), abs(dy)))
+    elif abs(p1[0] - p2[0]) < 0.5:  # vertical segment at x = X: move left/right
+        x = (p1[0] + p2[0]) / 2
+        for dx in ((x - ox) + sep, -((ox + ow) - x + sep)):
+            out.append((round(lx + dx, 2), round(ly, 2), abs(dx)))
+    out.sort(key=lambda t: t[2])
+    return out
+
+
+def _obstacle_move_options(
+    raw: dict, registry: MultiRegistry, author_explicit: set[str]
+) -> list[tuple[str, float, float]]:
+    """(element_id, target_x, target_y) displacements to try, least-disruptive
+    first. Only elements the author did not position explicitly are movable, so
+    an authored coordinate is never overridden to clear someone else's link."""
+    diagram = parse_diagram(raw)
+    margin = diagram.canvas.overlap_margin
+    sep = margin + _CLEARANCE
+    root = build_layout(diagram, registry)
+
+    ranked: list[tuple[float, str, float, float]] = []
+    seen: set[str] = set()
+    for obox, p1, p2 in _link_element_crossings(root, diagram.links, margin):
+        eid = obox.element.id
+        if eid in author_explicit or eid in seen:
+            continue
+        targets = _displacement_targets(obox, p1, p2, sep)
+        if not targets:
+            continue
+        seen.add(eid)
+        for tx, ty, magnitude in targets:
+            ranked.append((magnitude, eid, tx, ty))
+    ranked.sort(key=lambda r: r[0])
+    return [(eid, tx, ty) for _magnitude, eid, tx, ty in ranked]
+
+
+def _resolve_obstacles(raw: dict, registry: MultiRegistry, author_explicit: set[str]) -> None:
+    """Clear link-vs-element crossings that no connection side can fix, by
+    moving the obstacle out of the path. Each candidate is applied, then stages
+    1-2 are re-run and the total residual re-measured; the move is kept only if
+    it strictly improves, otherwise `raw` is rolled back exactly. This never
+    makes a diagram worse, and a strictly-decreasing residual terminates."""
+    for _ in range(_MAX_OBSTACLE_PASSES):
+        before = _attempted_residual_count(raw, registry)
+        if before == 0:
+            return
+        options = _obstacle_move_options(raw, registry, author_explicit)
+        if not options:
+            return
+        progressed = False
+        for eid, tx, ty in options:
+            backup = copy.deepcopy(raw)
+            node = _find_element_node(raw["elements"], eid)
+            node["x"], node["y"] = tx, ty
+            _resolve_element_overlaps(raw, registry, author_explicit)
+            _resolve_link_routing(raw, registry)
+            if _attempted_residual_count(raw, registry) < before:
+                progressed = True
+                break
+            raw.clear()
+            raw.update(backup)  # exact rollback, comments intact (ruamel deepcopy)
+        if not progressed:
+            return
+
+
+# --- change reporting: diff the final tree against the original ---
+
+
+def _collect_moves(original: dict, final: dict, registry: MultiRegistry) -> list[Move]:
+    """Elements whose rendered position actually changed. Comparing laid-out
+    coordinates (not raw x/y) means an element that only went from auto to an
+    explicit pin at the *same* spot isn't reported as a move."""
+    before = {b.element.id: (b.abs_x, b.abs_y) for b in iter_boxes(build_layout(parse_diagram(original), registry))}
+    final_nodes = {n["id"]: n for n in _iter_raw_nodes(final.get("elements", []))}
+    moves: list[Move] = []
+    for box in iter_boxes(build_layout(parse_diagram(final), registry)):
+        eid = box.element.id
+        if eid == "__root__" or eid not in before:
+            continue
+        ox, oy = before[eid]
+        if abs(box.abs_x - ox) > 0.5 or abs(box.abs_y - oy) > 0.5:
+            node = final_nodes.get(eid, {})
+            moves.append(Move(eid, node.get("x"), node.get("y")))
+    return moves
+
+
+def _collect_link_changes(original: dict, final: dict) -> list[LinkChange]:
+    original_links = original.get("links", []) or []
+    changes: list[LinkChange] = []
+    for i, link in enumerate(final.get("links", []) or []):
+        prior = original_links[i] if i < len(original_links) else {}
+        if link.get("fromSide") != prior.get("fromSide") or link.get("toSide") != prior.get("toSide"):
+            changes.append(LinkChange(link["from"], link["to"], link.get("fromSide"), link.get("toSide")))
+    return changes
+
+
 def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
     """Resolve overlaps and link-routing collisions in `raw` (a ruamel-loaded
     mapping), mutating it in place, and return what changed plus what remains.
     Caller decides whether to write `raw` back out.
 
-    `raw` must already be Fatal-clean (schema + semantics validated) - parse/
-    layout here assume that, exactly as build/validate/sync do.
+    Three stages, in order (each later stage depends on the earlier ones being
+    settled): (1) separate overlapping elements, (2) route links by connection
+    side, (3) displace an element a link still runs through. `raw` must already
+    be Fatal-clean (schema + semantics validated) - parse/layout here assume
+    that, exactly as build/validate/sync do.
     """
     diagram = parse_diagram(raw)
     margin = diagram.canvas.overlap_margin
-    sep = margin + _CLEARANCE
 
     root = build_layout(diagram, registry)
     initial_overlaps = set(overlap_warnings(root, registry, margin))
@@ -334,55 +578,12 @@ def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
     if not initial_overlaps and not initial_link:
         return DoctorResult(status="ok", remaining=_unfixable_warnings(root, diagram, registry))
 
-    explicit = _explicit_ids(raw)
-    order = _doc_order(raw)
+    original = copy.deepcopy(raw)
+    author_explicit = _explicit_ids(raw)
 
-    # Pin the children of every already-broken parent up front so there's no
-    # auto re-packing to fight during separation.
-    pinned_parents: set[str] = set()
-    for kind, parent, *_rest in _find_overlaps(root, registry, margin):
-        if parent.element.id not in pinned_parents:
-            _pin_children(raw, parent)
-            pinned_parents.add(parent.element.id)
-
-    moves: dict[str, Move] = {}
-    for _ in range(_MAX_PASSES):
-        diagram = parse_diagram(raw)
-        root = build_layout(diagram, registry)
-        overlaps = _find_overlaps(root, registry, margin)
-        if not overlaps:
-            break
-
-        # A nudge can grow a container until it collides at a higher level,
-        # breaking a parent we hadn't pinned yet. Pin those first, then re-lay
-        # out before moving anything, so we never nudge against a still-auto
-        # container.
-        unpinned = [ov for ov in overlaps if ov[1].element.id not in pinned_parents]
-        if unpinned:
-            for _kind, parent, *_rest in unpinned:
-                if parent.element.id not in pinned_parents:
-                    _pin_children(raw, parent)
-                    pinned_parents.add(parent.element.id)
-            continue
-
-        kind = overlaps[0][0]
-        if kind == "pair":
-            _, _parent, a, b = overlaps[0]
-            movable, anchor = _pick_movable(a, b, explicit, order)
-            dx, dy = _separate_pair(_footprint_rect(movable), _footprint_rect(anchor), sep)
-        else:  # "label"
-            _, _parent, child, label_rect = overlaps[0]
-            movable = child
-            dx, dy = _separate_from_label(_footprint_rect(child), label_rect, sep)
-
-        node = _find_element_node(raw["elements"], movable.element.id)
-        node["x"] = round(movable.local_x + dx, 2)
-        node["y"] = round(movable.local_y + dy, 2)
-        moves[movable.element.id] = Move(movable.element.id, node["x"], node["y"])
-
-    # Stage 2: link routing. Positions are settled, so connection sides can be
-    # chosen against the final geometry.
-    link_changes = _resolve_link_routing(raw, registry)
+    _resolve_element_overlaps(raw, registry, author_explicit)  # stage 1
+    _resolve_link_routing(raw, registry)  # stage 2
+    _resolve_obstacles(raw, registry, author_explicit)  # stage 3
 
     diagram = parse_diagram(raw)
     root = build_layout(diagram, registry)
@@ -396,8 +597,8 @@ def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
     status = "fixed" if not attempted_residual else "partial"
     return DoctorResult(
         status=status,
-        moves=list(moves.values()),
-        link_changes=link_changes,
+        moves=_collect_moves(original, raw, registry),
+        link_changes=_collect_link_changes(original, raw),
         resolved_overlaps=sorted(initial_overlaps - final_overlaps),
         remaining=remaining,
     )

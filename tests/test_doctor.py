@@ -167,10 +167,10 @@ def test_false_edge_aliasing_is_resolved():
     assert result.link_changes  # at least one link re-sided
 
 
-def test_unresolvable_crossing_is_reported_partial():
-    # B sits directly between A and X on the same vertical line: no connection
-    # side moves the elbow's midpoint out of B's column, so it can't be fixed
-    # by re-routing - doctor must report it, not silently leave a broken fix.
+def test_author_positioned_obstacle_is_reported_not_moved():
+    # B sits directly between A and X on the same vertical line, and the author
+    # placed it there explicitly. No connection side clears the crossing, and
+    # stage 3 must not override an authored position - so it stays, reported.
     raw = _base(
         [
             {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 60},
@@ -182,6 +182,46 @@ def test_unresolvable_crossing_is_reported_partial():
     result = diagnose_and_fix(raw, REGISTRY)
     assert result.status == "partial"
     assert any("passes through element 'B'" in w for w in result.remaining)
+    assert (raw["elements"][1]["x"], raw["elements"][1]["y"]) == (300, 200)  # untouched
+
+
+def test_auto_placed_obstacle_is_displaced_off_the_path():
+    # Same geometry, but the obstacle C is auto-placed (no author coords) and
+    # happens to land on the A -> X path. Sides can't re-route around it, so
+    # stage 3 moves C out of the way instead.
+    raw = _base(
+        [
+            {"kind": "node", "id": "C", "type": "EC2", "label": "in the way"},
+            {"kind": "node", "id": "A", "type": "EC2", "x": 60, "y": 60},
+            {"kind": "node", "id": "X", "type": "EC2", "x": 60, "y": 400},
+        ],
+        links=[{"from": "A", "to": "X"}],
+    )
+    assert any("through element 'C'" in w for w in _link_warnings(raw))
+
+    result = diagnose_and_fix(raw, REGISTRY)
+
+    assert result.status == "fixed"
+    assert _link_warnings(raw) == []
+    assert [m.id for m in result.moves] == ["C"]
+
+
+def test_obstacle_move_never_worsens_a_diagram():
+    # A crossing with no clean fix (author-pinned obstacle) must leave the
+    # diagram no worse than it started: exactly the one original warning, and
+    # no spurious element moves or side changes.
+    raw = _base(
+        [
+            {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 60},
+            {"kind": "node", "id": "B", "type": "EC2", "x": 300, "y": 200},
+            {"kind": "node", "id": "X", "type": "EC2", "x": 300, "y": 420},
+        ],
+        links=[{"from": "A", "to": "X"}],
+    )
+    result = diagnose_and_fix(raw, REGISTRY)
+    assert result.moves == []
+    assert result.link_changes == []
+    assert len(result.remaining) == 1
 
 
 def test_author_set_link_sides_are_not_overridden():
@@ -254,6 +294,43 @@ def test_cli_fix_writes_clean_yaml_and_keeps_comments(tmp_path):
     written = src.read_text()
     assert "# keep-this-comment" in written  # ruamel round-trip preserved it
     assert _overlaps(yaml.safe_load(written)) == []
+
+
+_OBSTACLE_YAML = """\
+version: "1.0"
+canvas:
+  aspectRatio: "16:9"
+elements:
+  # obstacle-comment
+  - kind: node
+    id: C
+    type: EC2
+  - {kind: node, id: A, type: EC2, x: 60, y: 60}
+  - {kind: node, id: X, type: EC2, x: 60, y: 400}
+links:
+  - {from: A, to: X}
+"""
+
+
+def test_cli_fix_through_obstacle_stage_keeps_comments(tmp_path):
+    # Exercises the stage-3 path (deepcopy rollback + keep) end to end and
+    # confirms comments survive it.
+    import yaml
+
+    from zook.cli import main
+
+    src = tmp_path / "d.yaml"
+    src.write_text(_OBSTACLE_YAML)
+    result = CliRunner().invoke(main, ["doctor", str(src), "--fix", "--format", "json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "fixed"
+    assert [m["id"] for m in payload["moves"]] == ["C"]
+
+    written = src.read_text()
+    assert "# obstacle-comment" in written
+    assert _link_warnings(yaml.safe_load(written)) == []
 
 
 def test_cli_reports_fatal_error(tmp_path):
