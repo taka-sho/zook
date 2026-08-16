@@ -8,9 +8,9 @@ gap: it takes the same computed geometry the overlap checks run on and
 actually separates the colliding elements, emitting the new coordinates (or
 writing them straight back into the YAML with `--fix`/`-o`).
 
-Three resolution stages, in order (each depends on the earlier ones being
-settled - link routing follows from positions, and displacing an obstacle
-follows from the routing that's left):
+Four resolution stages, in order (each depends on the earlier ones being
+settled - link routing follows from positions, displacing an obstacle follows
+from the routing that's left, and a waypoint detour is the last resort):
 
   1. Element overlaps - the element-vs-element and element-vs-container-label
      collisions that `overlap_warnings()` reports - separated by nudging
@@ -30,11 +30,17 @@ follows from the routing that's left):
      is never overridden), and each move is applied, re-checked through stages
      1-2, and kept only if the total residual strictly drops - otherwise rolled
      back exactly - so this stage, too, never makes a diagram worse.
+  4. Waypoint detour - a crossing that survives stages 2 and 3 (the obstacle is
+     author-pinned, so it can't move, and no side re-routes around it). The
+     link's path *can* change: explicit `waypoints` are inserted to route it
+     around the obstacle's bounding box. Only links the author didn't route
+     themselves are candidates, and, like every other stage, a detour is kept
+     only if the total residual strictly drops, else rolled back exactly.
 
 The link stage minimises *every* link warning `link_crossing_warnings()`
 reports, which includes a link's own midpoint label colliding with an element
 or another label, so those are attempted too (re-siding a link moves its
-midpoint). A collision none of the three stages can remove is reported under
+midpoint). A collision none of the four stages can remove is reported under
 `remaining`, never silently left half-fixed.
 
 Still fully out of scope, reported under `remaining` but not auto-fixed:
@@ -135,12 +141,14 @@ class Move:
 
 @dataclass
 class LinkChange:
-    """One link's connection sides assigned to resolve a crossing/aliasing."""
+    """One link re-routed to resolve a crossing/aliasing: connection sides
+    reassigned (stage 2) and/or detour waypoints inserted (stage 4)."""
 
     from_id: str
     to_id: str
     from_side: str | None
     to_side: str | None
+    waypoints: list[tuple[float, float]] | None = None
 
 
 @dataclass
@@ -406,13 +414,10 @@ def _attempted_residual_count(raw: dict, registry: MultiRegistry) -> int:
     )
 
 
-def _link_element_crossings(root_box: Box, links, margin: float) -> list[tuple[Box, tuple, tuple]]:
-    """Every (obstacle_box, seg_start, seg_end) where a link's rendered path
-    runs through an unrelated element. Uses the exact routing geometry
-    link_crossing_warnings() reports on (link_render_plan), and applies the
-    same endpoint-ancestor/descendant exclusion, so a hit here is a real
-    'passes through element' warning - not a link touching its own container."""
-    by_id, parent_of = _build_indices(root_box)
+def _endpoint_exclusion(by_id: dict, parent_of: dict, link) -> set[str]:
+    """Element ids a link is allowed to touch: its own two endpoints plus their
+    ancestors (it legitimately passes through its containers) and descendants.
+    A crossing of anything else is a real 'passes through element' warning."""
 
     def ancestors(eid: str) -> set[str]:
         result: set[str] = set()
@@ -426,6 +431,20 @@ def _link_element_crossings(root_box: Box, links, margin: float) -> list[tuple[B
         box = by_id.get(eid)
         return {b.element.id for b in iter_boxes(box)} if box else set()
 
+    return (
+        {link.from_id, link.to_id}
+        | ancestors(link.from_id)
+        | ancestors(link.to_id)
+        | descendants(link.from_id)
+        | descendants(link.to_id)
+    )
+
+
+def _link_element_crossings(root_box: Box, links, margin: float) -> list[tuple[Box, tuple, tuple]]:
+    """Every (obstacle_box, seg_start, seg_end) where a link's rendered path
+    runs through an unrelated element. Uses the exact routing geometry
+    link_crossing_warnings() reports on (link_render_plan)."""
+    by_id, parent_of = _build_indices(root_box)
     crossings: list[tuple[Box, tuple, tuple]] = []
     for link in links:
         from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
@@ -433,13 +452,7 @@ def _link_element_crossings(root_box: Box, links, margin: float) -> list[tuple[B
             continue
         _s, _e, _style, path = link_render_plan(from_box, to_box, link)
         segments = list(zip(path, path[1:]))
-        exclude = (
-            {link.from_id, link.to_id}
-            | ancestors(link.from_id)
-            | ancestors(link.to_id)
-            | descendants(link.from_id)
-            | descendants(link.to_id)
-        )
+        exclude = _endpoint_exclusion(by_id, parent_of, link)
         for eid, box in by_id.items():
             if eid == "__root__" or eid in exclude:
                 continue
@@ -449,6 +462,31 @@ def _link_element_crossings(root_box: Box, links, margin: float) -> list[tuple[B
                     crossings.append((box, p1, p2))
                     break
     return crossings
+
+
+def _obstacles_crossed_by_link(root_box: Box, links, margin: float) -> dict[int, list[Box]]:
+    """Per-link map: link index -> the unrelated element boxes its path runs
+    through. Same geometry/exclusion as _link_element_crossings, but grouped by
+    link so stage 4 can detour a link around all the obstacles it hits at once."""
+    by_id, parent_of = _build_indices(root_box)
+    result: dict[int, list[Box]] = {}
+    for i, link in enumerate(links):
+        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
+        if from_box is None or to_box is None:
+            continue
+        _s, _e, _style, path = link_render_plan(from_box, to_box, link)
+        segments = list(zip(path, path[1:]))
+        exclude = _endpoint_exclusion(by_id, parent_of, link)
+        obstacles = [
+            box
+            for eid, box in by_id.items()
+            if eid != "__root__"
+            and eid not in exclude
+            and any(_segment_intersects_rect(p1, p2, _inflate_rect(_footprint_rect(box), margin)) for p1, p2 in segments)
+        ]
+        if obstacles:
+            result[i] = obstacles
+    return result
 
 
 def _displacement_targets(obox: Box, p1: tuple, p2: tuple, sep: float) -> list[tuple[float, float, float]]:
@@ -527,6 +565,95 @@ def _resolve_obstacles(raw: dict, registry: MultiRegistry, author_explicit: set[
             return
 
 
+# --- stage 4: detour a link (via waypoints) around an obstacle it crosses ---
+
+
+def _union_rect(rects: list[Rect]) -> Rect:
+    x0 = min(r[0] for r in rects)
+    y0 = min(r[1] for r in rects)
+    x1 = max(r[0] + r[2] for r in rects)
+    y1 = max(r[1] + r[3] for r in rects)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def _detour_waypoints(p_start: tuple, p_end: tuple, rect: Rect, sep: float) -> list[tuple[list, float]]:
+    """(waypoints, deviation) candidates that route a straight link from
+    p_start to p_end *around* the obstacle bounding box `rect`, smaller
+    deviation first. A near-vertical link detours sideways (left/right of the
+    box); a near-horizontal one detours over/under it. Two vias take the path
+    out to a clear column/row and back, so it clears the whole box in one go."""
+    rx, ry, rw, rh = rect
+    left, right = rx - sep, rx + rw + sep
+    top, bottom = ry - sep, ry + rh + sep
+    dx, dy = p_end[0] - p_start[0], p_end[1] - p_start[1]
+    out: list[tuple[list, float]] = []
+    if abs(dy) >= abs(dx):  # vertical-ish link -> detour horizontally
+        y_near_start = top if p_start[1] <= p_end[1] else bottom
+        y_near_end = bottom if p_start[1] <= p_end[1] else top
+        mid_x = (p_start[0] + p_end[0]) / 2
+        for x_detour in (right, left):
+            out.append(([(x_detour, y_near_start), (x_detour, y_near_end)], abs(x_detour - mid_x)))
+    else:  # horizontal-ish link -> detour vertically
+        x_near_start = left if p_start[0] <= p_end[0] else right
+        x_near_end = right if p_start[0] <= p_end[0] else left
+        mid_y = (p_start[1] + p_end[1]) / 2
+        for y_detour in (bottom, top):
+            out.append(([(x_near_start, y_detour), (x_near_end, y_detour)], abs(y_detour - mid_y)))
+    out.sort(key=lambda c: c[1])
+    return out
+
+
+def _detour_candidates(raw: dict, registry: MultiRegistry, author_routed: set[int]) -> list[tuple[int, list]]:
+    """(link_index, waypoints) detours to try, least-deviating first. Skips
+    links the author already routed with explicit waypoints - their routing is
+    intentional and must not be overridden."""
+    diagram = parse_diagram(raw)
+    margin = diagram.canvas.overlap_margin
+    sep = margin + _CLEARANCE
+    root = build_layout(diagram, registry)
+    by_id, _parent = _build_indices(root)
+
+    ranked: list[tuple[float, int, list]] = []
+    for i, obstacles in _obstacles_crossed_by_link(root, diagram.links, margin).items():
+        if i in author_routed:
+            continue
+        link = diagram.links[i]
+        _s, _e, _style, path = link_render_plan(by_id[link.from_id], by_id[link.to_id], link)
+        union = _union_rect([_footprint_rect(b) for b in obstacles])
+        for waypoints, deviation in _detour_waypoints(path[0], path[-1], union, sep):
+            ranked.append((deviation, i, waypoints))
+    ranked.sort(key=lambda r: r[0])
+    return [(i, waypoints) for _dev, i, waypoints in ranked]
+
+
+def _resolve_link_detours(raw: dict, registry: MultiRegistry, author_routed: set[int]) -> None:
+    """Last resort for a link that still runs through an element no side change
+    (stage 2) or obstacle move (stage 3) could clear - typically an author-
+    pinned obstacle. Insert detour waypoints so the link routes around it. Each
+    candidate is applied and the total residual re-measured; kept only if it
+    strictly improves (adding waypoints changes only this link's routing, never
+    element positions, so no earlier stage needs re-running), else rolled back
+    exactly. Never makes a diagram worse; strict decrease terminates."""
+    for _ in range(_MAX_OBSTACLE_PASSES):
+        before = _attempted_residual_count(raw, registry)
+        if before == 0:
+            return
+        candidates = _detour_candidates(raw, registry, author_routed)
+        if not candidates:
+            return
+        progressed = False
+        for link_idx, waypoints in candidates:
+            backup = copy.deepcopy(raw)
+            raw["links"][link_idx]["waypoints"] = [{"x": round(x, 2), "y": round(y, 2)} for x, y in waypoints]
+            if _attempted_residual_count(raw, registry) < before:
+                progressed = True
+                break
+            raw.clear()
+            raw.update(backup)  # exact rollback, comments intact (ruamel deepcopy)
+        if not progressed:
+            return
+
+
 # --- change reporting: diff the final tree against the original ---
 
 
@@ -548,13 +675,28 @@ def _collect_moves(original: dict, final: dict, registry: MultiRegistry) -> list
     return moves
 
 
+def _waypoints_repr(waypoints) -> list[tuple[float, float]]:
+    return [(wp["x"], wp["y"]) for wp in (waypoints or [])]
+
+
 def _collect_link_changes(original: dict, final: dict) -> list[LinkChange]:
     original_links = original.get("links", []) or []
     changes: list[LinkChange] = []
     for i, link in enumerate(final.get("links", []) or []):
         prior = original_links[i] if i < len(original_links) else {}
-        if link.get("fromSide") != prior.get("fromSide") or link.get("toSide") != prior.get("toSide"):
-            changes.append(LinkChange(link["from"], link["to"], link.get("fromSide"), link.get("toSide")))
+        sides_changed = link.get("fromSide") != prior.get("fromSide") or link.get("toSide") != prior.get("toSide")
+        final_wps = _waypoints_repr(link.get("waypoints"))
+        waypoints_changed = final_wps != _waypoints_repr(prior.get("waypoints"))
+        if sides_changed or waypoints_changed:
+            changes.append(
+                LinkChange(
+                    link["from"],
+                    link["to"],
+                    link.get("fromSide"),
+                    link.get("toSide"),
+                    final_wps if waypoints_changed else None,
+                )
+            )
     return changes
 
 
@@ -563,11 +705,13 @@ def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
     mapping), mutating it in place, and return what changed plus what remains.
     Caller decides whether to write `raw` back out.
 
-    Three stages, in order (each later stage depends on the earlier ones being
+    Four stages, in order (each later stage depends on the earlier ones being
     settled): (1) separate overlapping elements, (2) route links by connection
-    side, (3) displace an element a link still runs through. `raw` must already
-    be Fatal-clean (schema + semantics validated) - parse/layout here assume
-    that, exactly as build/validate/sync do.
+    side, (3) displace an (auto-placed) element a link still runs through,
+    (4) detour a link with waypoints around an obstacle none of the above could
+    clear (typically an author-pinned one). `raw` must already be Fatal-clean
+    (schema + semantics validated) - parse/layout here assume that, exactly as
+    build/validate/sync do.
     """
     diagram = parse_diagram(raw)
     margin = diagram.canvas.overlap_margin
@@ -580,10 +724,19 @@ def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
 
     original = copy.deepcopy(raw)
     author_explicit = _explicit_ids(raw)
+    # A link whose routing the author touched at all - explicit waypoints or a
+    # forced connection side - expresses routing intent, so stage 4 leaves it
+    # be rather than detouring it a different way.
+    author_routed = {
+        i
+        for i, link in enumerate(original.get("links", []) or [])
+        if link.get("waypoints") or link.get("fromSide") or link.get("toSide")
+    }
 
     _resolve_element_overlaps(raw, registry, author_explicit)  # stage 1
     _resolve_link_routing(raw, registry)  # stage 2
     _resolve_obstacles(raw, registry, author_explicit)  # stage 3
+    _resolve_link_detours(raw, registry, author_routed)  # stage 4
 
     diagram = parse_diagram(raw)
     root = build_layout(diagram, registry)

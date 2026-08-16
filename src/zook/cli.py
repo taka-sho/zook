@@ -167,10 +167,23 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
     same three formats the other commands use."""
     moves = [{"id": m.id, "x": m.x, "y": m.y} for m in result.moves]
     link_changes = [
-        {"from": c.from_id, "to": c.to_id, "fromSide": c.from_side, "toSide": c.to_side}
+        {
+            "from": c.from_id,
+            "to": c.to_id,
+            "fromSide": c.from_side,
+            "toSide": c.to_side,
+            "waypoints": None if c.waypoints is None else [{"x": x, "y": y} for x, y in c.waypoints],
+        }
         for c in result.link_changes
     ]
     changed = bool(result.moves or result.link_changes)
+
+    def _routing(c: dict) -> str:
+        parts = [f"{k}={c[k]}" for k in ("fromSide", "toSide") if c[k] is not None]
+        if c["waypoints"]:
+            vias = ", ".join(f"({w['x']:g},{w['y']:g})" for w in c["waypoints"])
+            parts.append(f"waypoints [{vias}]")
+        return ", ".join(parts) if parts else "auto"
 
     if fmt == "json":
         payload: dict = {
@@ -185,14 +198,11 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
         print(json.dumps(payload))
         return
 
-    def _sides(c: dict) -> str:
-        return ", ".join(f"{k}={c[k]}" for k in ("fromSide", "toSide") if c[k] is not None)
-
     if fmt == "github":
         for m in moves:
             print(f"::notice::moved {m['id']} to x={m['x']:g}, y={m['y']:g}")
         for c in link_changes:
-            print(f"::notice::routed link {c['from']} -> {c['to']} via {_sides(c)}")
+            print(f"::notice::routed link {c['from']} -> {c['to']} via {_routing(c)}")
         for message in result.remaining:
             print(f"::warning::{message}")
         if output_path is not None:
@@ -206,7 +216,7 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
         for m in moves:
             print(f"Moved {m['id']} -> x={m['x']:g}, y={m['y']:g}")
         for c in link_changes:
-            print(f"Routed link {c['from']} -> {c['to']} via {_sides(c)}")
+            print(f"Routed link {c['from']} -> {c['to']} via {_routing(c)}")
         if result.status == "partial":
             print("Some collisions could not be resolved automatically.", file=sys.stderr)
     for message in result.remaining:
@@ -230,14 +240,15 @@ def doctor_cmd(input_path: str, output_path: str | None, fix_in_place: bool,
                user_registry_path: str | None, strict: bool, fmt: str) -> None:
     """Auto-resolve overlaps and link-routing collisions in INPUT_PATH.
 
-    Three stages: (1) separate the sibling-vs-sibling and element-vs-container-
+    Four stages: (1) separate the sibling-vs-sibling and element-vs-container-
     label overlaps `validate` detects, by writing explicit x/y; (2) clear link
     crossings and false-edge aliasing by assigning fromSide/toSide; (3) when no
     side re-routes around an obstacle, slide the (auto-placed) obstacle out of
-    the path. Every change is verified so the diagram never gets worse. A
-    collision none of the stages can remove is reported under `remaining`,
-    along with off-canvas and placeholder-icon warnings (which doctor never
-    touches) - handle those via draw.io or by editing the YAML.
+    the path; (4) if the obstacle can't move (author-pinned), detour the link
+    around it with waypoints. Every change is verified so the diagram never
+    gets worse. A collision none of the stages can remove is reported under
+    `remaining`, along with off-canvas and placeholder-icon warnings (which
+    doctor never touches) - handle those via draw.io or by editing the YAML.
 
     Defaults to a dry run that only proposes the changes; pass -o PATH or --fix
     to write them. Comments and key ordering in the original file are kept.
