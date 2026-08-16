@@ -26,6 +26,8 @@ zook は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアー�
 
    `{"status": "error", ...}` は構造的な破綻(スキーマ違反・id重複・リンク参照先不在など)を意味し、レンダリングしても意味のある出力になりません。`error` フィールドの内容を読んで修正し、`{"status": "ok"}` か `{"status": "warning"}` になるまで直してください。スキーマ違反のメッセージには `(closest match: ...)` という形で具体的な原因が付くので、そこを優先して読むと直しやすいはずです。`warning` は描画上の軽微な問題(重なり・未知のアイコンなど)なので、そのまま進めても構いませんが、内容を確認し意図した配置になっているか判断してください。
 
+   描画上の `warning` は、座標や接続辺を手計算で直そうとせず、まず `doctor` に解消させてください(ピクセル単位の調整はAIが最も苦手とする作業で、ツール側に任せるのが確実です)。`doctor` は2段階で直します。(1) 兄弟要素どうし・要素とコンテナ見出しの**重なり**を、要素をずらして解消。(2) リンク(矢印)の**経路衝突・見かけ上の直接接続(false edge aliasing)**を、接続辺(fromSide/toSide)を割り当てて解消(悪化しないことを検証済みの範囲だけ変更します)。まず `zook doctor diagram.yaml --format json` で提案を確認し(ドライラン)、問題なければ `zook doctor diagram.yaml --fix` で書き戻します。どの移動・接続辺でも直せない衝突、およびキャンバス外座標・未知アイコンは `remaining` として報告されるだけなので、`docs-site/limitations.md` を読み、YAMLの編集か draw.io での手直しで対応してください。
+
 6. **生成する。**
 
    ```bash
@@ -51,6 +53,7 @@ zook from-mermaid diagram.mmd -o diagram.yaml
 | YAML の全フィールド仕様 | `docs/yaml-spec.md`(正本)、`docs-site/yaml-guide.md`(要点) |
 | アイコン・コンテナの語彙とレジストリの仕組み | `docs/icon-registry-and-vocabulary.md`、`docs-site/icons.md` |
 | 要件別のアーキテクチャパターン | `docs/patterns/README.md` |
+| 重なり・リンク経路 Warning の自動解消(`doctor`)の対象と使い方 | `docs-site/usage.md`(doctor節) |
 | 既知の制約(自動レイアウトが解決しない重なり、GCP/Azureの制約など) | `docs-site/limitations.md` |
 | draw.io連携による継続的な図の管理 | `docs-site/drawio-sync.md` |
 | Mermaidフローチャートからの変換 | `docs-site/mermaid-import.md` |

@@ -3,6 +3,7 @@
 Subcommands:
   build           YAML -> PPTX (the original single-command behavior).
   validate        Schema + semantic + overlap/crossing checks, no rendering.
+  doctor          Auto-resolve sibling/label overlaps by nudging coordinates.
   icons list      Show every registered icon type/alias/group.
   preview         YAML -> lightweight PNG, no PowerPoint/LibreOffice needed.
   export-drawio   YAML -> .drawio, for manual editing in draw.io.
@@ -158,6 +159,114 @@ def validate_cmd(input_path: str, user_registry_path: str | None, strict: bool, 
     status = "warning" if warnings.messages else "ok"
     _emit(fmt, status=status, warning_messages=warnings.messages)
     if strict and warnings.messages:
+        sys.exit(1)
+
+
+def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
+    """Report what `doctor` changed and what it left for the author, in the
+    same three formats the other commands use."""
+    moves = [{"id": m.id, "x": m.x, "y": m.y} for m in result.moves]
+    link_changes = [
+        {"from": c.from_id, "to": c.to_id, "fromSide": c.from_side, "toSide": c.to_side}
+        for c in result.link_changes
+    ]
+    changed = bool(result.moves or result.link_changes)
+
+    if fmt == "json":
+        payload: dict = {
+            "status": result.status,
+            "moves": moves,
+            "linkChanges": link_changes,
+            "resolvedOverlaps": result.resolved_overlaps,
+            "remaining": result.remaining,
+        }
+        if output_path is not None:
+            payload["output"] = output_path
+        print(json.dumps(payload))
+        return
+
+    def _sides(c: dict) -> str:
+        return ", ".join(f"{k}={c[k]}" for k in ("fromSide", "toSide") if c[k] is not None)
+
+    if fmt == "github":
+        for m in moves:
+            print(f"::notice::moved {m['id']} to x={m['x']:g}, y={m['y']:g}")
+        for c in link_changes:
+            print(f"::notice::routed link {c['from']} -> {c['to']} via {_sides(c)}")
+        for message in result.remaining:
+            print(f"::warning::{message}")
+        if output_path is not None:
+            print(f"Wrote {output_path}")
+        return
+
+    # text (default)
+    if not changed and result.status == "ok":
+        print("No overlaps or link-routing collisions to resolve.")
+    else:
+        for m in moves:
+            print(f"Moved {m['id']} -> x={m['x']:g}, y={m['y']:g}")
+        for c in link_changes:
+            print(f"Routed link {c['from']} -> {c['to']} via {_sides(c)}")
+        if result.status == "partial":
+            print("Some collisions could not be resolved automatically.", file=sys.stderr)
+    for message in result.remaining:
+        print(f"Remaining: {message}", file=sys.stderr)
+    if output_path is not None:
+        print(f"Wrote {output_path}")
+    elif changed:
+        print("(dry run - pass -o/--fix to apply these changes)")
+
+
+@main.command(name="doctor")
+@click.argument("input_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("-o", "--output", "output_path", default=None, type=click.Path(dir_okay=False),
+              help="Write the fixed YAML here (default: dry run - only report proposed positions).")
+@click.option("--fix", "fix_in_place", is_flag=True, default=False,
+              help="Apply the fixes to INPUT_PATH in place (ignored if -o is given).")
+@_registry_option
+@_strict_option
+@_format_option
+def doctor_cmd(input_path: str, output_path: str | None, fix_in_place: bool,
+               user_registry_path: str | None, strict: bool, fmt: str) -> None:
+    """Auto-resolve overlaps and link-routing collisions in INPUT_PATH.
+
+    Two stages: (1) separate the sibling-vs-sibling and element-vs-container-
+    label overlaps `validate` detects, by writing explicit x/y; (2) clear link
+    crossings and false-edge aliasing by assigning fromSide/toSide, verified so
+    routing never gets worse. A collision no move or side change can remove is
+    reported under `remaining`, along with off-canvas and placeholder-icon
+    warnings (which doctor never touches) - handle those via draw.io or by
+    editing the YAML.
+
+    Defaults to a dry run that only proposes the changes; pass -o PATH or --fix
+    to write them. Comments and key ordering in the original file are kept.
+    """
+    from ruamel.yaml import YAML
+
+    from .doctor import diagnose_and_fix
+    from .drawio import dump_yaml
+
+    yaml_rt = YAML()
+    yaml_rt.preserve_quotes = True
+    with open(input_path, encoding="utf-8") as f:
+        raw = yaml_rt.load(f)
+
+    try:
+        validate(raw)
+    except DiagramError as exc:
+        _emit(fmt, status="error", warning_messages=[], error=str(exc))
+        sys.exit(1)
+
+    registry = load_registries(user_registry_path=user_registry_path)
+    result = diagnose_and_fix(raw, registry)
+
+    changed = bool(result.moves or result.link_changes)
+    dest = output_path or (input_path if fix_in_place else None)
+    if dest is not None and changed:
+        dump_yaml(raw, dest)
+
+    _emit_doctor(fmt, result, output_path=dest if changed else None)
+    if strict and result.status == "partial":
         sys.exit(1)
 
 
