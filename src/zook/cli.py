@@ -4,6 +4,7 @@ Subcommands:
   build           YAML -> PPTX (the original single-command behavior).
   validate        Schema + semantic + overlap/crossing checks, no rendering.
   doctor          Auto-resolve sibling/label overlaps by nudging coordinates.
+  diff            Semantic structural diff between two diagrams.
   icons list      Show every registered icon type/alias/group.
   preview         YAML -> lightweight PNG, no PowerPoint/LibreOffice needed.
   export-drawio   YAML -> .drawio, for manual editing in draw.io.
@@ -279,6 +280,115 @@ def doctor_cmd(input_path: str, output_path: str | None, fix_in_place: bool,
 
     _emit_doctor(fmt, result, output_path=dest if changed else None)
     if strict and result.status == "partial":
+        sys.exit(1)
+
+
+def _fmt_value(value) -> str:
+    if value is None:
+        return "none"
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return f"{value}"
+
+
+def _fmt_changes(changes) -> str:
+    return "; ".join(f"{c.field} {_fmt_value(c.old)} -> {_fmt_value(c.new)}" for c in changes)
+
+
+def _emit_diff(fmt: str, result) -> None:
+    if fmt == "json":
+        payload = {
+            "identical": result.identical,
+            "canvas": [{"field": c.field, "old": c.old, "new": c.new} for c in result.canvas],
+            "elements": {
+                "added": [{"id": r.id, "kind": r.kind, "type": r.type, "parent": r.parent} for r in result.added_elements],
+                "removed": [{"id": r.id, "kind": r.kind, "type": r.type, "parent": r.parent} for r in result.removed_elements],
+                "reparented": [{"id": r.id, "from": r.old_parent, "to": r.new_parent} for r in result.reparented],
+                "modified": [
+                    {"id": m.id, "kind": m.kind, "type": m.type,
+                     "changes": [{"field": c.field, "old": c.old, "new": c.new} for c in m.changes]}
+                    for m in result.modified_elements
+                ],
+            },
+            "links": {
+                "added": [{"from": r.from_id, "to": r.to_id, "id": r.id} for r in result.added_links],
+                "removed": [{"from": r.from_id, "to": r.to_id, "id": r.id} for r in result.removed_links],
+                "modified": [
+                    {"from": m.from_id, "to": m.to_id, "id": m.id,
+                     "changes": [{"field": c.field, "old": c.old, "new": c.new} for c in m.changes]}
+                    for m in result.modified_links
+                ],
+            },
+        }
+        print(json.dumps(payload))
+        return
+
+    lines: list[str] = []
+    for c in result.canvas:
+        lines.append(f"~ canvas.{c.field}: {_fmt_value(c.old)} -> {_fmt_value(c.new)}")
+    for r in result.added_elements:
+        where = f" in {r.parent}" if r.parent else ""
+        lines.append(f"+ {r.id} ({r.kind} {r.type}){where}")
+    for r in result.removed_elements:
+        where = f" in {r.parent}" if r.parent else ""
+        lines.append(f"- {r.id} ({r.kind} {r.type}){where}")
+    for r in result.reparented:
+        lines.append(f"> {r.id}: moved {r.old_parent or '(root)'} -> {r.new_parent or '(root)'}")
+    for m in result.modified_elements:
+        lines.append(f"~ {m.id} ({m.kind} {m.type}): {_fmt_changes(m.changes)}")
+    for r in result.added_links:
+        lines.append(f"+ link {r.from_id} -> {r.to_id}")
+    for r in result.removed_links:
+        lines.append(f"- link {r.from_id} -> {r.to_id}")
+    for m in result.modified_links:
+        lines.append(f"~ link {m.from_id} -> {m.to_id}: {_fmt_changes(m.changes)}")
+
+    if fmt == "github":
+        for line in lines:
+            print(f"::notice::{line}")
+        return
+
+    # text (default)
+    if result.identical:
+        print("No structural differences.")
+        return
+    for line in lines:
+        print(line)
+
+
+@main.command(name="diff")
+@click.argument("old_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("new_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--exit-code", "exit_code", is_flag=True, default=False,
+              help="Exit non-zero (1) if the diagrams differ, like `git diff --exit-code`.")
+@_format_option
+def diff_cmd(old_path: str, new_path: str, exit_code: bool, fmt: str) -> None:
+    """Show the structural difference between two diagrams (OLD_PATH -> NEW_PATH).
+
+    Matches elements by `id` and links by id-or-endpoints and reports what
+    actually changed - elements added, removed, moved between containers, or
+    modified field-by-field; links added/removed/modified; canvas changes -
+    rather than the line noise a text diff would show. Values left to their
+    default on one side and written explicitly on the other are not reported.
+    """
+    from .diff import diff_diagrams
+
+    try:
+        with open(old_path, encoding="utf-8") as f:
+            old_raw = yaml.safe_load(f)
+        with open(new_path, encoding="utf-8") as f:
+            new_raw = yaml.safe_load(f)
+        validate(old_raw)
+        validate(new_raw)
+    except DiagramError as exc:
+        _emit(fmt, status="error", warning_messages=[], error=str(exc))
+        sys.exit(1)
+
+    result = diff_diagrams(old_raw, new_raw)
+    _emit_diff(fmt, result)
+    if exit_code and not result.identical:
         sys.exit(1)
 
 

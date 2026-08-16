@@ -59,6 +59,7 @@ python3 -m venv .venv
 | `build` | YAML から PowerPoint(.pptx)を生成する |
 | `validate` | レンダリングせずにスキーマ・重なりなどを検証する |
 | `doctor` | 衝突を4段階で自動解消する(要素の重なり=座標調整 / リンク経路=接続辺の割り当て / 貫通する障害物=退避 / 動かせない障害物=経由点で迂回) |
+| `diff` | 2つの図の**構造差分**を取る(要素の追加/削除/移動・リンク変化・canvas変更をidで対応付けて報告。テキスト差分のノイズなし) |
 | `icons list` | 登録済みのアイコン・コンテナ種別を一覧表示する |
 | `preview` | PowerPoint を使わずに軽量 PNG でプレビューする |
 | `export-drawio` | draw.io で編集できる形式に書き出す |
@@ -118,6 +119,7 @@ src/zook/
   cli.py        CLIエントリポイント(build/validate/doctor/icons/preview/export-drawio/sync/from-mermaid)
   validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照/fromSide-toSideの軸整合)
   doctor.py     衝突の自動解消(重なり=座標調整/リンク経路=接続辺/貫通する障害物=退避/動かせない障害物=経由点で迂回、doctor向け)
+  diff.py       2つの図の意味的な構造差分(id対応付け・デフォルト正規化、diff向け)
   model.py      パース後のデータモデル
   registry.py   アイコン/枠スタイルのレジストリ解決(MultiRegistry、provider別・エイリアス・上書き対応)
   layout.py     自動レイアウト(grid/horizontal/vertical、明示座標との混在、重複回避・検知、接続辺の自動選択)

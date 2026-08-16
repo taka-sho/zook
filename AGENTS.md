@@ -54,6 +54,7 @@ zook from-mermaid diagram.mmd -o diagram.yaml
 | アイコン・コンテナの語彙とレジストリの仕組み | `docs/icon-registry-and-vocabulary.md`、`docs-site/icons.md` |
 | 要件別のアーキテクチャパターン | `docs/patterns/README.md` |
 | 重なり・リンク経路 Warning の自動解消(`doctor`)の対象と使い方 | `docs-site/usage.md`(doctor節) |
+| 2つの図の構造差分(`diff`)。変更前後の差分レビューに使う | `docs-site/usage.md`(diff節) |
 | 既知の制約(自動レイアウトが解決しない重なり、GCP/Azureの制約など) | `docs-site/limitations.md` |
 | draw.io連携による継続的な図の管理 | `docs-site/drawio-sync.md` |
 | Mermaidフローチャートからの変換 | `docs-site/mermaid-import.md` |

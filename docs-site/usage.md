@@ -1,6 +1,6 @@
 # 使い方
 
-zook は `build`/`validate`/`doctor`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の8つのサブコマンドを持ちます。
+zook は `build`/`validate`/`doctor`/`diff`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の9つのサブコマンドを持ちます。
 
 ```bash
 zook --help
@@ -50,6 +50,33 @@ zook doctor diagram.yaml --format json          # 機械可読出力(moves/linkC
 - 著者が明示した位置(x/y)・接続辺(fromSide/toSide)・経由点(waypoints)は意図とみなし、上書きしません。移動対象は「著者が明示配置した要素より自動配置の要素を優先」、障害物の退避も**自動配置の要素だけ**、リンクの接続辺割り当て・迂回は「著者が経路を明示していないリンクだけ」を対象にします。
 - どの段階でも直せない衝突(例: 障害物も両端も著者指定で、接続辺も固定されている場合)は `remaining` として報告され、`status` は `partial` になります。**キャンバス外座標・未知アイコン**は `doctor` の対象外で、同じく `remaining` に出ます。これらは draw.io での手直しや YAML の編集・レジストリ追加で対応してください([既知の制約](limitations.md)参照)。
 - `--strict` を付けると、自動解消しきれない衝突が残った場合(`status: partial`)に非ゼロ終了します。
+
+## diff — 2つの図の構造差分を取る
+
+図を YAML=コードとして扱う zook では、変更を Git でレビューできることが強みです。しかし YAML のテキスト差分は「子要素の並び替え」「マッピングの整形」「自動レイアウトが書き込んだ座標」などのノイズが混ざり、本当に見たい変化が埋もれます。`diff` は2つの図を**意味で比較**します。要素を `id`、リンクを id または両端で対応付け、実際に変わったこと——要素の追加・削除・**コンテナ間の移動(再親付け)**・フィールド単位の変更、リンクの追加・削除・変更、canvas の変更——だけを報告します。
+
+```bash
+zook diff old.yaml new.yaml                 # 人間可読の構造差分
+zook diff old.yaml new.yaml --format json    # 機械可読(CI・AI向け)
+zook diff old.yaml new.yaml --exit-code       # 差分があれば非ゼロ終了(git diff --exit-code 相当)
+```
+
+```text
+~ canvas.aspectRatio: "16:9" -> "4:3"
++ api (node Lambda) in vpc
+- cache (node ElastiCache) in vpc
+> web: moved vpc -> edge
+~ db (node RDS): type "RDS" -> "Aurora"; label "Primary DB" -> "Main DB"
++ link api -> db
+~ link web -> db: style "straight" -> "elbow"
+```
+
+記号は `+` 追加 / `-` 削除 / `>` 移動(再親付け) / `~` 変更 です。
+
+- **デフォルト値の正規化**:片方で省略、もう片方で既定値を明示(例: ノードの `provider: aws`、コンテナの `layout: {direction: grid}`)しても、意味は同じなので差分に出しません。子要素の並び替えも差分になりません。
+- **再親付けの検出**:ある要素が別のコンテナへ移った場合、追加+削除ではなく「移動」として1件で報告します(例: `web` を `vpc` から `edge` へ)。テキスト差分では読み取れない構造変化です。
+- 両ファイルとも検証(スキーマ・意味)を通る必要があります。Fatal な入力は `error` として報告します。
+- `--exit-code` を使うと、CI で「意図しない図の変更を検知したら失敗させる」といったゲートに使えます。
 
 ## icons list — 登録済みアイコン・コンテナ種別を一覧表示
 
@@ -149,7 +176,7 @@ Wrote out.pptx
 
 ### 機械可読な出力(`--format`)
 
-`build`/`validate`/`doctor`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
+`build`/`validate`/`doctor`/`diff`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
 
 ```bash
 $ zook validate diagram.yaml --format json
