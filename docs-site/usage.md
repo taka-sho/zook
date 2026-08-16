@@ -1,6 +1,6 @@
 # 使い方
 
-zook は `build`/`validate`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の7つのサブコマンドを持ちます。
+zook は `build`/`validate`/`doctor`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の8つのサブコマンドを持ちます。
 
 ```bash
 zook --help
@@ -27,6 +27,27 @@ zook validate diagram.yaml
 zook validate diagram.yaml --strict          # Warningも失敗扱いにする
 zook validate diagram.yaml --format json      # CI向けの機械可読出力
 ```
+
+## doctor — 重なり・リンク経路の衝突を自動で解消する
+
+`validate` は「兄弟要素どうしの重なり」「リンクがノードを貫通している」といった問題を**検出するだけ**で、修正は書き手に委ねられます(座標や接続辺の手直し)。`doctor` はこの検出止まりを一歩進め、同じ座標計算をもとに衝突を実際に解消して結果を提示します(`-o`/`--fix` でそのまま YAML に書き戻します)。生成AIが最も苦手とする「ピクセル単位の座標調整・接続辺の試行錯誤」をツール側が肩代わりする位置づけです。
+
+```bash
+zook doctor diagram.yaml                       # ドライラン: 提案する変更を表示するだけ
+zook doctor diagram.yaml -o fixed.yaml          # 解消した YAML を別ファイルに書き出す
+zook doctor diagram.yaml --fix                  # 元ファイルを直接書き換える(-o 指定時は無視)
+zook doctor diagram.yaml --format json          # 機械可読出力(moves/linkChanges/remaining など)
+```
+
+`doctor` は次の2段階で解消します(位置が決まってからリンク経路を選ぶため、この順序です)。
+
+1. **要素の重なり(座標調整)。** `validate` が報告する**兄弟要素どうし・要素とコンテナ見出しの重なり**を、要素をずらして解消します。壊れたコンテナの直下要素に明示座標(x/y)を与えて分離するため、結果の YAML は解消後の配置がそのまま再現されます。
+2. **リンク経路(接続辺の割り当て)。** リンクは自前の座標を持たず、経路は両端の位置(この時点で確定済み)と接続辺から決まります。そこで**リンクのノード貫通・見かけ上の直接接続(false edge aliasing)・リンクラベルの衝突**を、`fromSide`/`toSide` を割り当てて解消します。割り当て候補ごとに実際の警告数を数え、**厳密に減るときだけ**採用するので、経路が悪化することはありません。
+
+- 既定は**ドライラン**で、提案する変更を表示するだけです(AGENTS.md の「まず提案し、合意を得てから作る」方針に合わせています)。`-o` か `--fix` を付けたときだけファイルに書き込みます。既存のコメント・キー順序は保持されます([draw.io連携](drawio-sync.md)の `sync` と同じ ruamel ラウンドトリップ)。
+- 著者が明示した位置(x/y)や接続辺(fromSide/toSide)は意図とみなし、上書きしません。移動対象は「著者が明示配置した要素より自動配置の要素を優先」、リンクは「両辺とも未指定(完全自動)のものだけ」を対象にします。
+- どの移動・接続辺でも直せない衝突(例: 垂直に並んだ2要素のちょうど間にある障害物)は `remaining` として報告され、`status` は `partial` になります。**キャンバス外座標・未知アイコン**は `doctor` の対象外で、同じく `remaining` に出ます。これらは draw.io での手直しや YAML の編集・レジストリ追加で対応してください([既知の制約](limitations.md)参照)。
+- `--strict` を付けると、自動解消しきれない衝突が残った場合(`status: partial`)に非ゼロ終了します。
 
 ## icons list — 登録済みアイコン・コンテナ種別を一覧表示
 
@@ -76,7 +97,7 @@ zook from-mermaid diagram.mmd -o diagram.yaml
 
 ## 独自アイコン・スタイルで上書きする
 
-`--registry` オプション(`build`/`validate`/`icons list`/`preview`/`export-drawio`/`sync` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
+`--registry` オプション(`build`/`validate`/`doctor`/`icons list`/`preview`/`export-drawio`/`sync` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
 
 ```bash
 zook build diagram.yaml -o diagram.pptx --registry my-registry.yaml
@@ -126,7 +147,7 @@ Wrote out.pptx
 
 ### 機械可読な出力(`--format`)
 
-`build`/`validate`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
+`build`/`validate`/`doctor`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
 
 ```bash
 $ zook validate diagram.yaml --format json
