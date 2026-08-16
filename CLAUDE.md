@@ -1,3 +1,3 @@
 # CLAUDE.md
 
-このプロジェクトの前提知識・使い方は [`AGENTS.md`](./AGENTS.md) にまとまっています。まずそちらを参照してください。
+This project's background and usage are covered in [`AGENTS.md`](./AGENTS.md) — read that first. A Japanese translation is available separately at [`AGENTS.ja.md`](./AGENTS.ja.md), for reference only; `AGENTS.md` is authoritative.

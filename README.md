@@ -6,43 +6,45 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-zook は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアーキテクチャ図を生成する CLI ツールです。draw.io で整えた見た目の変更を YAML に書き戻しながら図を育てていく運用を主眼に置いています。
+**[日本語版はこちら / Japanese version](README.ja.md)**
 
-利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/zook/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
+zook is a CLI tool that generates PowerPoint (.pptx) architecture diagrams from an infrastructure configuration written in YAML. It's built around growing a diagram over time — tune the look in draw.io, and write those changes back into the YAML.
 
-生成AIがこのツールを使って構成図を作る場合は [`AGENTS.md`](./AGENTS.md) に黄金の道(パターン選定→アイコン語彙確認→検証→生成)をまとめています。Mermaidの`flowchart`記法で書いた図がすでにある場合は、`zook from-mermaid` で YAML に変換してから同じ流れに載せられます([Mermaidフローチャートのインポート](https://taka-sho.github.io/zook/mermaid-import/))。
+Documentation site covering usage and features: **https://taka-sho.github.io/zook/** (source in `docs-site/`, built with [Zensical](https://zensical.org/) and published to GitHub Pages; a fully separate Japanese version lives at `/ja/`). The full requirements/design source material is in `docs/README-index.md`.
 
-## 基本の流れ: ベースを作り、draw.io で整え、YAML に戻す
+If a generative AI is going to use this tool to build a diagram, [`AGENTS.md`](./AGENTS.md) lays out the golden path (pick a pattern → confirm the icon vocabulary → validate → generate). If you already have a diagram written in Mermaid `flowchart` notation, convert it to YAML first with `zook from-mermaid`, then follow the same flow ([Mermaid Flowchart Import](https://taka-sho.github.io/zook/mermaid-import/)).
 
-zook でのアーキテクチャ図づくりは、次の4ステップを繰り返す形で進みます。図を直すたびにこの流れへ戻ってくる運用を想定しています。
+## The Basic Flow: Build a Base, Tune It in draw.io, Sync Back to YAML
 
-1. **YAML からベースの構成図を作る**。VPC・AZ・サービスといった構成要素を YAML で記述し、`build` で PowerPoint を生成します。座標を指定しなければ自動でレイアウトされるので、最初は構造を書くことだけに集中できます。
+Building an architecture diagram with zook is a loop of four steps, repeated. Every time you want to touch up the diagram, you come back to this flow.
+
+1. **Build a base diagram from YAML.** Write your VPCs, AZs, services, and other elements in YAML, and generate a PowerPoint with `build`. Elements auto-layout when you don't specify coordinates, so at first you can focus purely on writing the structure.
 
    ```bash
    zook build diagram.yaml -o diagram.pptx
    ```
 
-2. **見た目を draw.io で整える**。自動レイアウトのままでは間隔や配置が意図通りにならないことがあります。`export-drawio` で draw.io 形式に書き出し、要素の位置・サイズを実際に動かしながら調整します。
+2. **Tune the look in draw.io.** The auto-layout alone won't always give you the spacing and placement you want. Export to draw.io format with `export-drawio` and adjust position/size by actually moving elements around.
 
    ```bash
    zook export-drawio diagram.yaml -o diagram.drawio
    ```
 
-3. **draw.io での調整を YAML に書き戻す**。動かしていない要素は自動配置のまま維持され、実際に動かした要素だけ座標が YAML に加わります。ノードの追加・削除や色の変更は同期の対象外です。PowerPoint ではなく draw.io を経由するのは、draw.io のコンテナ図形はリサイズしても子要素の座標が変わらず、座標変換なしにそのまま YAML へ書き戻せるためです(PowerPoint のグループ図形は子要素の座標を独自スケールで保持しており、変換の読み戻しが煩雑になります)。
+3. **Sync your draw.io adjustments back into the YAML.** Elements you didn't touch stay auto-placed; only the elements you actually moved get coordinates added to the YAML. Adding/removing nodes or changing colors is out of scope for syncing. draw.io is used instead of PowerPoint here because a draw.io container shape's child coordinates don't change on resize, so they can be written straight back into the YAML with no coordinate conversion needed (a PowerPoint group shape keeps its children's coordinates in its own scaled system, which makes reading them back out awkward).
 
    ```bash
    zook sync diagram.yaml diagram.drawio -o diagram.yaml
    ```
 
-4. **整えた YAML から PowerPoint を出力し直す**。draw.io での配置を保ったまま PowerPoint が生成されます。構成そのものを変えたくなったら 1 に戻って YAML を編集し、また同じ4ステップを回します。
+4. **Regenerate the PowerPoint from the tuned YAML.** The PowerPoint is regenerated with your draw.io placement preserved. When you want to change the structure itself, go back to step 1, edit the YAML, and run through the same four steps again.
 
    ```bash
    zook build diagram.yaml -o diagram.pptx
    ```
 
-このループは CI に載せて自動化することもできます。draw.io 側で `.drawio` ファイルを保存すると、CI が `sync` を実行して更新後の YAML を Pull Request として自動作成する仕組みも用意しています(`.github/workflows/drawio-sync.yml`)。詳しい運用は[ドキュメントサイトの draw.io連携ページ](https://taka-sho.github.io/zook/drawio-sync/)にまとめています。
+This loop can also be automated in CI. Saving a `.drawio` file in draw.io can trigger CI to run `sync` and automatically open a Pull Request with the updated YAML (`.github/workflows/drawio-sync.yml`). See the [draw.io integration page](https://taka-sho.github.io/zook/drawio-sync/) on the docs site for the full workflow.
 
-## セットアップ
+## Setup
 
 ```bash
 git clone https://github.com/taka-sho/zook.git
@@ -52,93 +54,93 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-同梱のサンプルから生成できることを確認してください。`Wrote example.pptx` と表示され、終了コード `0` なら成功です。
+Confirm you can generate from the bundled sample. Success looks like `Wrote example.pptx` printed, with exit code `0`.
 
 ```bash
 .venv/bin/zook build docs/example.yaml -o example.pptx
 ```
 
-## サブコマンド一覧
+## Subcommands
 
-| コマンド | 役割 |
+| Command | Role |
 |---|---|
-| `build` | YAML から PowerPoint(.pptx)を生成する |
-| `validate` | レンダリングせずにスキーマ・重なりなどを検証する |
-| `doctor` | 衝突を4段階で自動解消する(要素の重なり=座標調整 / リンク経路=接続辺の割り当て / 貫通する障害物=退避 / 動かせない障害物=経由点で迂回) |
-| `diff` | 2つの図の**構造差分**を取る(要素の追加/削除/移動・リンク変化・canvas変更をidで対応付けて報告。テキスト差分のノイズなし) |
-| `icons list` | 登録済みのアイコン・コンテナ種別を一覧表示する |
-| `preview` | PowerPoint を使わずに軽量 PNG でプレビューする |
-| `export-drawio` | draw.io で編集できる形式に書き出す |
-| `sync` | draw.io での位置・サイズの変更を YAML に反映する |
-| `from-mermaid` | Mermaid の `flowchart`/`graph` 記法を YAML に変換する |
+| `build` | Generate a PowerPoint (.pptx) from YAML |
+| `validate` | Check schema/overlaps/etc. without rendering |
+| `doctor` | Auto-resolve collisions in four stages (element overlaps = coordinate adjustment / link routing = connection-side assignment / an obstacle blocking a path = displaced / an obstacle that can't move = detoured with waypoints) |
+| `diff` | Take the **structural diff** of two diagrams (elements added/removed/moved, link changes, canvas changes — matched by id and reported with no text-diff noise) |
+| `icons list` | List registered icon/container types |
+| `preview` | Preview as a lightweight PNG, no PowerPoint needed |
+| `export-drawio` | Export to a format editable in draw.io |
+| `sync` | Reflect position/size changes made in draw.io back into the YAML |
+| `from-mermaid` | Convert Mermaid `flowchart`/`graph` notation to YAML |
 
-`--registry` オプション(全サブコマンド共通)を使うと、組み込みの AWS/GCP/Azure アイコンレジストリの上に、独自のアイコンや枠スタイルを重ねられます。
+The `--registry` option (shared by every subcommand) lets you layer your own icons and frame styles on top of the built-in AWS/GCP/Azure icon registries.
 
 ```bash
 .venv/bin/zook build diagram.yaml -o out.pptx --registry my-registry.yaml
 ```
 
-各コマンドの詳しいオプションは[使い方ページ](https://taka-sho.github.io/zook/usage/)を参照してください。
+See the [usage page](https://taka-sho.github.io/zook/usage/) for each command's detailed options.
 
-## エラー処理の考え方
+## Approach to Error Handling
 
-zook は CI/CD での利用を想定し、構造の破綻と描画上の軽微な問題を区別します。スキーマ違反・id 重複・リンク参照先の不在といった構造的な誤りは Fatal として即座にエラー終了しますが、未知のアイコン種別や要素同士の重なりといった描画上の問題は Warning として出力しつつ生成を続けます(`--strict` を付けると Warning も非ゼロ終了に切り替わります)。`--format json`/`github` にも対応しており、CI のゲートへそのまま組み込めます。
+Built with CI/CD use in mind, zook distinguishes structural breakage from minor drawing issues. Structural errors — schema violations, duplicate ids, dangling link references — exit immediately as Fatal, while drawing-level issues — an unknown icon type, elements overlapping — are printed as Warnings while generation continues (`--strict` switches Warnings to a non-zero exit too). `--format json`/`github` are also supported, so this plugs directly into a CI gate.
 
-## アイコンについて
+## About the Icons
 
-同梱の PNG は各社の公式アイコンではなく、`scripts/generate_placeholder_icons.py` で生成した自作のプレースホルダーです(カテゴリ別の配色とサービス名の略称)。ライセンス上の理由から、AWS/GCP/Azure の公式アイコンはリポジトリに含めていません。実際の公式アイコンに差し替える場合は、各 `registry.<provider>.yaml` の `file` パスに合わせて画像を配置するだけで済み、コードの変更は不要です。
+The bundled PNGs aren't each vendor's official icons — they're self-made placeholders generated by `scripts/generate_placeholder_icons.py` (category-based colors plus a service-name abbreviation). Official AWS/GCP/Azure icons aren't included in the repository, for licensing reasons. Swapping in the real official icons just means placing image files to match the `file` path in each `registry.<provider>.yaml` — no code changes needed.
 
-`export-drawio` は AWS のアイコン・コンテナに限り、draw.io 公式の AWS4 シェイプライブラリで書き出します。GCP/Azure は対応表がまだ無く、このツール自身のプレースホルダー PNG が埋め込まれます。
+`export-drawio` writes out using draw.io's official AWS4 shape library, but for AWS icons/containers only. GCP/Azure have no mapping table yet, so this tool's own placeholder PNGs get embedded instead.
 
-## テスト・品質保証
+## Testing & Quality Assurance
 
-`main` への push ごとに CI がテストを実行し、ブランチカバレッジを計測します。**カバレッジは85%を下回るとCIが失敗する品質ゲート**として機能しており(現状の実測値は上のバッジの通り)、README冒頭のバッジは third-party サービスではなく、その実行結果から生成した JSON([`.github/badges/`](.github/badges/))を shields.io で描画したものです — 表示されている数値は常に `main` の最新の実行結果そのものです。
+CI runs the tests and measures branch coverage on every push to `main`. **Coverage is a quality gate that fails CI below 85%** (the current measured value is shown in the badges above) — the badges at the top of this README aren't from a third-party service; they're generated from that run's own results ([`.github/badges/`](.github/badges/)) and rendered via shields.io. The numbers shown always reflect the latest run on `main`.
 
 ```bash
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/pytest tests/ -v                                              # テストのみ
-.venv/bin/pytest tests/ --cov=zook --cov-report=term-missing            # カバレッジ内訳付き
+.venv/bin/pytest tests/ -v                                              # tests only
+.venv/bin/pytest tests/ --cov=zook --cov-report=term-missing            # with a coverage breakdown
 ```
 
-CI の設定は [`.github/workflows/tests.yml`](.github/workflows/tests.yml)、カバレッジ計測範囲・除外設定は `pyproject.toml` の `[tool.coverage.*]` を参照してください。
+See [`.github/workflows/tests.yml`](.github/workflows/tests.yml) for the CI configuration, and `pyproject.toml`'s `[tool.coverage.*]` for what's measured/excluded.
 
-## 既知の制約(v1)
+## Known Limitations (v1)
 
-- 自動レイアウトが解消する重なりは、自動配置の要素が明示座標の兄弟要素と重なるケースに限られます(単純な「真下に押し出す」処理)。それ以外の重なりは Warning として検出されるのみで自動修正はされず、生成後の手編集を前提としています。
-- 組み込みのアイコンレジストリは Tier-1 語彙(AWS26・GCP19・Azure18 サービス)のみで、それ以外は `--registry` によるユーザー拡張を想定しています。
-- リンクの接続辺(`fromSide`/`toSide`)は水平ペア・垂直ペアの組み合わせのみ対応しており、軸をまたぐ指定は Fatal エラーになります。
+- Overlap avoidance in auto-layout is limited to an auto-placed element overlapping an explicitly-positioned sibling (a simple "push straight down"). Every other overlap is only detected as a Warning, with no auto-fix, on the assumption you'll hand-edit it after generation.
+- The built-in icon registries only cover a Tier-1 vocabulary (26 AWS / 19 GCP / 18 Azure services) — anything beyond that is meant to be added via a user registry with `--registry`.
+- A link's connection sides (`fromSide`/`toSide`) only support a horizontal pair or a vertical pair — a cross-axis combination is a Fatal error.
 
-詳しい制約一覧は[ドキュメントサイトの既知の制約ページ](https://taka-sho.github.io/zook/limitations/)にまとめています。
+See the [known limitations page](https://taka-sho.github.io/zook/limitations/) on the docs site for the full list.
 
-## ドキュメントサイトと CI
+## Documentation Site & CI
 
-利用者向けドキュメントは [Zensical](https://zensical.org/) で `docs-site/` から生成し、`main` への push で GitHub Actions が GitHub Pages へ自動デプロイします。
+User-facing documentation is generated from `docs-site/` with [Zensical](https://zensical.org/), and GitHub Actions auto-deploys it to GitHub Pages on every push to `main`.
 
 ```bash
 .venv/bin/pip install zensical
-.venv/bin/zensical serve          # http://localhost:8000 でプレビュー
-.venv/bin/zensical build --clean  # site/ に静的サイトを生成(コミット対象外)
+.venv/bin/zensical serve          # preview at http://localhost:8000
+.venv/bin/zensical build --clean  # generates the static site into site/ (not committed)
 ```
 
-- `.github/workflows/tests.yml` — push/PR で `pytest` を実行
-- `.github/workflows/docs.yml` — `main` への push で docs-site を GitHub Pages へデプロイ
-- `.github/workflows/drawio-sync.yml` — `.drawio` ファイルの push をトリガーに `sync` を実行し、差分があれば更新後の YAML を PR として自動作成
+- `.github/workflows/tests.yml` — runs `pytest` on push/PR
+- `.github/workflows/docs.yml` — deploys docs-site to GitHub Pages on push to `main`
+- `.github/workflows/drawio-sync.yml` — triggered by a push to a `.drawio` file; runs `sync` and auto-opens a PR with the updated YAML if there's a diff
 
-## 構成
+## Structure
 
 ```
 src/zook/
-  cli.py        CLIエントリポイント(build/validate/doctor/icons/preview/export-drawio/sync/from-mermaid)
-  validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照/fromSide-toSideの軸整合)
-  doctor.py     衝突の自動解消(重なり=座標調整/リンク経路=接続辺/貫通する障害物=退避/動かせない障害物=経由点で迂回、doctor向け)
-  diff.py       2つの図の意味的な構造差分(id対応付け・デフォルト正規化、diff向け)
-  model.py      パース後のデータモデル
-  registry.py   アイコン/枠スタイルのレジストリ解決(MultiRegistry、provider別・エイリアス・上書き対応)
-  layout.py     自動レイアウト(grid/horizontal/vertical、明示座標との混在、重複回避・検知、接続辺の自動選択)
-  render.py     python-pptx によるスライド生成(階層グループ・コネクタ・ラベル)
-  preview.py    Pillow による軽量PNGプレビュー(LibreOffice/PowerPoint不要)
-  drawio.py     draw.io(mxGraph XML)へのエクスポート・同期(継続的な構成図管理向け)
-  mermaid_flowchart.py  Mermaidの`flowchart`/`graph`記法のパーサ(from-mermaid向け)
-  schemas/      zook.schema.json / icon-registry.schema.json(docs/の写し)
-  data/icons/{aws,gcp,azure}/  組み込みレジストリ + プレースホルダーアイコンPNG
+  cli.py        CLI entry point (build/validate/doctor/icons/preview/export-drawio/sync/from-mermaid)
+  validate.py   JSON Schema validation + semantic checks (duplicate ids/link references/fromSide-toSide axis match)
+  doctor.py     Automatic collision resolution (overlaps=coordinate adjustment/link routing=connection sides/blocking obstacle=displaced/immovable obstacle=detoured with waypoints; powers doctor)
+  diff.py       Semantic structural diff between two diagrams (id matching, default-value normalization; powers diff)
+  model.py      The parsed data model
+  registry.py   Icon/frame-style registry resolution (MultiRegistry: per-provider, aliases, overrides)
+  layout.py     Auto-layout (grid/horizontal/vertical, mixing with explicit coordinates, overlap avoidance/detection, connection-side auto-selection)
+  render.py     Slide generation via python-pptx (hierarchical groups, connectors, labels)
+  preview.py    Lightweight PNG preview via Pillow (no LibreOffice/PowerPoint needed)
+  drawio.py     Export/sync to draw.io (mxGraph XML), for continuous diagram management
+  mermaid_flowchart.py  Parser for Mermaid's `flowchart`/`graph` notation (powers from-mermaid)
+  schemas/      zook.schema.json / icon-registry.schema.json (copies of docs/)
+  data/icons/{aws,gcp,azure}/  built-in registries + placeholder icon PNGs
 ```
