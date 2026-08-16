@@ -230,13 +230,14 @@ def doctor_cmd(input_path: str, output_path: str | None, fix_in_place: bool,
                user_registry_path: str | None, strict: bool, fmt: str) -> None:
     """Auto-resolve overlaps and link-routing collisions in INPUT_PATH.
 
-    Two stages: (1) separate the sibling-vs-sibling and element-vs-container-
+    Three stages: (1) separate the sibling-vs-sibling and element-vs-container-
     label overlaps `validate` detects, by writing explicit x/y; (2) clear link
-    crossings and false-edge aliasing by assigning fromSide/toSide, verified so
-    routing never gets worse. A collision no move or side change can remove is
-    reported under `remaining`, along with off-canvas and placeholder-icon
-    warnings (which doctor never touches) - handle those via draw.io or by
-    editing the YAML.
+    crossings and false-edge aliasing by assigning fromSide/toSide; (3) when no
+    side re-routes around an obstacle, slide the (auto-placed) obstacle out of
+    the path. Every change is verified so the diagram never gets worse. A
+    collision none of the stages can remove is reported under `remaining`,
+    along with off-canvas and placeholder-icon warnings (which doctor never
+    touches) - handle those via draw.io or by editing the YAML.
 
     Defaults to a dry run that only proposes the changes; pass -o PATH or --fix
     to write them. Comments and key ordering in the original file are kept.
