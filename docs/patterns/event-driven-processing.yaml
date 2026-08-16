@@ -1,7 +1,7 @@
 version: "1.0"
-# 非同期・疎結合な処理パイプライン。
-# S3へのアップロードをEventBridgeで検知し、SQSでバッファしてからLambdaが処理する。
-# 「同期応答が不要」「後続処理が詰まっても受付側を止めたくない」に向く。
+# An asynchronous, loosely-coupled processing pipeline.
+# EventBridge detects an S3 upload, SQS buffers it, and Lambda processes it.
+# Fits "no synchronous response needed" / "downstream backpressure shouldn't block ingestion."
 
 canvas:
   aspectRatio: "16:9"

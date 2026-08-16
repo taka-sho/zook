@@ -1,7 +1,7 @@
 version: "1.0"
-# 静的サイト配信の構成。
-# Route53でドメインを解決し、CloudFront経由でS3に置いた静的ファイルを配信する。
-# 「サーバーレスで静的サイト/SPAを配信したい」に向く。
+# A static-site delivery setup.
+# Route53 resolves the domain, and CloudFront serves static files stored in S3.
+# Fits "serve a static site/SPA with no servers."
 
 canvas:
   aspectRatio: "16:9"

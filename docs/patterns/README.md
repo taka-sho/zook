@@ -1,42 +1,42 @@
-# アーキテクチャパターン集
+# Architecture Pattern Collection
 
-要件からYAMLをゼロに組み立てるより、ここにある近いパターンを土台にして差分を編集するほうが、構造の破綻なく安定して構成図を作れます。まずこのページで要件に近いパターンを選び、そのYAMLを読み込んで、要件に合わせてノードの追加・削除・ラベル変更を行ってください。全パターンは `zook validate` で警告ゼロを確認済みです。
+Rather than building a YAML from scratch to fit a requirement, starting from one of these nearby patterns and editing the difference produces a more stable diagram with no structural breakage. Start by picking the pattern closest to the requirement on this page, load its YAML, then add/remove nodes and change labels to match. Every pattern has been confirmed with `zook validate` to produce zero warnings.
 
-型(コンピューティングの実行方式)を変えずに要件だけ変わる場合は、パターン内のラベルや個数を差し替えるだけで済みます。型そのものが要件に合わない場合(例:サーバー管理をしたくないのにEC2ベースのパターンを選んでしまった)は、別のパターンに乗り換えてください。
+If the requirement changes but the type (the compute execution model) doesn't need to, you only need to swap labels or counts within the pattern. If the type itself doesn't fit the requirement (e.g. picking an EC2-based pattern when the requirement says "no server management"), switch to a different pattern instead.
 
-## `3tier-web-app.yaml` — 王道の3層Webアプリ
+## `3tier-web-app.yaml` — the classic 3-tier web app
 
-ALB配下に複数AZのEC2 Webサーバーを並べ、各AZにRDSを置いた冗長構成です。「Webアプリを新しく作りたい」「特別な要件がなければ実績のある構成にしたい」という依頼にまず当てはめてください。サーバーの起動・停止やOSパッチ適用を自前で管理する前提の構成なので、運用負荷を下げたい要件には次の `serverless-api.yaml` や `container-platform.yaml` のほうが適します。
+Multiple EC2 web servers across AZs behind an ALB, with an RDS in each AZ for redundancy. Reach for this first for "I want to build a new web app" or "no special requirements, just go with a proven setup." This assumes you'll manage server start/stop and OS patching yourself, so if reducing operational load matters, `serverless-api.yaml` or `container-platform.yaml` below fit better.
 
-## `serverless-api.yaml` — サーバー管理をしたくないAPI
+## `serverless-api.yaml` — an API with no server management wanted
 
-API GatewayでHTTPSリクエストを受け、Lambdaで処理し、DynamoDBに永続化します。認証はCognitoです。「サーバーの管理をしたくない」「トラフィックが不定期・低頻度」「まず小さく作って伸ばしたい」という要件に向きます。常時起動のコンテナやVMを好まない場合の第一候補です。
+API Gateway receives HTTPS requests, Lambda processes them, and DynamoDB persists the data. Auth is via Cognito. Fits requirements like "no server management," "irregular/low-frequency traffic," or "start small and grow." The first choice when always-on containers or VMs aren't wanted.
 
-## `event-driven-processing.yaml` — 非同期・疎結合な処理
+## `event-driven-processing.yaml` — asynchronous, loosely-coupled processing
 
-S3へのアップロードをEventBridgeで検知し、SQSでバッファしてからLambdaが処理する構成です。処理完了はSNSで通知します。「同期応答が不要」「後続処理が詰まっても受付側を止めたくない」「複数の消費者に同じイベントを配りたい」という要件に選んでください。リクエスト直後に結果を返す必要がある要件には向きません。
+EventBridge detects an upload to S3, SQS buffers it, and Lambda processes it. Completion is announced via SNS. Choose this for requirements like "no synchronous response needed," "downstream backpressure shouldn't block ingestion," or "the same event needs to reach multiple consumers." Not a fit when a result must be returned immediately after the request.
 
-## `container-platform.yaml` — コンテナのまま動かしたい基盤
+## `container-platform.yaml` — a platform that keeps running as containers
 
-ALB配下でECS(Fargate)がアプリケーションを実行し、Auroraに永続化、ElastiCacheでセッションをキャッシュします。「Dockerイメージが既にある」「サーバー管理は減らしたいが、コンテナという単位のまま動かしたい」という要件に合います。関数単位の細かい従量課金より、常時稼働のサービスとして動かしたい場合はこちらを選んでください。
+ECS (Fargate) behind an ALB runs the application, persisting to Aurora and caching sessions in ElastiCache. Fits "we already have a Docker image" or "want less server management, but still want to run as a container unit." Choose this over fine-grained per-function billing when you want an always-running service.
 
-## `static-site-cdn.yaml` — 静的サイト・SPAの配信
+## `static-site-cdn.yaml` — serving a static site / SPA
 
-Route53でドメインを解決し、CloudFront経由でS3の静的ファイルを配信します。「バックエンド処理を持たない、あるいは別途APIとして分離する」「静的サイトやSPAを配信したい」という要件に向きます。動的なサーバー処理が要件に含まれる場合は、`serverless-api.yaml` と組み合わせてください。
+Route53 resolves the domain, and CloudFront serves static files from S3. Fits "no backend processing, or it's a separately-deployed API" and "serving a static site or SPA." Combine with `serverless-api.yaml` if dynamic server-side processing is also required.
 
-## `gcp-serverless-api.yaml` — GCP版のサーバーレスAPI
+## `gcp-serverless-api.yaml` — GCP version of the serverless API
 
-`serverless-api.yaml` のGCP版です。API GatewayでHTTPSリクエストを受け、Cloud Functionsで処理し、Firestoreに永続化します。認証はIdentity Platformです。要件でGCPが明示されているときに選んでください。
+The GCP counterpart of `serverless-api.yaml`. API Gateway receives HTTPS requests, Cloud Functions processes them, and Firestore persists the data. Auth is via Identity Platform. Choose this when GCP is explicitly required.
 
-## `azure-container-app.yaml` — Azure版のコンテナ基盤
+## `azure-container-app.yaml` — Azure version of the container platform
 
-`container-platform.yaml` のAzure版です。Front DoorでHTTPSを受け、Container Appsでアプリを実行し、Cosmos DBに永続化します。認証はEntra IDです。要件でAzureが明示されているときに選んでください。
+The Azure counterpart of `container-platform.yaml`. Front Door receives HTTPS, Container Apps runs the app, and Cosmos DB persists the data. Auth is via Entra ID. Choose this when Azure is explicitly required.
 
-## パターンの選び方
+## Choosing a Pattern
 
-要件文からまず次の2点を読み取ってください。
+First read off two things from the requirements:
 
-1. **クラウドプロバイダの指定があるか。** 明示が無ければAWS版から選び、GCP/Azureの指定があれば対応するGCP/Azure版を選びます(GCP/Azure版は現状 `serverless-api.yaml`/`container-platform.yaml` の2系統のみ用意しています)。
-2. **コンピューティングの実行方式に希望があるか。** サーバー管理を避けたいなら `serverless-api.yaml`、Dockerイメージ前提でコンテナのまま動かしたいなら `container-platform.yaml`、特別な指定が無ければ `3tier-web-app.yaml`、非同期・イベント駆動が明示されていれば `event-driven-processing.yaml`、配信対象が静的コンテンツのみなら `static-site-cdn.yaml` を選びます。
+1. **Is a cloud provider specified?** If not stated, start from the AWS version; if GCP/Azure is specified, use the corresponding GCP/Azure version (currently only `serverless-api.yaml`/`container-platform.yaml` have GCP/Azure counterparts).
+2. **Is there a preference for the compute execution model?** If server management should be avoided, use `serverless-api.yaml`; if it's container-based on an existing Docker image, use `container-platform.yaml`; with no special requirement, use `3tier-web-app.yaml`; if asynchronous/event-driven is explicit, use `event-driven-processing.yaml`; if the delivery target is static content only, use `static-site-cdn.yaml`.
 
-どのパターンにも当てはまらない要件は、複数パターンを組み合わせるか(例:静的サイト配信 + サーバーレスAPI)、`docs/yaml-spec.md` と `zook icons list` を参照しながら新規に組み立ててください。使えるサービス名は `docs/icon-registry-and-vocabulary.md` の通りTier-1語彙(AWS26・GCP19・Azure18サービス)に限られるので、それ以外のサービスが要件に含まれる場合は、近い代替サービスに読み替えるか、ユーザーに確認してください。
+For requirements that don't fit any single pattern, either combine multiple patterns (e.g. static-site delivery + a serverless API) or build a new one from scratch while referring to `docs/yaml-spec.md` and `zook icons list`. Usable service names are limited to the Tier-1 vocabulary (26 AWS / 19 GCP / 18 Azure services) documented in `docs/icon-registry-and-vocabulary.md`, so if the requirement calls for something outside that set, either substitute the closest available service or check with the user.

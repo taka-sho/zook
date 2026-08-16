@@ -1,7 +1,7 @@
 version: "1.0"
-# Azureでのコンテナアプリ構成(container-platform.yamlのAzure版)。
-# Front DoorでHTTPSを受け、Container Appsでアプリを実行し、Cosmos DBに永続化する。
-# 認証はEntra IDで行う。Azureを指定された場合の土台に向く。
+# Container app setup on Azure (the Azure counterpart of container-platform.yaml).
+# Front Door receives HTTPS, Container Apps runs the app, and Cosmos DB persists the data.
+# Auth is via Entra ID. A good base when Azure is explicitly required.
 
 canvas:
   aspectRatio: "16:9"

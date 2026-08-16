@@ -1,31 +1,31 @@
-# サービス語彙 & アイコンレジストリ仕様（v1.0）
+# Service Vocabulary & Icon Registry Specification (v1.0)
 
-**バージョン:** 1.0
-**作成日:** 2026-07-25
-**対象:** 要求仕様書 §7.4、YAML入力仕様書 §10 の確定
-**関連ファイル:** `icon-registry.schema.json`, `registry.aws.yaml`, `registry.gcp.yaml`, `registry.azure.yaml`
+**Version:** 1.0
+**Date:** 2026-07-25
+**Scope:** Settles requirements spec §7.4 and yaml-spec §10
+**Related files:** `icon-registry.schema.json`, `registry.aws.yaml`, `registry.gcp.yaml`, `registry.azure.yaml`
 
 ---
 
-## 1. 基本方針：型は enum で固定しない
+## 1. Basic Policy: Types Are Not Fixed as an Enum
 
-サービスの `type` を JSON Schema の enum で縛ると、サービス追加のたびにスキーマ改修が必要になり、拡張性(要求仕様書 R-IC-04)を損なう。そこで：
+Constraining a service's `type` with a JSON Schema enum would require a schema change every time a service is added, undermining extensibility (requirements spec R-IC-04). So instead:
 
-- **YAML スキーマ上、`type` は自由文字列**のまま(既に確定済み)。
-- **語彙の実体はレジストリが唯一の真実源**とする。`type` → アイコンの対応はレジストリで定義。
-- 未知 `type` は Fatal にせず、Warning + プレースホルダで継続(エラーポリシー §9)。
+- **In the YAML schema, `type` remains a free-form string** (already settled).
+- **The registry is the single source of truth for vocabulary.** The `type` → icon mapping is defined in the registry.
+- An unknown `type` is not Fatal — it continues with a Warning + placeholder (error policy §9).
 
-これにより「新サービス対応 = レジストリに1行 + アイコン追加」だけで済む。
+This means "supporting a new service" is just "one line in the registry + an icon file."
 
-## 2. サービス語彙（Tier 分け）
+## 2. Service Vocabulary (Tiers)
 
-初期からレジストリに載せる語彙を Tier で分ける。
+The vocabulary shipped in the registry from the start is split into tiers.
 
-### Tier 1（v1 同梱：26種）
+### Tier 1 (bundled in v1: 26 services)
 
-実際の構成図で頻出する基礎サービスを網羅する。
+Covers the foundational services that show up constantly in real-world diagrams.
 
-| カテゴリ | サービス |
+| Category | Services |
 |---|---|
 | Compute | EC2, Lambda, ECS, EKS, Fargate |
 | Storage | S3, EFS, EBS |
@@ -33,92 +33,92 @@
 | Networking | ELB(ALB), CloudFront, Route53, APIGateway, NATGateway |
 | Integration | SNS, SQS, EventBridge |
 | Security | IAM, Cognito |
-| General | User, Admin, Developer, Client(AWSサービスではなく、図に登場する人物・役割を表すアクター) |
+| General | User, Admin, Developer, Client (not AWS services — actors representing people/roles that appear in a diagram) |
 
-- 当初要望の EC2/Lambda/RDS/S3 を含み、そこに「図でよく一緒に描かれる」ものを加えた実用最小セット。
-- General カテゴリは AWS サービスではなく、構成図に頻出する「誰がアクセスするか」を表すアクター(エンドユーザー・管理者・開発者・クライアント端末)。同じレジストリ機構(`icons` エントリ)にそのまま乗る。
+- A practical minimal set that covers the originally requested EC2/Lambda/RDS/S3, plus the services that commonly get drawn alongside them.
+- The General category isn't AWS services — it's actors that commonly appear in architecture diagrams to represent "who's accessing this" (end user, administrator, developer, client device). They plug directly into the same registry mechanism (`icons` entries).
 
-### Tier 2（オンデマンド追加）
+### Tier 2 (added on demand)
 
-上記以外の AWS サービス(公式アイコンは300超)。必要になった時点でレジストリに追記する。スキーマ改修は不要。
+Every other AWS service (the official icon set has 300+). Added to the registry as needed. No schema change required.
 
-## 3. アイコンレジストリの形式
+## 3. Icon Registry Format
 
-プロバイダごとに1つのレジストリファイル(例：`icons/aws/registry.aws.yaml`)。`icon-registry.schema.json` で厳密化済み。
+One registry file per provider (e.g. `icons/aws/registry.aws.yaml`), formalized via `icon-registry.schema.json`.
 
-### 3.1 トップレベル
+### 3.1 Top Level
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |---|---|---|
-| `registryVersion` | ○ | 固定 "1.0" |
-| `provider` | ○ | `aws`/`gcp`/`azure`/`custom` |
-| `iconSet` | | 由来・バージョン記録(AWSは四半期更新のため明記) |
-| `basePath` | | アイコンファイルのあるディレクトリ |
-| `defaults` | | 既定サイズ・既定拡張子 |
-| `icons` | ○ | ノード(サービス/リソース)の定義 |
-| `groups` | | コンテナ(枠)のスタイル定義 |
+| `registryVersion` | Yes | fixed "1.0" |
+| `provider` | Yes | `aws`/`gcp`/`azure`/`custom` |
+| `iconSet` | | provenance/version record (AWS updates quarterly, so this is worth recording explicitly) |
+| `basePath` | | directory containing the icon files |
+| `defaults` | | default size / default extension |
+| `icons` | Yes | node (service/resource) definitions |
+| `groups` | | container (frame) style definitions |
 
-### 3.2 icons エントリ（ノード）
+### 3.2 icons Entries (Nodes)
 
-キー = YAML の `type`。値は：
+Key = the YAML's `type`. Value:
 
-- `file`（必須）：`basePath` からの相対パス
-- `category`：Compute/Storage 等
-- `kind`：`service` | `resource`（AWS の2区分に対応）
-- `label`：要素側でラベル省略時の既定表示名
-- `aliases`：別名リスト(大小文字無視でマッチ)
-- `size`：このアイコン固有のサイズ上書き
-- `drawioShape`：`zook export-drawio`(`detailed-design-pptx.md` sec8.14参照)が使うdraw.io公式シェイプのstyle文字列。省略時はPNG(`file`)をそのまま埋め込む
+- `file` (required): path relative to `basePath`
+- `category`: Compute/Storage etc.
+- `kind`: `service` | `resource` (matches AWS's two-way distinction)
+- `label`: default display name used when an element omits its own label
+- `aliases`: list of alternate names (matched case-insensitively)
+- `size`: size override specific to this icon
+- `drawioShape`: the draw.io official-shape style string used by `zook export-drawio` (see `detailed-design-pptx.md` §8.14). If omitted, the PNG (`file`) is embedded as-is
 
-### 3.3 groups エントリ（コンテナ枠）
+### 3.3 groups Entries (Container Frames)
 
-キー = コンテナの `type`（cloud/vpc/az/subnet 等）。枠線色・塗り・破線・ラベル位置・任意の隅アイコンを定義。色は妥当な既定値を入れてあるが、**公式デックの配色に合わせて最終調整する**前提。`drawioShape`（任意）も同様にexport-drawio用の公式コンテナシェイプを指定できる。
+Key = the container's `type` (cloud/vpc/az/subnet, etc.). Defines border color, fill, dashing, label position, and an optional corner icon. Reasonable defaults are filled in, but these are expected to be **tuned to match the official deck's color scheme** as a final pass. `drawioShape` (optional) similarly lets you specify an official container shape for export-drawio.
 
-- `cloud`(AWS Cloud 境界)は最も外側の枠として追加済み。`icon` に隅アイコン(`General/aws-cloud-badge.png`)を指定しており、実装側はラベル位置が `top-left`/`bottom-left` のとき、その隅にアイコンを描画しラベルをアイコン分だけ右にずらす(詳細は `detailed-design-pptx.md`)。「どこから AWS Cloud か」を一目で分かるようにする狙い。
+- `cloud` (the AWS Cloud boundary) is included as the outermost frame. Its `icon` specifies a corner icon (`General/aws-cloud-badge.png`); when the label position is `top-left`/`bottom-left`, the implementation draws the icon in that corner and shifts the label right to make room for it (see `detailed-design-pptx.md` for details). The goal is to make "where the AWS Cloud boundary starts" visible at a glance.
 
-## 4. 解決アルゴリズム
+## 4. Resolution Algorithm
 
-ノードのアイコン解決手順：
+Steps for resolving a node's icon:
 
-1. 要素の `provider`（既定 aws）で対象レジストリを選ぶ。
-2. `type` をキーに、**エイリアス込み・大小文字無視**で lookup。
-3. ヒット → `basePath` + `file` を実ファイルに解決。
-4. ミス → Warning を出し、プレースホルダアイコンで継続。
+1. Pick the target registry based on the element's `provider` (default `aws`).
+2. Look up `type` as the key, **alias-aware and case-insensitive**.
+3. Hit → resolve `basePath` + `file` to an actual file.
+4. Miss → emit a Warning and continue with a placeholder icon.
 
-コンテナは同様に `groups` を引く。**その provider 自身のレジストリに定義がなければ AWS レジストリの `groups` にフォールバック**する(vpc/az/subnet のような一般的な概念を GCP/Azure で毎回再定義しなくて済むようにするため)。`cloud` のようにプロバイダ固有の見た目にしたいものだけ、各プロバイダのレジストリで個別定義する。ヒットしなければ既定枠。
+Containers work the same way, looking up `groups`. **If not defined in that provider's own registry, it falls back to the AWS registry's `groups`** (so a common concept like vpc/az/subnet doesn't need to be redefined for GCP/Azure every time). Only things meant to look provider-specific, like `cloud`, are defined individually in each provider's registry. If there's no hit at all, a default frame is used.
 
-- 検証済み(AWS registry)：Tier 1 の 26 エントリ + 別名で lookup キー 46 個、**衝突なし**。`alb`→ELB、`AmazonEC2`→EC2、`ddb`→DynamoDB 等が解決可能。
-- 検証済み(実装フェーズ)：GCP/Azure レジストリ追加後、`MultiRegistry` が要素の `provider` に応じて正しいレジストリへディスパッチすること、および `groups` の AWS フォールバックが機能することをユニットテストで確認済み(`tests/test_registry.py`)。
+- Verified (AWS registry): Tier 1's 26 entries plus aliases give 46 lookup keys, **no collisions**. `alb`→ELB, `AmazonEC2`→EC2, `ddb`→DynamoDB and similar all resolve correctly.
+- Verified (implementation phase): after the GCP/Azure registries were added, unit tests confirm `MultiRegistry` correctly dispatches to the right registry based on an element's `provider`, and that the AWS fallback for `groups` works as intended (`tests/test_registry.py`).
 
-## 5. 上書き（オーバーライド）機構
+## 5. Override Mechanism
 
-- 組み込みレジストリの上に、**ユーザーレジストリを重ねられる**。
-- 解決順：ユーザー定義 > 組み込み。同一キーはユーザー側が勝つ。
-- カスタムアイコンは `provider: custom` + `icons/custom/` に置いて追加。
-- これで「社内独自アイコン」「未対応サービスの暫定アイコン」に対応。
+- A **user registry can be layered on top of** the built-in registries.
+- Resolution order: user-defined > built-in. The user side wins on a matching key.
+- Custom icons are added via `provider: custom` plus files under `icons/custom/`.
+- This covers "internal company-specific icons" and "stopgap icons for services not yet supported."
 
-## 6. バージョニング（AWS 四半期更新への追従）
+## 6. Versioning (Keeping Up With AWS's Quarterly Updates)
 
-- AWS 公式アイコンは Q1(1月末)/Q2(4月末)/Q3(7月末)に更新される。
-- `iconSet` に採用リリースを明記し、アイコン一式ごと差し替え可能にする(vendoring)。
-- レジストリのキー(=YAML の `type`)は安定させ、更新時はファイル実体だけ入れ替える運用を基本とする。
+- Official AWS icons are updated in Q1 (late January), Q2 (late April), and Q3 (late July).
+- `iconSet` records the adopted release, so the whole icon set can be swapped out (vendoring).
+- The registry's keys (= the YAML's `type` values) are kept stable; updates generally just swap out the underlying files.
 
-## 7. 他プロバイダへの拡張(実装フェーズで確定)
+## 7. Extending to Other Providers (settled during implementation)
 
-- `registry.gcp.yaml` / `registry.azure.yaml` を同形式で追加済み(Tier-1 でGCP 19サービス・Azure 18サービス + `cloud`/`vpc`/固有アカウント概念の groups)。
-- スキーマ(`icon-registry.schema.json`)は共通。`provider` 値と `icons`/`groups` の中身が変わるだけ。
-- 図 YAML 側はノードに `provider: gcp` を付けるだけで切り替わる。1つの図の中で複数プロバイダを混在させることも可能(要素ごとに `provider` を個別指定できるため)。
-- 解決は `MultiRegistry`(`src/zook/registry.py`)が担当。`aws`/`gcp`/`azure` を常にすべて読み込み、`--registry` で指定したユーザーレジストリはその **ファイル自身が宣言する `provider`** に重ねる(未知の値、例えば `custom` を宣言すれば独立した新しいプロバイダとして追加される)。
-- `zook icons list [--provider <name>]` で、実際に解決可能な語彙を一覧確認できる。
+- `registry.gcp.yaml` / `registry.azure.yaml` were added in the same format (Tier-1 with 19 GCP services and 18 Azure services, plus `cloud`/`vpc`/provider-specific account-concept groups).
+- The schema (`icon-registry.schema.json`) is shared — only the `provider` value and the contents of `icons`/`groups` differ.
+- On the diagram-YAML side, switching providers is as simple as adding `provider: gcp` to a node. Multiple providers can coexist within a single diagram, since `provider` is set per element.
+- Resolution is handled by `MultiRegistry` (`src/zook/registry.py`). It always loads `aws`/`gcp`/`azure`, and a user registry passed via `--registry` is layered onto whichever `provider` **that file itself declares** (declaring an unknown value, e.g. `custom`, adds it as an independent new provider).
+- `zook icons list [--provider <name>]` lists the vocabulary that's actually resolvable.
 
-## 8. 確定状況 & 申し送り
+## 8. Status & Handoff
 
-- レジストリ形式は JSON Schema 化・検証済み。サンプル `registry.aws.yaml` も適合確認済み。
-- **アイコン実ファイル本体は未同梱**。Claude Code 側で公式アセットを取得し、`file` パスに合わせて配置(または配置に合わせて `file` を調整)すること。
-- SVG 原本は PNG へ変換して配置(設計メモ §8.1)。`defaults.ext` は png。
-- 解決は「エイリアス込み・大小文字無視」で実装すること(§4)。
-- 色・カテゴリ・kind は公式デックに合わせて必要に応じ調整可。
+- The registry format has been formalized as JSON Schema and validated. The sample `registry.aws.yaml` has also been confirmed to conform.
+- **The actual icon files are not bundled.** The implementation side (Claude Code) needs to source the official assets and place them per the `file` paths (or adjust `file` to match the placement).
+- Original SVGs are converted to PNG before being placed (design memo §8.1). `defaults.ext` is png.
+- Resolution must be implemented as "alias-aware and case-insensitive" (§4).
+- Color/category/kind can be adjusted as needed to match the official deck.
 
 ---
 
-*本仕様により、要求仕様書 §7.4 とアイコン関連の未決事項はすべて確定。残るアイコン実ファイルの調達・配置は実装フェーズの作業。*
+*This spec settles every open item from requirements spec §7.4 and the icon-related questions. What remains is sourcing and placing the actual icon files, which is implementation-phase work.*
