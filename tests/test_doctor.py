@@ -167,10 +167,10 @@ def test_false_edge_aliasing_is_resolved():
     assert result.link_changes  # at least one link re-sided
 
 
-def test_author_positioned_obstacle_is_reported_not_moved():
-    # B sits directly between A and X on the same vertical line, and the author
-    # placed it there explicitly. No connection side clears the crossing, and
-    # stage 3 must not override an authored position - so it stays, reported.
+def test_author_pinned_obstacle_is_detoured_with_waypoints():
+    # B sits directly between A and X on the same vertical line, placed there by
+    # the author. No side clears it (stage 2) and stage 3 must not move an
+    # authored position - so stage 4 detours the *link* around B with waypoints.
     raw = _base(
         [
             {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 60},
@@ -180,9 +180,12 @@ def test_author_positioned_obstacle_is_reported_not_moved():
         links=[{"from": "A", "to": "X"}],
     )
     result = diagnose_and_fix(raw, REGISTRY)
-    assert result.status == "partial"
-    assert any("passes through element 'B'" in w for w in result.remaining)
-    assert (raw["elements"][1]["x"], raw["elements"][1]["y"]) == (300, 200)  # untouched
+
+    assert result.status == "fixed"
+    assert _link_warnings(raw) == []
+    assert result.moves == []  # B is authored; it was not moved
+    assert (raw["elements"][1]["x"], raw["elements"][1]["y"]) == (300, 200)  # B untouched
+    assert result.link_changes and result.link_changes[0].waypoints  # link detoured instead
 
 
 def test_auto_placed_obstacle_is_displaced_off_the_path():
@@ -206,19 +209,20 @@ def test_auto_placed_obstacle_is_displaced_off_the_path():
     assert [m.id for m in result.moves] == ["C"]
 
 
-def test_obstacle_move_never_worsens_a_diagram():
-    # A crossing with no clean fix (author-pinned obstacle) must leave the
-    # diagram no worse than it started: exactly the one original warning, and
-    # no spurious element moves or side changes.
+def test_unresolvable_crossing_never_worsens():
+    # The author both pinned B on the line AND forced the link's sides, so
+    # every stage must stand down: no move, no side change, no detour - the
+    # diagram is left exactly as it came in, with its one warning reported.
     raw = _base(
         [
             {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 60},
             {"kind": "node", "id": "B", "type": "EC2", "x": 300, "y": 200},
             {"kind": "node", "id": "X", "type": "EC2", "x": 300, "y": 420},
         ],
-        links=[{"from": "A", "to": "X"}],
+        links=[{"from": "A", "to": "X", "fromSide": "bottom", "toSide": "top"}],
     )
     result = diagnose_and_fix(raw, REGISTRY)
+    assert result.status == "partial"
     assert result.moves == []
     assert result.link_changes == []
     assert len(result.remaining) == 1
@@ -242,6 +246,46 @@ def test_author_set_link_sides_are_not_overridden():
     assert result.link_changes == []
     assert result.status == "partial"
     assert raw["links"][0]["fromSide"] == "top"  # untouched
+
+
+# --- stage 4: waypoint detours ---
+
+
+def test_link_crossing_two_pinned_obstacles_is_detoured_around_both():
+    # Two author-pinned obstacles on the A->X line: a single detour must route
+    # around their union and clear both at once.
+    raw = _base(
+        [
+            {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 40},
+            {"kind": "node", "id": "B1", "type": "EC2", "x": 300, "y": 200},
+            {"kind": "node", "id": "B2", "type": "EC2", "x": 300, "y": 320},
+            {"kind": "node", "id": "X", "type": "EC2", "x": 300, "y": 480},
+        ],
+        links=[{"from": "A", "to": "X"}],
+    )
+    result = diagnose_and_fix(raw, REGISTRY)
+
+    assert result.status == "fixed"
+    assert _link_warnings(raw) == []
+    assert result.moves == []  # both obstacles authored; none moved
+    assert result.link_changes[0].waypoints  # one detour clears both
+
+
+def test_author_routed_link_is_left_alone():
+    # The author already routed the link with a waypoint (which still leaves a
+    # crossing); stage 4 must respect that intent and not replace the routing.
+    raw = _base(
+        [
+            {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 60},
+            {"kind": "node", "id": "B", "type": "EC2", "x": 300, "y": 200},
+            {"kind": "node", "id": "X", "type": "EC2", "x": 300, "y": 420},
+        ],
+        links=[{"from": "A", "to": "X", "waypoints": [{"x": 300, "y": 250}]}],
+    )
+    result = diagnose_and_fix(raw, REGISTRY)
+
+    assert result.link_changes == []  # author's routing untouched
+    assert raw["links"][0]["waypoints"] == [{"x": 300, "y": 250}]
 
 
 # --- CLI ---

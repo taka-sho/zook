@@ -58,7 +58,7 @@ python3 -m venv .venv
 |---|---|
 | `build` | YAML から PowerPoint(.pptx)を生成する |
 | `validate` | レンダリングせずにスキーマ・重なりなどを検証する |
-| `doctor` | 衝突を3段階で自動解消する(要素の重なり=座標調整 / リンク経路=接続辺の割り当て / 貫通する障害物=退避) |
+| `doctor` | 衝突を4段階で自動解消する(要素の重なり=座標調整 / リンク経路=接続辺の割り当て / 貫通する障害物=退避 / 動かせない障害物=経由点で迂回) |
 | `icons list` | 登録済みのアイコン・コンテナ種別を一覧表示する |
 | `preview` | PowerPoint を使わずに軽量 PNG でプレビューする |
 | `export-drawio` | draw.io で編集できる形式に書き出す |
@@ -117,7 +117,7 @@ zook は CI/CD での利用を想定し、構造の破綻と描画上の軽微�
 src/zook/
   cli.py        CLIエントリポイント(build/validate/doctor/icons/preview/export-drawio/sync/from-mermaid)
   validate.py   JSON Schema検証 + 意味検証(id重複/リンク参照/fromSide-toSideの軸整合)
-  doctor.py     衝突の自動解消(重なり=座標調整/リンク経路=接続辺/貫通する障害物=退避、doctor向け)
+  doctor.py     衝突の自動解消(重なり=座標調整/リンク経路=接続辺/貫通する障害物=退避/動かせない障害物=経由点で迂回、doctor向け)
   model.py      パース後のデータモデル
   registry.py   アイコン/枠スタイルのレジストリ解決(MultiRegistry、provider別・エイリアス・上書き対応)
   layout.py     自動レイアウト(grid/horizontal/vertical、明示座標との混在、重複回避・検知、接続辺の自動選択)
