@@ -1,73 +1,75 @@
 # AGENTS.md
 
-zook は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアーキテクチャ図を生成する CLI ツールです。想定する主な利用者は生成AIです。ユーザーがAIに「○○の要件でインフラ構成を提案してアーキテクチャ図を作って」と依頼する場面を考えてみてください。この依頼を受けたAIは、まず構成案をテキストで提示して合意を得ます。そのうえで要件に合うアーキテクチャを選び、zookでYAMLを書き、検証してから図を生成することになります。このファイルは、その一連の流れを迷わず進めるための道筋です。
+*[日本語版はこちら / Japanese version](./AGENTS.ja.md)*
 
-## アーキテクチャ提案から図の生成までの流れ
+zook is a CLI tool that generates PowerPoint (.pptx) architecture diagrams from an infrastructure configuration written in YAML. Its primary intended user is a generative AI. Picture the scenario: a user asks an AI to "propose an infrastructure setup for X and build an architecture diagram." The AI receiving that request should first present a proposed configuration in text and get agreement on it. Only then does it pick an architecture that fits the requirements, write the YAML with zook, validate it, and generate the diagram. This file is the path that lets that sequence proceed without hesitation.
 
-1. **まずテキストで構成案を提示し、合意を得る。** 要件を受け取っても、いきなりzookでYAML/pptxを作り始めないでください。想定する構成を箇条書きやアスキーアート程度の軽量な形でユーザーに示し、方向性の合意を得てから次のステップに進みます。この段階ではzookのコマンドを一切実行しません。認識のズレは、実際に図を生成する前に直すほうがずっと安く済みます。
+## From Architecture Proposal to Diagram Generation
 
-2. **近いパターンを探す。** `docs/patterns/README.md` に、要件別のアーキテクチャパターン(3層Webアプリ・サーバーレスAPI・非同期処理・コンテナ基盤など)と、それぞれ「どんな要件のときに選ぶか」がまとまっています。ゼロから構造を組み立てるより、近いパターンのYAMLを土台にして要件に合わせて差分を編集するほうが、確実に構造の破綻を避けられます。
+1. **First present the proposed configuration in text and get agreement.** Even after receiving requirements, don't jump straight into building YAML/pptx with zook. Show the user the intended configuration in a lightweight form — a bulleted list or a rough ASCII diagram is enough — and get agreement on the direction before moving to the next step. Don't run any zook command at this stage. Misalignment is far cheaper to fix here than after the diagram has actually been generated.
 
-3. **使えるサービス名を確認する。** YAML の `type`(`EC2`、`ComputeEngine` など)はスキーマ上の enum で固定されていません。**アイコンレジストリが語彙の唯一の真実源**です。書き始める前に必ず次を実行し、実在する `type`・別名・カテゴリを確認してください。
+2. **Look for a close pattern.** `docs/patterns/README.md` lists architecture patterns by requirement (a 3-tier web app, a serverless API, asynchronous processing, a container platform, etc.) along with "what kind of requirement calls for this one." Basing your YAML on a close pattern's file and editing the difference to fit the requirement is far more reliable at avoiding structural breakage than building the structure from scratch.
+
+3. **Confirm which service names are usable.** A YAML `type` (`EC2`, `ComputeEngine`, etc.) isn't fixed by a schema enum. **The icon registry is the single source of truth for vocabulary.** Before you start writing, always run the following to check the actually-existing `type`s, aliases, and categories.
 
    ```bash
    zook icons list --format json
    ```
 
-   存在しない `type` を書いても Fatal エラーにはならず Warning とプレースホルダー表示で処理は続行されますが、意図した見た目にはなりません。
+   Writing a `type` that doesn't exist isn't a Fatal error — processing continues with a Warning and a placeholder — but the result won't look as intended.
 
-4. **YAML を書く、またはパターンを編集する。** 形式の正式な定義は `docs/zook.schema.json`(JSON Schema)、読み下した仕様は `docs/yaml-spec.md` にあります。パターンを流用する場合は、要件に合わない部分だけを書き換え、パターン全体の構造(コンテナの入れ子・レイアウト方針)はなるべく維持してください。
+4. **Write the YAML, or edit a pattern.** The formal definition of the format is `docs/zook.schema.json` (JSON Schema); the spec written out in prose is `docs/yaml-spec.md`. When reusing a pattern, only rewrite the parts that don't fit the requirement, and keep the pattern's overall structure (container nesting, layout policy) as intact as possible.
 
-5. **検証する。** レンダリングの前に必ず実行してください。
+5. **Validate.** Always run this before rendering.
 
    ```bash
    zook validate diagram.yaml --format json
    ```
 
-   `{"status": "error", ...}` は構造的な破綻(スキーマ違反・id重複・リンク参照先不在など)を意味し、レンダリングしても意味のある出力になりません。`error` フィールドの内容を読んで修正し、`{"status": "ok"}` か `{"status": "warning"}` になるまで直してください。スキーマ違反のメッセージには `(closest match: ...)` という形で具体的な原因が付くので、そこを優先して読むと直しやすいはずです。`warning` は描画上の軽微な問題(重なり・未知のアイコンなど)なので、そのまま進めても構いませんが、内容を確認し意図した配置になっているか判断してください。
+   `{"status": "error", ...}` means structural breakage (a schema violation, a duplicate id, a dangling link reference, etc.) — rendering it wouldn't produce a meaningful result. Read the `error` field's contents, fix the issue, and keep iterating until you get `{"status": "ok"}` or `{"status": "warning"}`. A schema-violation message comes with a specific cause in the form `(closest match: ...)`, which is the most efficient place to start reading. A `warning` is a minor drawing issue (an overlap, an unknown icon, etc.) — it's fine to proceed as-is, but check the details and judge whether the placement matches your intent.
 
-   描画上の `warning` は、座標や接続辺を手計算で直そうとせず、まず `doctor` に解消させてください(ピクセル単位の調整はAIが最も苦手とする作業で、ツール側に任せるのが確実です)。`doctor` は4段階で直します。(1) 兄弟要素どうし・要素とコンテナ見出しの**重なり**を、要素をずらして解消。(2) リンク(矢印)の**経路衝突・見かけ上の直接接続(false edge aliasing)**を、接続辺(fromSide/toSide)を割り当てて解消。(3) 接続辺では迂回できない貫通は、経路上の**障害物要素(自動配置のもの)をどかして**解消。(4) 障害物が著者指定で動かせない場合は、**リンク側に経由点(waypoints)を挿入して迂回**させて解消。いずれも「悪化しないことを検証済みの変更だけ」を採用します。まず `zook doctor diagram.yaml --format json` で提案を確認し(ドライラン)、問題なければ `zook doctor diagram.yaml --fix` で書き戻します。どの段階でも直せない衝突、およびキャンバス外座標・未知アイコンは `remaining` として報告されるだけなので、`docs-site/limitations.md` を読み、YAMLの編集か draw.io での手直しで対応してください。
+   For a drawing-level `warning`, don't try to fix coordinates or connection sides by hand-calculating — let `doctor` resolve it first (pixel-level adjustment is exactly what an AI is worst at, so it's far more reliable to let the tool handle it). `doctor` fixes things in four stages: (1) resolve sibling-vs-sibling and element-vs-container-label **overlaps** by nudging elements apart; (2) resolve a link's (arrow's) **path collisions and apparent direct connections (false edge aliasing)** by assigning connection sides (fromSide/toSide); (3) resolve a path that can't be routed around via a connection side by **displacing the obstacle element (if auto-placed)**; (4) if the obstacle is author-positioned and can't be moved, resolve it by **inserting waypoints into the link to detour around it**. Every stage only ever applies "a change verified not to make things worse." First run `zook doctor diagram.yaml --format json` to see the proposal (a dry run), and if it looks right, write it back with `zook doctor diagram.yaml --fix`. A collision none of the stages can resolve, along with off-canvas coordinates and unknown icons, is simply reported under `remaining` — read `docs-site/limitations.md` and handle those by editing the YAML or fixing it up in draw.io.
 
-6. **生成する。**
+6. **Generate.**
 
    ```bash
    zook build diagram.yaml -o diagram.pptx
    ```
 
-見た目を調整したい場合は、YAML を直接手直しするだけでなく、`zook export-drawio`/`sync` によるdraw.io連携(`docs-site/drawio-sync.md`)という選択肢もあります。
+If you want to adjust the look further, beyond hand-editing the YAML directly, there's also the option of draw.io integration via `zook export-drawio`/`sync` (`docs-site/drawio-sync.md`).
 
-## Mermaidのフローチャートから始まる依頼の場合
+## When the Request Starts From a Mermaid Flowchart
 
-ユーザーがすでにMermaidの`flowchart`/`graph`記法で図を持っている(あるいはAI自身がMermaidで業務フローを組み立てた)場合は、上記のYAMLを新規に書く流れの代わりに、まず変換してください。
+If the user already has a diagram in Mermaid `flowchart`/`graph` notation (or the AI itself built a workflow in Mermaid), convert it first instead of writing the YAML from scratch as above.
 
 ```bash
 zook from-mermaid diagram.mmd -o diagram.yaml
 ```
 
-変換後のYAMLはこの時点で検証済みなので、そのままステップ6の`build`に進めます。対応記法・既知の制約は`docs-site/mermaid-import.md`を参照してください。`sequenceDiagram`など`flowchart`以外のMermaid図種別には対応していません。
+The converted YAML is already validated at this point, so you can go straight to step 6's `build`. See `docs-site/mermaid-import.md` for supported notation and known limitations. Mermaid diagram types other than `flowchart`/`graph`, such as `sequenceDiagram`, aren't supported.
 
-## 主要リファレンス
+## Key References
 
-| 知りたいこと | 参照先 |
+| What you want to know | Where to look |
 |---|---|
-| YAML の全フィールド仕様 | `docs/yaml-spec.md`(正本)、`docs-site/yaml-guide.md`(要点) |
-| アイコン・コンテナの語彙とレジストリの仕組み | `docs/icon-registry-and-vocabulary.md`、`docs-site/icons.md` |
-| 要件別のアーキテクチャパターン | `docs/patterns/README.md` |
-| 重なり・リンク経路 Warning の自動解消(`doctor`)の対象と使い方 | `docs-site/usage.md`(doctor節) |
-| 2つの図の構造差分(`diff`)。変更前後の差分レビューに使う | `docs-site/usage.md`(diff節) |
-| 既知の制約(自動レイアウトが解決しない重なり、GCP/Azureの制約など) | `docs-site/limitations.md` |
-| draw.io連携による継続的な図の管理 | `docs-site/drawio-sync.md` |
-| Mermaidフローチャートからの変換 | `docs-site/mermaid-import.md` |
-| pptx生成の内部設計(座標系・コネクタなど) | `docs-site/design-notes.md`、`docs/detailed-design-pptx.md` |
+| The full YAML field spec | `docs/yaml-spec.md` (authoritative), `docs-site/yaml-guide.md` (summary) |
+| The icon/container vocabulary and how the registry works | `docs/icon-registry-and-vocabulary.md`, `docs-site/icons.md` |
+| Architecture patterns by requirement | `docs/patterns/README.md` |
+| What `doctor` (auto-resolves overlap/link-routing Warnings) covers and how to use it | `docs-site/usage.md` (doctor section) |
+| Structural diff (`diff`) between two diagrams — for reviewing changes before/after | `docs-site/usage.md` (diff section) |
+| Known limitations (overlaps auto-layout doesn't resolve, GCP/Azure constraints, etc.) | `docs-site/limitations.md` |
+| Continuous diagram management via draw.io integration | `docs-site/drawio-sync.md` |
+| Converting from a Mermaid flowchart | `docs-site/mermaid-import.md` |
+| Internal design of pptx generation (coordinate system, connectors, etc.) | `docs-site/design-notes.md`, `docs/detailed-design-pptx.md` |
 
-## 変更作業をするとき
+## When Making Changes
 
-- `docs/zook.schema.json`/`docs/icon-registry.schema.json` を変更したら、`src/zook/schemas/` 配下の同名ファイルにも同じ内容をコピーしてください(パッケージが読み込むのはこちらのコピーで、2つは常にbyte-identicalである前提です)。
-- `docs/registry.<provider>.yaml` を変更したら、`src/zook/data/icons/<provider>/registry.<provider>.yaml` にも同様にコピーしてください。
-- 変更後は必ずテストを実行してください。
+- If you change `docs/zook.schema.json`/`docs/icon-registry.schema.json`, copy the same content into the identically-named file under `src/zook/schemas/` (that's the copy the package actually loads — the two are required to always be byte-identical).
+- If you change `docs/registry.<provider>.yaml`, copy it the same way into `src/zook/data/icons/<provider>/registry.<provider>.yaml`.
+- Always run the tests after making a change.
 
   ```bash
   .venv/bin/pytest tests/ -v
   ```
 
-- `docs/example.yaml`・`docs/example-cloud-actors.yaml`・`docs/patterns/*.yaml` は「Warningゼロ」を保つ前提の回帰対象です。変更が影響しうる場合は `zook validate` で確認してください。
+- `docs/example.yaml`, `docs/example-cloud-actors.yaml`, and `docs/patterns/*.yaml` are regression fixtures expected to stay at "zero warnings." If your change could affect them, check with `zook validate`.
