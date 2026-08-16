@@ -19,6 +19,7 @@ from .layout import (
     is_shape_node,
     iter_boxes,
     label_gap,
+    link_label_anchor,
     link_label_size,
     link_render_plan,
     node_label_font_size,
@@ -231,8 +232,8 @@ def _draw_link(draw: ImageDraw.ImageDraw, from_box: Box, to_box: Box, link, regi
 
     if link.label:
         font = _font(round(link.label_font_size))
-        p1, p2 = path[0], path[-1]
-        mx, my = _px((p1[0] + p2[0]) / 2), _px((p1[1] + p2[1]) / 2)
+        anchor_x, anchor_y = link_label_anchor(path)
+        mx, my = _px(anchor_x), _px(anchor_y)
         label_w, label_h = link_label_size(link.label_font_size)
         w, h = _px(label_w), _px(label_h)
         draw.rectangle([mx - w / 2, my - h / 2, mx + w / 2, my + h / 2], fill=LABEL_BG)

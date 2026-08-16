@@ -259,7 +259,21 @@
         },
         "toSide": {
           "enum": ["top", "bottom", "left", "right"],
-          "description": "Force the connector to enter `to` on this side. Same auto-completion rule as fromSide. Setting both to sides on different axes (e.g. fromSide: bottom with toSide: left) is a Fatal error - see sec9."
+          "description": "Force the connector to enter `to` on this side. Same auto-completion rule as fromSide. Setting both to sides on different axes (e.g. fromSide: bottom with toSide: left) is a Fatal error unless `waypoints` is set - see sec9."
+        },
+        "waypoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y"],
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"}
+            }
+          },
+          "description": "Explicit intermediate points (absolute canvas coordinates), in order, that the connector routes through as a straight polyline between `from` and `to`. Overrides `style` routing; use it to detour a link around an element it would otherwise cross. Each endpoint attaches on the side facing the nearest waypoint unless fromSide/toSide is set, and with waypoints the fromSide/toSide axis-match rule no longer applies."
         }
       }
     }
