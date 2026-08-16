@@ -1,133 +1,135 @@
-# YAML入力仕様
+# YAML Input Guide
 
-zook の入力 YAML は [`zook.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/zook.schema.json)(JSON Schema Draft 2020-12)で厳密に定義されています。本ページはその要点をまとめたものです。完全な仕様は [`docs/yaml-spec.md`](https://github.com/taka-sho/zook/blob/main/docs/yaml-spec.md) を参照してください。
+[🇯🇵 日本語版](/zook/ja/yaml-guide/){ .md-button }
 
-## トップレベル構造
+zook's input YAML is strictly defined by [`zook.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/zook.schema.json) (JSON Schema Draft 2020-12). This page summarizes the key points. See [`docs/yaml-spec.md`](https://github.com/taka-sho/zook/blob/main/docs/yaml-spec.md) for the complete spec.
+
+## Top-Level Structure
 
 ```yaml
-version: "1.0"        # 必須。固定値
-canvas: {...}          # 必須。スライド設定
-elements: [...]        # 必須。コンテナ/ノードの配列
-links: [...]            # 任意。接続線。省略すれば線なしの図
+version: "1.0"        # required. fixed value
+canvas: {...}          # required. slide settings
+elements: [...]        # required. array of containers/nodes
+links: [...]            # optional. connectors. omit for a lineless diagram
 ```
 
 ## canvas
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |---|---|---|
-| `aspectRatio` | ○ | `"16:9"` または `"4:3"` |
-| `padding` | | スライド端と最上位要素の余白(既定 40) |
-| `background` | | 背景色 `#RRGGBB` |
-| `overlapMargin` | | 重なり検知で各要素の周囲に追加するバッファ(論理単位、既定 0)。0 は文字通りの重なりのみ検知、大きくすると近接している要素・リンク経路も検知対象になる |
+| `aspectRatio` | Yes | `"16:9"` or `"4:3"` |
+| `padding` | | margin between the slide edge and top-level elements (default 40) |
+| `background` | | background color `#RRGGBB` |
+| `overlapMargin` | | buffer (logical units, default 0) added around each element for overlap detection. `0` detects literal overlaps only; a larger value also flags elements/link paths that are merely close together |
 
-論理座標系は `16:9` で 1280×720、`4:3` で 960×720。原点は左上、+x が右、+y が下です。
+The logical coordinate system is 1280×720 for `16:9` and 960×720 for `4:3`. Origin is top-left, +x is right, +y is down.
 
-## 要素(`elements` / `children`)
+## Elements (`elements` / `children`)
 
-`kind` で2種類に判別されます。
+Distinguished into two kinds via `kind`.
 
-### container(枠:VPC / AZ / subnet など)
+### container (a frame: VPC / AZ / subnet, etc.)
 
 ```yaml
 - kind: container
-  id: vpc-main          # 図全体で一意
-  type: vpc               # 自由文字列。cloud/vpc/az/subnet/region/account/group など
-  provider: aws            # 既定 generic
+  id: vpc-main          # unique across the whole diagram
+  type: vpc               # a free-form string. cloud/vpc/az/subnet/region/account/group, etc.
+  provider: aws            # default generic
   label: "Production VPC"
   style:
-    labelFontSize: 10       # 枠自身のラベル文字サイズ(pt、既定10)
-    borderColor: "#8C4FFF"   # 任意。省略時はアイコンレジストリのgroups.<type>の既定色
-    fillColor: "#F5F0FF"      # 任意。省略時は塗りなし(レジストリ側の既定に従う)
-    borderWidth: 2             # 任意。省略時は既定1
-  layout:                  # 子の自動配置ルール(下記参照)
+    labelFontSize: 10       # the frame's own label font size (pt, default 10)
+    borderColor: "#8C4FFF"   # optional. defaults to the icon registry's groups.<type> default color
+    fillColor: "#F5F0FF"      # optional. defaults to no fill (follows the registry's default)
+    borderWidth: 2             # optional. defaults to 1
+  layout:                  # auto-placement rule for children (see below)
     direction: horizontal
     gap: 48
-  children: [...]           # 入れ子(再帰)
+  children: [...]           # nested (recursive)
 ```
 
-`style.labelFontSize` を大きくすると、自動レイアウトがそのラベル用に確保する上下スペースも比例して広がります。`borderColor`/`fillColor`/`borderWidth` は、個別のコンテナだけアイコンレジストリの既定スタイル([アイコン・レジストリ](icons.md)参照)から色・線幅を変えたい場合に指定します。
+Increasing `style.labelFontSize` also proportionally expands the top/bottom space auto-layout reserves for that label. Set `borderColor`/`fillColor`/`borderWidth` when you want to change color/line-width for one specific container away from the icon registry's default style (see [Icon Registry](icons.md)).
 
-### node(アイコン:EC2 / Lambda / RDS / S3 など)
+### node (an icon: EC2 / Lambda / RDS / S3, etc.)
 
 ```yaml
 - kind: node
   id: web
-  type: EC2                # アイコン解決キー。詳細は「アイコン・レジストリ」参照
+  type: EC2                # the icon-resolution key. See "Icon Registry" for details
   label: "WebServer"
-  size: 64                  # アイコンの幅・高さを同時に指定するショートハンド(論理単位)
+  size: 64                  # shorthand for setting the icon's width and height together (logical units)
   style:
-    labelPosition: below    # below(既定) / above / right / none
-    labelGap: 4              # アイコンとラベルの間隔(論理単位、既定4)
-    labelFontSize: 9          # ラベル文字サイズ(pt、既定9)
+    labelPosition: below    # below (default) / above / right / none
+    labelGap: 4              # spacing between the icon and its label (logical units, default 4)
+    labelFontSize: 9          # label font size (pt, default 9)
 ```
 
-`labelGap` を大きくすると、狭いレイアウトでラベル同士やリンクのラベルとの重なりを避けやすくなります(重なりは[既知の制約](limitations.md)にある通り警告されますが、自動では回避されません)。`labelFontSize` を大きくすると、自動レイアウトがラベル用に確保するフットプリント(高さ)も比例して広がります。
+Increasing `labelGap` makes it easier to avoid label-vs-label or label-vs-link-label overlaps in tight layouts (overlaps are flagged as warnings per [Known Limitations](limitations.md), but not auto-avoided). Increasing `labelFontSize` also proportionally expands the footprint (height) auto-layout reserves for the label.
 
-### node(プレーン図形:アイコンの代わりに図形+内部ラベル)
+### node (plain shape: a shape + inline label instead of an icon)
 
 ```yaml
 - kind: node
   id: step1
-  type: step1               # shape指定時は実質未使用(何でもよい)
-  label: "処理A"
+  type: step1               # effectively unused when shape is set (any value works)
+  label: "Step A"
   style:
     shape: rounded            # rect / rounded / diamond / circle
     fillColor: "#D4E6FF"
     borderColor: "#2255AA"
 ```
 
-`style.shape` を指定すると、アイコンではなく図形(四角/角丸/ひし形/円)を描き、その内部にラベルを中央揃えで表示します。[Mermaidフローチャートのインポート](mermaid-import.md)が内部的に使っている機能ですが、手書きのYAMLでも使えます。`labelPosition`/`labelGap` はこのモードでは効果がありません(ラベルは常に図形中央)。
+Setting `style.shape` draws a shape (rectangle/rounded-rectangle/diamond/circle) instead of an icon, with the label centered inside it. This is what [Mermaid Flowchart Import](mermaid-import.md) uses internally, but you can use it directly in hand-written YAML too. `labelPosition`/`labelGap` have no effect in this mode (the label always sits centered in the shape).
 
-## 座標とサイズ
+## Position & Size
 
-- `x`/`y` を指定 → 親コンテナ内での絶対配置(左上原点からの相対座標)。**両方セットで指定**(片方だけはスキーマエラー)。
-- `x`/`y` を省略 → 親の `layout` に従って自動配置。
-- 同一コンテナ内で座標指定の子と自動配置の子は混在可能。
-- `width`/`height` 省略時:コンテナは子に合わせて自動サイズ、ノードは `size`(指定があれば)、それも無ければ既定アイコンサイズ。
-- ノードの `size` は `width`/`height` を同時に設定するショートハンドです。軸ごとに `width`/`height` を明示すればそちらが優先され、`size` はその軸で無視されます。
+- `x`/`y` specified → absolute placement within the parent container (coordinates relative to its top-left origin). **Must be set together** (only one is a schema error).
+- `x`/`y` omitted → auto-placed according to the parent's `layout`.
+- Explicitly-positioned and auto-placed children can be mixed within the same container.
+- `width`/`height` omitted: a container auto-sizes to fit its children; a node uses `size` (if given), falling back to a default icon size.
+- A node's `size` is shorthand for setting `width`/`height` together. Explicitly setting `width`/`height` per axis wins on that axis, with `size` ignored there.
 
-## 自動レイアウト(`layout`)
+## Auto-Layout (`layout`)
 
-`x`/`y` を持たない子に適用されます。
+Applies to children with no `x`/`y`.
 
-| フィールド | 既定 | 説明 |
+| Field | Default | Description |
 |---|---|---|
 | `direction` | `grid` | `horizontal` / `vertical` / `grid` |
-| `columns` | 自動 | grid の列数 |
-| `gap` | 24 | 子どうしの間隔 |
-| `padding` | 32 | コンテナ内側の余白 |
+| `columns` | auto | number of grid columns |
+| `gap` | 24 | spacing between children |
+| `padding` | 32 | inner padding of the container |
 
-!!! note "v1の制約"
-    自動配置は既に座標指定された子を避けずに詰める第一版仕様です。重なりが生じた場合は zook が Warning として検出しますが、自動では回避しません。PowerPoint 上で手直ししてください(詳細は[既知の制約](limitations.md))。
+!!! note "v1 limitation"
+    In v1, auto-placement packs without avoiding children that already have explicit coordinates. If an overlap results, zook detects it as a Warning but doesn't auto-avoid it — fix it up by hand in PowerPoint (see [Known Limitations](limitations.md)).
 
-## links(接続線)
+## links (connectors)
 
 ```yaml
 links:
   - from: web
     to: db
-    label: "3306"       # 任意
-    labelFontSize: 8      # ラベル文字サイズ(pt、既定8)。label が無ければ無効
-    arrow: end            # end(既定) / both / none
-    style: straight        # straight(既定) / elbow / curved
-    fromSide: bottom       # 任意。接続辺を明示指定(top/bottom/left/right)
-    toSide: top             # 任意。省略時は自動選択
-    waypoints:              # 任意。経路が通る中間点(キャンバス絶対座標)
+    label: "3306"       # optional
+    labelFontSize: 8      # label font size (pt, default 8). no effect without label
+    arrow: end            # end (default) / both / none
+    style: straight        # straight (default) / elbow / curved
+    fromSide: bottom       # optional. force the connection side (top/bottom/left/right)
+    toSide: top             # optional. auto-selected if omitted
+    waypoints:              # optional. intermediate points the path threads through (absolute canvas coords)
       - {x: 470, y: 150}
       - {x: 470, y: 360}
 ```
 
-- `from`/`to` はノードでもコンテナでも参照可能。存在しない `id` を参照すると Fatal エラーになります。
-- `links` を丸ごと省略すれば「線なし、エリア内に配置するだけ」の図になります。
-- `style` は `straight`/`elbow`/`curved` を明示的に選べます。`style` を省略(既定 `straight`)した場合でも、接続点同士が水平・垂直どちらでもない(斜め)ときは自動的に `elbow`(直角の折れ線)で描画されます。斜めの直線は AWS 構成図の直交ルーティングの慣習に合わないためです。`elbow`/`curved` を明示指定すればこの自動変換は行われません。
-- `fromSide`/`toSide` で接続する辺を指定できます。
-    - 両方指定する場合、軸(`top`/`bottom`は垂直、`left`/`right`は水平)が矛盾する組み合わせ(例: `fromSide: bottom` + `toSide: left`)は Fatal エラーになります。
-    - 片方だけ指定した場合、その軸を維持したままもう片方は自動選択されます。
-    - 両方省略した場合は自動選択です。単純な位置関係(dx/dyの大小)だけでなく、ラベル回避のオフセットまで含めた実際の経路長を比較し、支配的な軸の経路が明らかに(20%以上)長くなる場合のみ逆の軸に切り替えます。単なる僅差では切り替わらないため、直感に反する不安定な選択を避けています。
-- `waypoints` で経路が通る中間点を明示できます。指定した点を順に通る直線折れ線として描画され(`style` の自動取り回しは無効)、障害物の迂回や任意のL字経路に使えます。両端は各中間点の向いている辺に自動接続されます(`fromSide`/`toSide` があればそちらが優先)。中間点を明示するため、`fromSide`/`toSide` の軸一致ルールは `waypoints` 併用時には適用されません。座標はキャンバス絶対座標です(要素の `x`/`y` はローカル座標ですが、リンクはどのコンテナにも属さないため絶対座標で指定します)。
-- ノードの `labelPosition: below`/`above` でラベルが付いている場合、そのラベルと同じ辺(below→下方向、above→上方向)から出るリンクは、ラベルを避けてその外側に接続されます。左右方向の接続はラベル位置の影響を受けません。
+- `from`/`to` can reference either a node or a container. Referencing a nonexistent `id` is a Fatal error.
+- Omitting `links` entirely produces "no lines, elements just placed in an area."
+- `style` can explicitly be `straight`/`elbow`/`curved`. Even when `style` is omitted (default `straight`), a connection whose points aren't aligned horizontally or vertically (diagonal) is automatically drawn as `elbow` (a right-angle bend) instead, since a plain diagonal line doesn't match the orthogonal-routing convention of AWS-style architecture diagrams. Setting `elbow`/`curved` explicitly disables this auto-conversion.
+- `fromSide`/`toSide` let you specify the connection side.
+    - When both are set, a mismatched axis (`top`/`bottom` is vertical, `left`/`right` is horizontal — e.g. `fromSide: bottom` + `toSide: left`) is a Fatal error.
+    - When only one is set, that side fixes the axis, and the other is auto-selected.
+    - When both are omitted, it's fully automatic: rather than just the simple relative position (which of dx/dy is larger), the actual routed path length is compared (including label-avoidance offsets), switching to the other axis only when the dominant axis's path is clearly (20%+) longer. A near-tie never triggers a switch, avoiding an unstable, unintuitive choice.
+- `waypoints` lets you make the routing explicit with intermediate points the path passes through. It's drawn as a straight polyline through the given points in order (disabling `style`'s automatic routing), useful for detouring around an obstacle or drawing an arbitrary L-shaped path. Each end auto-attaches to whichever side faces its nearest waypoint (a `fromSide`/`toSide` you set takes priority). Since the intermediate points make the routing explicit, the `fromSide`/`toSide` axis-match rule doesn't apply when `waypoints` is used. Coordinates are absolute canvas coordinates (unlike an element's `x`/`y`, which are local — a link belongs to no container, so it's given in absolute coordinates).
+- If a node has a label via `labelPosition: below`/`above`, a link leaving from that same side (below→downward, above→upward) attaches outside the label, avoiding it. Left/right connections are unaffected by label position.
 
-## 完全な例
+## A Complete Example
 
 ```yaml
 version: "1.0"
@@ -204,4 +206,4 @@ links:
     arrow: none
 ```
 
-このサンプルは [`docs/example.yaml`](https://github.com/taka-sho/zook/blob/main/docs/example.yaml) としてリポジトリに同梱されており、JSON Schema 検証済みです。
+This sample is bundled with the repository as [`docs/example.yaml`](https://github.com/taka-sho/zook/blob/main/docs/example.yaml), and is validated against the JSON Schema.

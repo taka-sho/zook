@@ -1,15 +1,15 @@
-# Installation
+# インストール
 
-[🇯🇵 日本語版](/zook/ja/installation/){ .md-button }
+[🇬🇧 English](/zook/installation/){ .md-button }
 
-## Requirements
+## 必要環境
 
-- Python 3.10 or later
-- (Recommended) a pptx viewer such as LibreOffice, if you want to check icon rasterization quality
+- Python 3.10 以上
+- (推奨)アイコンのラスタライズ品質を確認したい場合は LibreOffice などの pptx ビューア
 
-## Setup
+## セットアップ
 
-Clone the repository, create a virtual environment, and install.
+リポジトリを clone し、仮想環境を作成してインストールします。
 
 ```bash
 git clone https://github.com/taka-sho/zook.git
@@ -19,7 +19,7 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-The `zook` command is now available.
+`zook` コマンドが使えるようになります。
 
 ```bash
 .venv/bin/zook --help
@@ -36,29 +36,26 @@ Options:
 
 Commands:
   build          Generate a .pptx from INPUT_PATH.
-  diff           Show the structural difference between two diagrams...
-  doctor         Auto-resolve overlaps and link-routing collisions in...
   export-drawio  Export INPUT_PATH as a .drawio file for manual editing...
-  from-mermaid   Convert a Mermaid flowchart (INPUT_PATH, e.g. ...
   icons          Inspect the icon/group registry.
   preview        Render a quick PNG preview of INPUT_PATH (no...
   sync           Sync position/size changes made in an edited DRAWIO_PATH...
   validate       Check INPUT_PATH for Fatal/Warning issues without...
 ```
 
-See [Usage](usage.md) for details on each subcommand.
+各サブコマンドの詳細は[使い方](usage.md)を参照してください。
 
-## Verifying It Works
+## 動作確認
 
-Confirm you can generate a pptx from the bundled sample YAML (`docs/example.yaml`).
+同梱のサンプル YAML(`docs/example.yaml`)から pptx を生成できることを確認してください。
 
 ```bash
 .venv/bin/zook build docs/example.yaml -o example.pptx
 ```
 
-Success looks like `Wrote example.pptx` printed, with exit code `0`.
+`Wrote example.pptx` と表示され、終了コード `0` であれば成功です。
 
-## Running the Tests
+## テストの実行
 
 ```bash
 .venv/bin/pytest tests/ -v

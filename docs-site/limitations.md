@@ -1,54 +1,56 @@
-# 既知の制約(v1)
+# Known Limitations (v1)
 
-zook は「PowerPoint 手編集の起点として十分な図」を目標としており、完全自動の美麗レイアウトは目指していません。v1 時点での既知の制約は以下の通りです。
+[🇯🇵 日本語版](/zook/ja/limitations/){ .md-button }
 
-## 重なりは一部のみ自動回避、残りは検出のみ
+zook targets "a diagram that's good enough as a starting point for hand-editing in PowerPoint," not a fully automatic, polished layout. The known limitations as of v1 are as follows.
 
-座標未指定(自動配置)の要素が、既に座標指定された兄弟要素と重なる場合は、自動配置の要素の側だけがずらされます(明示座標の要素は著者の意図として一切動かしません)。この自動回避は単純な「真下に押し出す」処理なので、複雑な配置ではそれでも重なりが解消しないことがあります。それ以外の重なりは自動修正されず、生成後、計算済みの座標から次の重なりを機械的に検出して Warning を出すのみです。
+## Only Some Overlaps Are Auto-Avoided; the Rest Are Detection Only
 
-- 兄弟要素同士の矩形の重なり(親子関係にある要素同士は対象外。ただしコンテナ自身のラベル文字の領域だけは例外で、直接の子要素との重なりを個別にチェックします)
-- リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている場合(コンテナのラベルとの重なりは、祖先コンテナであっても除外されません)
+When an element with no coordinates (auto-placed) overlaps an already-positioned sibling, only the auto-placed element is shifted (an explicitly-positioned element is never moved — it's treated as the author's intent). This auto-avoidance is a simple "push straight down" operation, so it can still fail to resolve an overlap in a complex layout. Every other overlap isn't auto-corrected — after generation, the computed coordinates are mechanically checked for the next overlap, and a Warning is emitted.
 
-要素とリンクラベルの重なりは、リンクの経路自体がその要素を横切っていなくても(ラベルの表示位置だけが重なっている場合でも)検出対象です。一方で、兄弟関係にない要素同士(親コンテナが異なる要素同士)の重なりはチェック対象外です。いずれも生成後に PowerPoint 上で位置調整することを前提としています。
+- Rectangle overlaps between sibling elements (parent/child pairs are excluded — except that a container's own label-text area is checked individually against its direct children)
+- A link's (arrow's) path, or its own label, overlapping an unrelated element, another link's label, or a container's label (overlap with a container's label is never excluded, even for an ancestor container)
 
-なお、これらの多くは `zook doctor` で自動解消できます([使い方](usage.md)の doctor 節参照)。**兄弟要素どうし・要素とコンテナ見出しの重なり**は要素をずらして解消し、**リンクのノード貫通・リンクラベルの衝突**は接続辺(fromSide/toSide)の割り当てで解消を試みます。接続辺では迂回できない貫通は、経路上の**障害物要素(自動配置のもの)を経路と垂直方向にどかして**解消し、障害物が著者指定で動かせない場合は**リンク側に経由点(waypoints)を挿入して迂回**させます(いずれも悪化しない範囲でのみ変更)。それでも直せないケース(例: 障害物も両端も著者指定で、接続辺も固定されている場合)は `remaining` として報告されるだけなので、生成後の手直しが必要です。
+An element-vs-link-label overlap is checked for even when the link's path itself doesn't cross that element (i.e. even when only the label's displayed position overlaps). On the other hand, overlaps between elements that aren't siblings (different parent containers) aren't checked. Both are meant to be fixed up by hand in PowerPoint after generation.
 
-`canvas.overlapMargin` を設定すると、文字通りの重なりだけでなく「近すぎる」状態も検知できます([YAML入力仕様](yaml-guide.md)参照)。
+Much of this can actually be auto-resolved with `zook doctor` (see the doctor section in [Usage](usage.md)). **Sibling-vs-sibling and element-vs-container-label overlaps** are resolved by nudging elements apart; **a link running through a node, and link-label collisions** are attempted by assigning connection sides (fromSide/toSide). A path that can't be routed around via connection sides is resolved by pushing the **obstacle (if auto-placed) perpendicular to the path**, and if the obstacle is author-positioned and can't be moved, by **inserting waypoints into the link to detour around it** (both only ever apply a change that doesn't make things worse). A case that still can't be fixed (e.g. the obstacle and both endpoints are all author-positioned, with the connection sides fixed too) is simply reported under `remaining`, requiring a manual fix after generation.
 
-## Z ルートの見かけ上の直接接続(false edge aliasing)は検出のみ
+Setting `canvas.overlapMargin` extends detection beyond literal overlaps to "too close" as well (see the [YAML Input Guide](yaml-guide.md)).
 
-2本の別々のリンクが共通のノードの同じ接続点(例:コンテナの上端中央)を経由すると、それぞれの Z ルート(`elbow`)の線分が同一直線上で連続し、あたかも無関係な2要素が直接つながっているように見えることがあります(典型例:ノードA→コンテナX、コンテナX→ノードB の2本が、どちらもコンテナXの同じ辺の中央点を選んだ場合)。zook はこれを機械的に検出して Warning を出します。`zook doctor` はこの Warning に対し、片方のリンクの接続辺(fromSide/toSide)を割り当てて重なりを崩すことを試みます([使い方](usage.md)の doctor 節)。ただし両端の位置関係によっては接続辺の変更だけでは崩せないこともあり、その場合は `remaining` として報告されるだけなので、該当リンクの `from`/`to` を見直すか PowerPoint 上で手直ししてください。
+## Apparent Direct Connections From Z-Route Aliasing Are Detection Only
 
-## 接続辺は上下ペア・左右ペアの組み合わせのみ
+When two separate links pass through the same connection point of a shared node (e.g. a container's top-center), their Z-route (`elbow`) segments can end up collinear and continuous, making two unrelated elements look directly connected (the typical case: node A→container X and container X→node B both happen to pick the same side of X's center point). zook mechanically detects this and emits a Warning. `zook doctor` attempts to break this alignment by assigning a connection side (fromSide/toSide) to one of the links (see the doctor section in [Usage](usage.md)). Depending on the endpoints' relative positions, though, a connection-side change alone can't always break it — in that case it's simply reported under `remaining`, so revisit the link's `from`/`to` or fix it up by hand in PowerPoint.
 
-`link.fromSide`/`toSide` で接続辺を指定する場合、`top`/`bottom`(垂直)どうし、または `left`/`right`(水平)どうしの組み合わせのみサポートしています。軸をまたぐ組み合わせ(例: `fromSide: bottom` + `toSide: left`)はFatalエラーになります。これは `elbow` の経路生成(`bentConnector3`)が両端とも同じ軸から出入りする前提で実装されているためで、任意の辺の組み合わせ(1屈曲のL字経路)には対応していません。
+## Connection Sides Only Support a Top/Bottom Pair or a Left/Right Pair
 
-任意の経路が必要な場合(障害物を迂回させたい、L字に曲げたい等)は、`link.waypoints` で中間点を明示してください([YAML入力仕様](yaml-guide.md))。中間点を通る直線折れ線として描画され、この軸一致ルールは適用されません。
+When specifying connection sides via `link.fromSide`/`toSide`, only a `top`/`bottom` (vertical) pair or a `left`/`right` (horizontal) pair is supported. A cross-axis combination (e.g. `fromSide: bottom` + `toSide: left`) is a Fatal error. This is because `elbow`'s path generation (`bentConnector3`) is implemented assuming both ends exit/enter on the same axis — an arbitrary combination of sides (a single-bend L-shaped path) isn't supported.
 
-## リンク経路検知は curved のみ直線近似
+When you need an arbitrary path (to detour around an obstacle, bend into an L-shape, etc.), make the intermediate points explicit with `link.waypoints` instead (see the [YAML Input Guide](yaml-guide.md)). It's drawn as a straight polyline through those points, and this axis-match rule doesn't apply there.
 
-リンク経路の重なり検知は、実際に描画される経路をもとに判定します。`style: straight`・`elbow` はどちらも実際の描画結果(`elbow` は python-pptx の `bentConnector3` プリセットが描く2屈曲のZ字経路)と完全に一致しますが、`curved`(曲線)のみベジェ曲線の実際の膨らみまでは再現しておらず、直線で近似した参考値になります。
+## Link-Path Detection Only Approximates `curved` as a Straight Line
 
-## コネクタは矩形図形限定
+Link-path overlap detection is based on the path as it's actually rendered. `style: straight` and `elbow` both match the actual rendered result exactly (`elbow` is the two-bend Z-shaped path drawn by python-pptx's `bentConnector3` preset), but `curved` (a bezier curve) doesn't reproduce the curve's actual bulge — it's a straight-line approximation, for reference only.
 
-接続対象(アイコン画像・コンテナ枠)はすべて矩形として扱われます。python-pptx のコネクタ実装自体が矩形以外では安定動作を保証していないためです。
+## Connectors Are Limited to Rectangular Shapes
 
-## コネクタラベルは移動に追従しない
+Every connection target (icon image, container frame) is treated as a rectangle, since python-pptx's own connector implementation doesn't guarantee stable behavior for anything else.
 
-OOXML スキーマ上の制約により、リンクラベルは独立したテキストボックスとして中点に配置されます。生成後に図形を大きく動かした場合、ラベル位置は追従しません(詳細は[内部設計メモ](design-notes.md#connector-labels))。
+## Connector Labels Don't Follow Movement
 
-## アイコンはプレースホルダー
+Due to a constraint in the OOXML schema, a link's label is placed as an independent textbox at its midpoint. If you move shapes significantly after generation, the label's position won't follow (see [Design Notes](design-notes.md#connector-labels) for details).
 
-同梱のアイコン画像(AWS/GCP/Azure いずれも)は各社の公式アイコンではなく、自作のプレースホルダーです。実運用では [アイコン・レジストリ](icons.md#icon-assets) の説明に従い、公式アセットに差し替えることを想定しています。
+## Icons Are Placeholders
 
-## draw.ioの公式アイコン表示はAWSのみ
+The bundled icon images (for AWS, GCP, and Azure alike) aren't each vendor's official icons — they're self-made placeholders. Real-world use is expected to swap in official assets, following the instructions in [Icon Registry](icons.md#icon-assets).
 
-`zook export-drawio` は、draw.io公式のAWS4シェイプライブラリにマッピング済みのAWSアイコン・コンテナについては公式の見た目で書き出します。GCP/Azureのアイコン・コンテナは現時点でこのマッピングが無く、zook自身のプレースホルダーPNGを埋め込む形にフォールバックします(仕組み自体は3プロバイダ共通なので、対応表を追加すれば拡張可能。詳細は[内部設計メモ](design-notes.md)、経緯は`docs/detailed-design-pptx.md` §8.14参照)。
+## Official draw.io Icon Display Is AWS-Only
 
-## マルチクラウドの語彙は Tier-1 のみ
+`zook export-drawio` writes out AWS icons/containers already mapped to draw.io's official AWS4 shape library with the official look. GCP/Azure icons/containers currently have no such mapping and fall back to embedding zook's own placeholder PNGs (the mechanism itself is shared across all three providers, so this is extensible by adding a mapping table — see [Design Notes](design-notes.md) for details and `docs/detailed-design-pptx.md` §8.14 for the background).
 
-AWS/GCP/Azure の組み込みレジストリは、それぞれ実務でよく使う十数〜二十数サービスに絞った Tier-1 語彙です(`zook icons list` で確認可能)。それ以外のサービスは、`--registry` でユーザー独自のレジストリに追記して使う想定です。コンテナの `groups`(vpc/az/subnet など)は各プロバイダのレジストリに未定義のものを AWS レジストリにフォールバックしますが、クラウド境界(`cloud`)のようにプロバイダ固有の見た目を持つものは各プロバイダのレジストリで個別に定義しています。
+## Multi-Cloud Vocabulary Is Tier-1 Only
 
-## 大量バッチ生成は想定外
+The built-in AWS/GCP/Azure registries are each a Tier-1 vocabulary limited to the dozen-or-so to twenty-some services commonly used in practice (check with `zook icons list`). Anything beyond that is expected to be appended to your own registry via `--registry`. A container's `groups` (vpc/az/subnet, etc.) fall back to the AWS registry when undefined in a given provider's own registry, but things meant to look provider-specific — like the cloud boundary (`cloud`) — are defined individually in each provider's registry.
 
-1回の実行で数十枚以上のスライドを生成するような用途は想定していません(1 YAML = 1 スライド、週1〜月2回程度の利用を想定)。
+## Large-Scale Batch Generation Isn't a Target Use Case
+
+Generating dozens or more slides in a single run isn't a target use case (1 YAML = 1 slide, with usage expected roughly weekly to a couple of times a month).

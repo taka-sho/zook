@@ -28,7 +28,12 @@ jobs:
         with:
           python-version: "3.x"
       - run: pip install zensical
-      - run: zensical build --clean
+      # English (docs-site/) is the primary site, built to site/. Japanese
+      # (docs-site-ja/) is a completely separate docs tree, built into site/ja/
+      # via its own config (site_dir differs, so this doesn't clobber the
+      # English build) - see docs-site/index.md's language-switcher link.
+      - run: zensical build --clean --strict -f zensical.toml
+      - run: zensical build --clean --strict -f zensical.ja.toml
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site

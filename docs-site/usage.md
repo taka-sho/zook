@@ -1,64 +1,66 @@
-# 使い方
+# Usage
 
-zook は `build`/`validate`/`doctor`/`diff`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid` の9つのサブコマンドを持ちます。
+[🇯🇵 日本語版](/zook/ja/usage/){ .md-button }
+
+zook has nine subcommands: `build`/`validate`/`doctor`/`diff`/`icons`/`preview`/`export-drawio`/`sync`/`from-mermaid`.
 
 ```bash
 zook --help
 ```
 
-## build — PowerPoint を生成する
+## build — Generate a PowerPoint
 
 ```bash
 zook build <input.yaml> -o <output.pptx>
 ```
 
-- `input.yaml` — [YAML入力仕様](yaml-guide.md)に従った構成定義ファイル
-- `-o, --output` — 出力する `.pptx` のパス(必須)
-- `--registry` — 独自レジストリで組み込みレジストリを上書き([アイコン・レジストリ](icons.md)参照)
-- `--strict` — Warning が1件でもあれば非ゼロ終了する(既定では Fatal のときのみ非ゼロ終了)
-- `--format {text,json,github}` — 出力形式(後述)
+- `input.yaml` — a diagram definition file following the [YAML Input Guide](yaml-guide.md)
+- `-o, --output` — the output `.pptx` path (required)
+- `--registry` — override the built-in registries with your own (see [Icon Registry](icons.md))
+- `--strict` — exit non-zero if there's even one Warning (default: non-zero only on Fatal)
+- `--format {text,json,github}` — output format (below)
 
-## validate — レンダリングせずに検証だけ行う
+## validate — Check Without Rendering
 
-`build` から実際の pptx 生成(python-pptx 呼び出し)を除いたものです。スキーマ検証・意味検証・重なり検知はすべて行われるため、LLM が生成した YAML を素早く検証するループに向いています。
+Everything `build` does minus the actual pptx generation (the python-pptx call). Schema validation, semantic validation, and overlap detection all run, making this well-suited to a fast loop for checking LLM-generated YAML.
 
 ```bash
 zook validate diagram.yaml
-zook validate diagram.yaml --strict          # Warningも失敗扱いにする
-zook validate diagram.yaml --format json      # CI向けの機械可読出力
+zook validate diagram.yaml --strict          # treat Warnings as failures too
+zook validate diagram.yaml --format json      # machine-readable output for CI
 ```
 
-## doctor — 重なり・リンク経路の衝突を自動で解消する
+## doctor — Auto-Resolve Overlaps and Link-Routing Collisions
 
-`validate` は「兄弟要素どうしの重なり」「リンクがノードを貫通している」といった問題を**検出するだけ**で、修正は書き手に委ねられます(座標や接続辺の手直し)。`doctor` はこの検出止まりを一歩進め、同じ座標計算をもとに衝突を実際に解消して結果を提示します(`-o`/`--fix` でそのまま YAML に書き戻します)。生成AIが最も苦手とする「ピクセル単位の座標調整・接続辺の試行錯誤」をツール側が肩代わりする位置づけです。
+`validate` **only detects** problems like "sibling elements overlap" or "a link runs through a node" — fixing them (adjusting coordinates or connection sides) is left to the author. `doctor` takes that a step further: using the same geometry `validate` computes, it actually resolves the collision and shows you the result (write it straight back into the YAML with `-o`/`--fix`). The idea is that the tool handles the "pixel-level coordinate adjustment and connection-side trial-and-error" that a generative AI is worst at.
 
 ```bash
-zook doctor diagram.yaml                       # ドライラン: 提案する変更を表示するだけ
-zook doctor diagram.yaml -o fixed.yaml          # 解消した YAML を別ファイルに書き出す
-zook doctor diagram.yaml --fix                  # 元ファイルを直接書き換える(-o 指定時は無視)
-zook doctor diagram.yaml --format json          # 機械可読出力(moves/linkChanges/remaining など)
+zook doctor diagram.yaml                       # dry run: just shows the proposed changes
+zook doctor diagram.yaml -o fixed.yaml          # write the resolved YAML to a new file
+zook doctor diagram.yaml --fix                  # rewrite the original file in place (ignored if -o is given)
+zook doctor diagram.yaml --format json          # machine-readable output (moves/linkChanges/remaining, etc.)
 ```
 
-`doctor` は次の4段階で解消します(あとの段階ほど前段の結果に依存するため、この順序です)。
+`doctor` resolves things in four stages (in this order, since each later stage depends on the earlier ones' results):
 
-1. **要素の重なり(座標調整)。** `validate` が報告する**兄弟要素どうし・要素とコンテナ見出しの重なり**を、要素をずらして解消します。壊れたコンテナの直下要素に明示座標(x/y)を与えて分離するため、結果の YAML は解消後の配置がそのまま再現されます。
-2. **リンク経路(接続辺の割り当て)。** リンクは自前の座標を持たず、経路は両端の位置(この時点で確定済み)と接続辺から決まります。そこで**リンクのノード貫通・見かけ上の直接接続(false edge aliasing)・リンクラベルの衝突**を、`fromSide`/`toSide` を割り当てて解消します。割り当て候補ごとに実際の警告数を数え、**厳密に減るときだけ**採用するので、経路が悪化することはありません。
-3. **障害物の退避(座標調整)。** 接続辺を変えても迂回できない貫通(経路がノードを突き抜ける)は、経路を動かせないので**障害物側の要素を経路と垂直方向にどかして**解消します。動かすのは自動配置の要素だけで、移動を実際に適用→段階1・2を再実行→総警告数が**厳密に減ったときだけ**採用し、そうでなければ完全に巻き戻します(この段階でも図が悪化することはありません)。
-4. **リンクの迂回(経由点の挿入)。** 障害物が著者指定で動かせない場合は、代わりに**リンク側に経由点(`waypoints`)を挿入して障害物の外側へ迂回**させます。障害物の外接矩形を回る経由点を実際に入れて→総警告数が**厳密に減ったときだけ**採用し、そうでなければ巻き戻します。著者が経路(経由点や接続辺)を明示したリンクは意図とみなし、この迂回の対象にしません。
+1. **Element overlaps (coordinate adjustment).** Resolves the **sibling-vs-sibling and element-vs-container-label overlaps** `validate` reports, by nudging elements apart. It gives direct children of a broken container explicit coordinates (x/y), so the resulting YAML reproduces the resolved layout exactly.
+2. **Link routing (connection-side assignment).** A link has no coordinates of its own — its path is determined by both endpoints' positions (settled by this point) and its connection sides. So **a link running through a node, an apparent direct connection (false edge aliasing), and link-label collisions** are resolved by assigning `fromSide`/`toSide`. Each candidate assignment is checked against the actual warning count, and only kept if it **strictly decreases** — so the routing can never get worse.
+3. **Displacing an obstacle (coordinate adjustment).** A path that still runs through a node even after trying every connection side can't be moved, so instead **the obstacle is pushed perpendicular to the path**. Only auto-placed elements are moved — the move is actually applied, stages 1–2 are re-run, and it's kept only if the **total warning count strictly decreases**; otherwise it's fully rolled back (so this stage, too, can never make things worse).
+4. **Detouring the link (inserting waypoints).** If the obstacle is author-positioned and can't be moved, instead **detour waypoints are inserted into the link** to route it around the obstacle. Waypoints that go around the obstacle's bounding box are actually inserted, and kept only if the **total warning count strictly decreases**; otherwise rolled back. A link whose routing (waypoints or connection sides) the author already specified is treated as intentional and is never a target for this.
 
-- 既定は**ドライラン**で、提案する変更を表示するだけです(AGENTS.md の「まず提案し、合意を得てから作る」方針に合わせています)。`-o` か `--fix` を付けたときだけファイルに書き込みます。既存のコメント・キー順序は保持されます([draw.io連携](drawio-sync.md)の `sync` と同じ ruamel ラウンドトリップ)。
-- 著者が明示した位置(x/y)・接続辺(fromSide/toSide)・経由点(waypoints)は意図とみなし、上書きしません。移動対象は「著者が明示配置した要素より自動配置の要素を優先」、障害物の退避も**自動配置の要素だけ**、リンクの接続辺割り当て・迂回は「著者が経路を明示していないリンクだけ」を対象にします。
-- どの段階でも直せない衝突(例: 障害物も両端も著者指定で、接続辺も固定されている場合)は `remaining` として報告され、`status` は `partial` になります。**キャンバス外座標・未知アイコン**は `doctor` の対象外で、同じく `remaining` に出ます。これらは draw.io での手直しや YAML の編集・レジストリ追加で対応してください([既知の制約](limitations.md)参照)。
-- `--strict` を付けると、自動解消しきれない衝突が残った場合(`status: partial`)に非ゼロ終了します。
+- Defaults to a **dry run** that just shows the proposed changes (matching AGENTS.md's "propose first, agree, then build" policy). Only writes to a file when `-o` or `--fix` is given. Existing comments and key ordering are preserved (the same ruamel round-trip `sync` uses — see [draw.io Integration](drawio-sync.md)).
+- A position (x/y), connection side (fromSide/toSide), or waypoints the author explicitly set is treated as intentional and never overwritten. When choosing what to move, an auto-placed element is preferred over an explicitly-positioned one; obstacle displacement only ever moves **auto-placed elements**; connection-side assignment and detouring only target **links whose routing the author didn't specify**.
+- A collision no stage can resolve (e.g. the obstacle and both endpoints are all author-positioned, with the connection sides fixed too) is reported under `remaining`, and `status` becomes `partial`. **Off-canvas coordinates and unknown icons** are out of scope for `doctor` and also appear under `remaining` — handle those via draw.io, editing the YAML, or extending the registry (see [Known Limitations](limitations.md)).
+- With `--strict`, a residual collision that couldn't be auto-resolved (`status: partial`) causes a non-zero exit.
 
-## diff — 2つの図の構造差分を取る
+## diff — Structural Diff Between Two Diagrams
 
-図を YAML=コードとして扱う zook では、変更を Git でレビューできることが強みです。しかし YAML のテキスト差分は「子要素の並び替え」「マッピングの整形」「自動レイアウトが書き込んだ座標」などのノイズが混ざり、本当に見たい変化が埋もれます。`diff` は2つの図を**意味で比較**します。要素を `id`、リンクを id または両端で対応付け、実際に変わったこと——要素の追加・削除・**コンテナ間の移動(再親付け)**・フィールド単位の変更、リンクの追加・削除・変更、canvas の変更——だけを報告します。
+Since zook treats a diagram as code in YAML, being able to review changes in Git is one of its strengths. But a plain text diff of YAML mixes in noise — reordered children, reformatted mappings, coordinates written by auto-layout — burying the change you actually care about. `diff` compares two diagrams **by meaning**. Elements are matched by `id`, links by id or by their endpoints, and only what actually changed is reported: elements added, removed, **moved between containers (re-parented)**, or modified field-by-field; links added, removed, or modified; and canvas changes.
 
 ```bash
-zook diff old.yaml new.yaml                 # 人間可読の構造差分
-zook diff old.yaml new.yaml --format json    # 機械可読(CI・AI向け)
-zook diff old.yaml new.yaml --exit-code       # 差分があれば非ゼロ終了(git diff --exit-code 相当)
+zook diff old.yaml new.yaml                 # human-readable structural diff
+zook diff old.yaml new.yaml --format json    # machine-readable (for CI/AI)
+zook diff old.yaml new.yaml --exit-code       # non-zero exit if there's a difference (like git diff --exit-code)
 ```
 
 ```text
@@ -71,18 +73,18 @@ zook diff old.yaml new.yaml --exit-code       # 差分があれば非ゼロ終�
 ~ link web -> db: style "straight" -> "elbow"
 ```
 
-記号は `+` 追加 / `-` 削除 / `>` 移動(再親付け) / `~` 変更 です。
+The symbols are `+` added / `-` removed / `>` moved (re-parented) / `~` modified.
 
-- **デフォルト値の正規化**:片方で省略、もう片方で既定値を明示(例: ノードの `provider: aws`、コンテナの `layout: {direction: grid}`)しても、意味は同じなので差分に出しません。子要素の並び替えも差分になりません。
-- **再親付けの検出**:ある要素が別のコンテナへ移った場合、追加+削除ではなく「移動」として1件で報告します(例: `web` を `vpc` から `edge` へ)。テキスト差分では読み取れない構造変化です。
-- 両ファイルとも検証(スキーマ・意味)を通る必要があります。Fatal な入力は `error` として報告します。
-- `--exit-code` を使うと、CI で「意図しない図の変更を検知したら失敗させる」といったゲートに使えます。
+- **Default-value normalization**: omitting a value on one side and writing the equivalent default explicitly on the other (e.g. a node's `provider: aws`, or a container's `layout: {direction: grid}`) means the same thing, so it's not reported as a diff. Reordering children isn't reported either.
+- **Re-parenting detection**: when an element moves to a different container, it's reported as a single "move," not an add plus a remove (e.g. `web` moving from `vpc` to `edge`) — a structural change a text diff can't express.
+- Both files must pass validation (schema and semantic). Fatal input is reported as `error`.
+- `--exit-code` is handy for CI gates like "fail if an unintended diagram change is detected."
 
-## icons list — 登録済みアイコン・コンテナ種別を一覧表示
+## icons list — List Registered Icon/Container Types
 
 ```bash
-zook icons list                  # aws/gcp/azure すべて
-zook icons list --provider gcp    # 特定プロバイダのみ
+zook icons list                  # all of aws/gcp/azure
+zook icons list --provider gcp    # a specific provider only
 zook icons list --format json
 ```
 
@@ -96,56 +98,56 @@ zook icons list --format json
   ...
 ```
 
-`type` を書き間違えて Warning になる前に、実際に使える名前を確認できます。`--registry` を併用すると、独自レジストリを重ねた状態での一覧になります。
+Check the names that are actually usable before a typo'd `type` turns into a Warning. Combined with `--registry`, this lists the vocabulary with your custom registry layered on.
 
-## preview — 軽量PNGプレビュー
+## preview — Lightweight PNG Preview
 
-PowerPoint も LibreOffice も使わずに、構成をすぐに目で確認できます(Pillow による簡易描画。実際の pptx とは見た目が多少異なります)。
+Get an instant visual check with no PowerPoint or LibreOffice needed (a simplified render via Pillow — the look differs somewhat from the actual pptx).
 
 ```bash
 zook preview diagram.yaml -o diagram.png
 ```
 
-## export-drawio / sync — draw.ioで手直しして継続的に管理する
+## export-drawio / sync — Hand-Tune in draw.io, Manage Continuously
 
-生成した構成図を[draw.io](https://www.diagrams.net/)で手直しし、その位置・サイズの変更をYAMLに機械的に反映できます。詳細な運用フローは[draw.io連携](drawio-sync.md)を参照してください。
+Hand-tune a generated diagram in [draw.io](https://www.diagrams.net/), then mechanically feed its position/size changes back into the YAML. See [draw.io Integration](drawio-sync.md) for the full workflow.
 
 ```bash
-zook export-drawio diagram.yaml -o diagram.drawio   # draw.ioで開ける形式で書き出す
-# ... draw.io で位置・サイズを調整して保存 ...
-zook sync diagram.yaml diagram.drawio -o diagram.yaml # 変更をYAMLに反映
+zook export-drawio diagram.yaml -o diagram.drawio   # write out a format draw.io can open
+# ... adjust position/size in draw.io and save ...
+zook sync diagram.yaml diagram.drawio -o diagram.yaml # reflect the changes back into the YAML
 ```
 
-## from-mermaid — Mermaidフローチャートから変換する
+## from-mermaid — Convert From a Mermaid Flowchart
 
-[Mermaid](https://mermaid.js.org/)の`flowchart`/`graph`記法をzookのYAMLに変換します。詳細は[Mermaidフローチャートのインポート](mermaid-import.md)を参照してください。
+Converts [Mermaid](https://mermaid.js.org/)'s `flowchart`/`graph` notation into zook YAML. See [Mermaid Flowchart Import](mermaid-import.md) for details.
 
 ```bash
 zook from-mermaid diagram.mmd -o diagram.yaml
 ```
 
-## 独自アイコン・スタイルで上書きする
+## Overriding With Your Own Icons/Styles
 
-`--registry` オプション(`build`/`validate`/`doctor`/`icons list`/`preview`/`export-drawio`/`sync` 共通)で、組み込みレジストリの上に独自のアイコン・枠スタイル定義を重ねられます。同じキーを定義するとユーザー側が優先されます。ユーザーレジストリの `provider` フィールドで、どのプロバイダに重ねるかが決まります(既定 `aws`)。
+The `--registry` option (shared by `build`/`validate`/`doctor`/`icons list`/`preview`/`export-drawio`/`sync`) lets you layer your own icon and frame-style definitions on top of the built-in registries. Defining the same key lets the user side win. Your registry's `provider` field decides which provider it layers onto (default `aws`).
 
 ```bash
 zook build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 ```
 
-`my-registry.yaml` は [`icon-registry.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry.schema.json) に従った形式です。詳細は[アイコン・レジストリ](icons.md)を参照してください。
+`my-registry.yaml` follows the [`icon-registry.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry.schema.json) format. See [Icon Registry](icons.md) for details.
 
-## エラーハンドリング {: #error-handling }
+## Error Handling {: #error-handling }
 
-zook は「構造的な破綻」と「描画上の軽微な問題」を明確に区別します(CI/CD での利用を想定した設計)。
+zook clearly distinguishes "structural breakage" from "minor drawing issues" (designed with CI/CD use in mind).
 
-### Fatal(標準エラー出力 + 非ゼロ終了)
+### Fatal (stderr + non-zero exit)
 
-以下は生成を即座に中止します。
+These stop generation immediately.
 
-- YAML が JSON Schema に違反している(必須フィールド欠落・型不一致・未知フィールド・`x`/`y` の片方のみ指定 など)
-- element の `id` が重複している
-- `links` の `from`/`to` が存在しない `id` を参照している
-- `link.fromSide`/`toSide` を両方指定し、かつ軸(`top`/`bottom` の垂直と `left`/`right` の水平)が矛盾している
+- The YAML violates the JSON Schema (a missing required field, a type mismatch, an unknown field, only one of `x`/`y` set, etc.)
+- An element's `id` is duplicated
+- A `links` entry's `from`/`to` references a nonexistent `id`
+- Both `link.fromSide`/`toSide` are set with a mismatched axis (`top`/`bottom` vertical vs `left`/`right` horizontal)
 
 ```bash
 $ zook build broken.yaml -o out.pptx
@@ -154,18 +156,18 @@ $ echo $?
 1
 ```
 
-### Warning(標準エラー出力に出力して継続)
+### Warning (printed to stderr, generation continues)
 
-以下は警告を出しつつ生成を継続します(終了コードは既定 `0`。`--strict` を付けると `1`)。
+These print a warning but let generation continue (exit code `0` by default; `1` with `--strict`).
 
-- `type` がレジストリで解決できない(未知のサービス名) → プレースホルダーアイコンで描画
-- 要素の座標がキャンバス範囲外 → クリップせずそのまま配置
-- 要素同士が座標上で重なっている(兄弟要素間) → 計算済みの座標から機械的に矩形の重なりを検出して警告。明示座標の子は自動修正しないが、**自動配置の子は明示座標の兄弟と重なる場合に自動でずらされる**(それでも重なりが解消しない場合のみ警告される)
-- 子要素がコンテナ自身のラベル文字の領域と重なっている
-- リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告。コンテナのラベルとの重なりは祖先コンテナであっても除外されない
-- 2本の別リンクのZルートが共通ノードの同一接続点で連続し、直接接続に見える(false edge aliasing、詳細は[既知の制約](limitations.md))
+- A `type` can't be resolved in the registry (unknown service name) → drawn with a placeholder icon
+- An element's coordinates fall outside the canvas → placed as-is, not clipped
+- Elements overlap at their coordinates (between siblings) → mechanically detected as a rectangle overlap from the computed coordinates. Explicitly-positioned children are never auto-corrected, but an **auto-placed child is automatically shifted when it overlaps an explicitly-positioned sibling** (a Warning is only raised if that still doesn't resolve it)
+- A child element overlaps its container's own label-text area
+- A link's (arrow's) path, or its own label, overlaps an unrelated element, another link's label, or a container's label → mechanically judged from the actual rendered path from the connection points (`straight`/`elbow` are exact; only `curved` is a straight-line approximation). Overlap with a container's label is never excluded even for an ancestor container
+- Two separate links' Z-routes run collinear through a shared node's connection point, reading as one direct connection (false edge aliasing — see [Known Limitations](limitations.md) for details)
 
-いずれも `canvas.overlapMargin`([YAML入力仕様](yaml-guide.md#canvas)参照)を設定すると、文字通りの重なりだけでなく「近すぎる」状態も検知対象にできます。
+Setting `canvas.overlapMargin` (see [YAML Input Guide](yaml-guide.md#canvas)) extends detection beyond literal overlaps to "too close" as well, for any of the above.
 
 ```bash
 $ zook build diagram.yaml -o out.pptx
@@ -174,19 +176,19 @@ Warning: element 'web' overlaps element 'cache'
 Wrote out.pptx
 ```
 
-### 機械可読な出力(`--format`)
+### Machine-Readable Output (`--format`)
 
-`build`/`validate`/`doctor`/`diff`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション)にも対応しています。
+`build`/`validate`/`doctor`/`diff`/`export-drawio`/`sync`/`from-mermaid` also support `--format json` (a single-line JSON object) and `--format github` (GitHub Actions `::warning::`/`::error::` annotations).
 
 ```bash
 $ zook validate diagram.yaml --format json
 {"status": "warning", "warnings": ["unknown type 'QuantumFlux' for node 'mystery'; using placeholder icon"]}
 ```
 
-CI/CD パイプラインからは、終了コード(`--strict` 併用可)や `--format` の出力でゲートを掛けられます。
+CI/CD pipelines can gate on the exit code (combinable with `--strict`) or on the `--format` output.
 
-## 生成される PowerPoint について
+## About the Generated PowerPoint
 
-- VPC → AZ → サービスのような入れ子構造は、PowerPoint 上でも階層グループとして生成されます。各階層を個別にドラッグ・編集できます。
-- コネクタ(矢印)は矩形図形(アイコン・コンテナ枠)同士の接続点に接続され、図形移動にある程度追従します(詳細は[内部設計メモ](design-notes.md)を参照)。
-- 生成される図は「後編集の起点」として十分な品質を目標としており、完璧な自動レイアウトは行いません。重なりの一部(自動配置 vs 明示座標)は自動で回避されますが、それ以外の重なりは Warning として検出されるのみで、PowerPoint 上で手直しする前提です。
+- Nested structures like VPC → AZ → service are generated as hierarchical groups in PowerPoint too — each level can be dragged and edited individually.
+- Connectors (arrows) attach to the connection points of rectangular shapes (icons, container frames) and follow shape movement to some degree (see [Design Notes](design-notes.md) for details).
+- The generated diagram targets being good enough as "a starting point for hand-editing," not a perfect automatic layout. Some overlaps (auto-placed vs. explicit) are automatically avoided, but everything else is only detected as a Warning, on the assumption you'll fix it up by hand in PowerPoint.
