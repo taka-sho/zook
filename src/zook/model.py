@@ -68,6 +68,7 @@ class Link:
     label_font_size: float = 8
     from_side: Optional[str] = None  # "top"|"bottom"|"left"|"right"; None -> auto
     to_side: Optional[str] = None
+    waypoints: list[tuple[float, float]] = field(default_factory=list)  # explicit polyline vias (absolute coords)
 
 
 @dataclass
@@ -118,6 +119,7 @@ def _parse_link(raw: dict) -> Link:
         label_font_size=raw.get("labelFontSize", 8),
         from_side=raw.get("fromSide"),
         to_side=raw.get("toSide"),
+        waypoints=[(wp["x"], wp["y"]) for wp in raw.get("waypoints", [])],
     )
 
 

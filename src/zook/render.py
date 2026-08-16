@@ -31,6 +31,7 @@ from .layout import (
     is_shape_node,
     label_box_height,
     label_gap,
+    link_label_anchor,
     link_label_size,
     link_render_plan,
     node_label_font_size,
@@ -197,9 +198,13 @@ def _render_element(shapes, box: Box, registry: MultiRegistry, shape_index: dict
         shape_index[element.id] = (pic, box)
 
 
-def _add_link_label(shapes, conn, text: str, font_size: float) -> None:
-    """sec8.3: p:cxnSp cannot carry txBody; use a separate midpoint textbox."""
-    mx, my = (conn.begin_x + conn.end_x) / 2, (conn.begin_y + conn.end_y) / 2
+def _add_link_label(shapes, midpoint: tuple[float, float], text: str, font_size: float) -> None:
+    """sec8.3: p:cxnSp cannot carry txBody; use a separate midpoint textbox.
+
+    `midpoint` is in logical units - the chord midpoint of the path's two
+    endpoints, matching exactly where link_crossing_warnings() predicts the
+    label sits, so render and the overlap check never disagree."""
+    mx, my = E(midpoint[0]), E(midpoint[1])
     label_w, label_h = link_label_size(font_size)
     w, h = E(label_w), E(label_h)
     tb = shapes.add_textbox(Emu(int(mx - w / 2)), Emu(int(my - h / 2)), w, h)
@@ -231,33 +236,72 @@ def _is_non_rect_shape_node(box: Box) -> bool:
     return is_shape_node(box.element) and box.element.style.get("shape") in _NON_RECT_SHAPES
 
 
+def _style_connector(conn) -> None:
+    conn.line.color.rgb = RGBColor.from_string("545B64")
+    conn.line.width = Pt(1.25)
+
+
+def _add_arrowhead(conn, tag: str) -> None:
+    ln = conn.line._get_or_add_ln()
+    ln.append(ln.makeelement(qn(tag), {"type": "triangle", "w": "med", "len": "med"}))
+
+
+def _render_polyline_link(shapes, link: Link, path, from_shape, to_shape, start_idx, end_idx, from_box, to_box):
+    """A waypoint link renders as one straight connector per segment (spike
+    finding: the lowest-risk way to draw an N-bend polyline - it reuses the
+    exact begin/end-override primitive the single-segment case uses). The
+    arrowhead goes on the last segment only (and the head, for `both`, on the
+    first) so the chain reads as one arrow."""
+    segments = []
+    for (x0, y0), (x1, y1) in zip(path, path[1:]):
+        conn = shapes.add_connector(MSO_CONNECTOR.STRAIGHT, E(x0), E(y0), E(x1), E(y1))
+        conn.begin_x, conn.begin_y = E(x0), E(y0)
+        conn.end_x, conn.end_y = E(x1), E(y1)
+        _style_connector(conn)
+        segments.append(conn)
+
+    # Glue the two ends to their shapes (interior joints stay at the explicit
+    # via points); re-assert the exact endpoints, since begin/end_connect snap.
+    if not _is_non_rect_shape_node(from_box):
+        segments[0].begin_connect(from_shape, start_idx)
+        segments[0].begin_x, segments[0].begin_y = E(path[0][0]), E(path[0][1])
+    if not _is_non_rect_shape_node(to_box):
+        segments[-1].end_connect(to_shape, end_idx)
+        segments[-1].end_x, segments[-1].end_y = E(path[-1][0]), E(path[-1][1])
+
+    if link.arrow != "none":
+        _add_arrowhead(segments[-1], "a:tailEnd")
+        if link.arrow == "both":
+            _add_arrowhead(segments[0], "a:headEnd")
+
+
 def _render_link(shapes, link: Link, shape_index: dict) -> None:
     from_shape, from_box = shape_index[link.from_id]
     to_shape, to_box = shape_index[link.to_id]
     start_idx, end_idx, eff_style, path = link_render_plan(from_box, to_box, link)
 
-    conn = shapes.add_connector(_CONNECTOR_TYPES[eff_style], E(0), E(0), E(1), E(1))
-    if not _is_non_rect_shape_node(from_box):
-        conn.begin_connect(from_shape, start_idx)
-    if not _is_non_rect_shape_node(to_box):
-        conn.end_connect(to_shape, end_idx)
-    # begin_connect/end_connect snap to the connected shape's own edge; override
-    # with our (possibly label-aware, sec "connection_point") points so a
-    # bottom/top exit past a below/above label, and the auto-elbow bend for a
-    # diagonal `straight` link, both actually render as planned.
-    conn.begin_x, conn.begin_y = E(path[0][0]), E(path[0][1])
-    conn.end_x, conn.end_y = E(path[-1][0]), E(path[-1][1])
-    conn.line.color.rgb = RGBColor.from_string("545B64")
-    conn.line.width = Pt(1.25)
-
-    if link.arrow != "none":
-        ln = conn.line._get_or_add_ln()
-        ln.append(ln.makeelement(qn("a:tailEnd"), {"type": "triangle", "w": "med", "len": "med"}))
-        if link.arrow == "both":
-            ln.append(ln.makeelement(qn("a:headEnd"), {"type": "triangle", "w": "med", "len": "med"}))
+    if link.waypoints:
+        _render_polyline_link(shapes, link, path, from_shape, to_shape, start_idx, end_idx, from_box, to_box)
+    else:
+        conn = shapes.add_connector(_CONNECTOR_TYPES[eff_style], E(0), E(0), E(1), E(1))
+        if not _is_non_rect_shape_node(from_box):
+            conn.begin_connect(from_shape, start_idx)
+        if not _is_non_rect_shape_node(to_box):
+            conn.end_connect(to_shape, end_idx)
+        # begin_connect/end_connect snap to the connected shape's own edge; override
+        # with our (possibly label-aware, sec "connection_point") points so a
+        # bottom/top exit past a below/above label, and the auto-elbow bend for a
+        # diagonal `straight` link, both actually render as planned.
+        conn.begin_x, conn.begin_y = E(path[0][0]), E(path[0][1])
+        conn.end_x, conn.end_y = E(path[-1][0]), E(path[-1][1])
+        _style_connector(conn)
+        if link.arrow != "none":
+            _add_arrowhead(conn, "a:tailEnd")
+            if link.arrow == "both":
+                _add_arrowhead(conn, "a:headEnd")
 
     if link.label:
-        _add_link_label(shapes, conn, link.label, link.label_font_size)
+        _add_link_label(shapes, link_label_anchor(path), link.label, link.label_font_size)
 
 
 def render(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> Presentation:

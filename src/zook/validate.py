@@ -82,6 +82,11 @@ def validate_semantics(raw: dict) -> None:
     mismatched: list[str] = []
     for link in raw.get("links", []):
         from_side, to_side = link.get("fromSide"), link.get("toSide")
+        # The axis-match rule exists because a plain elbow (bentConnector3) must
+        # enter/exit on one axis; a waypoint link is an explicit polyline, so any
+        # side combination is fine there.
+        if link.get("waypoints"):
+            continue
         if from_side and to_side and _SIDE_AXIS[from_side] != _SIDE_AXIS[to_side]:
             mismatched.append(f"{link['from']!r} -> {link['to']!r} (fromSide={from_side!r}, toSide={to_side!r})")
     if mismatched:

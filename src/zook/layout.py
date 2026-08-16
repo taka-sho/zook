@@ -394,6 +394,17 @@ def overlap_warnings(root_box: Box, registry: MultiRegistry, margin: float = 0) 
 _SIDE_TO_IDX = {"top": 0, "left": 1, "bottom": 2, "right": 3}
 _IDX_AXIS = {0: "vertical", 2: "vertical", 1: "horizontal", 3: "horizontal"}
 
+
+def _side_toward(box: Box, point: tuple[float, float]) -> int:
+    """Connection-point index (0=top,1=left,2=bottom,3=right) of the box edge
+    that faces `point`, by dominant direction from the box centre - used to
+    attach a waypoint link's endpoint toward its first/last via."""
+    cx, cy = box.abs_x + box.width / 2, box.abs_y + box.height / 2
+    dx, dy = point[0] - cx, point[1] - cy
+    if abs(dx) >= abs(dy):
+        return 3 if dx >= 0 else 1
+    return 2 if dy >= 0 else 0
+
 # How much shorter the non-dominant axis's path must be, relative to the
 # dominant axis's, before auto-selection switches to it (sec8.2). Without
 # this, a near-tie (a couple of percent, easily produced by label-avoidance
@@ -427,6 +438,15 @@ def choose_connection_indices(from_box: Box, to_box: Box, link: Optional[Link] =
     """
     from_side = link.from_side if link else None
     to_side = link.to_side if link else None
+
+    # Waypoints route explicitly, so each endpoint just attaches on the side
+    # facing its nearest waypoint (unless the author fixed a side). The axis-
+    # match rule that constrains a plain elbow doesn't apply here.
+    if link and link.waypoints:
+        s = _SIDE_TO_IDX[from_side] if from_side else _side_toward(from_box, link.waypoints[0])
+        e = _SIDE_TO_IDX[to_side] if to_side else _side_toward(to_box, link.waypoints[-1])
+        return s, e
+
     fcx, fcy = from_box.abs_x + from_box.width / 2, from_box.abs_y + from_box.height / 2
     tcx, tcy = to_box.abs_x + to_box.width / 2, to_box.abs_y + to_box.height / 2
     dx, dy = tcx - fcx, tcy - fcy
@@ -570,6 +590,28 @@ def link_label_size(font_size: float) -> tuple[float, float]:
     return base_w * ratio, base_h * ratio
 
 
+def link_label_anchor(path: list[tuple[float, float]]) -> tuple[float, float]:
+    """Where a link's midpoint label sits: the point half-way along the drawn
+    path *by arc length*. For a straight or a (symmetric) elbow path this is
+    exactly the chord midpoint of the two endpoints it replaced, so those are
+    unchanged; for a waypoint polyline it lands on the line actually drawn
+    instead of on the straight chord (which can cut across the very obstacle
+    the detour avoids). Shared by render.py, preview.py and the link-label
+    overlap check so all three agree on the label's position."""
+    seg_lengths = [math.dist(a, b) for a, b in zip(path, path[1:])]
+    total = sum(seg_lengths)
+    if total == 0:
+        return path[0]
+    half = total / 2
+    covered = 0.0
+    for (a, b), length in zip(zip(path, path[1:]), seg_lengths):
+        if covered + length >= half:
+            t = (half - covered) / length if length else 0.0
+            return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        covered += length
+    return path[-1]
+
+
 def link_render_plan(from_box: Box, to_box: Box, link: Link) -> tuple[int, int, str, list[tuple[float, float]]]:
     """Single source of truth for how a link will actually be drawn: which
     connection-point indices, the effective style (straight auto-upgrades
@@ -578,6 +620,11 @@ def link_render_plan(from_box: Box, to_box: Box, link: Link) -> tuple[int, int, 
     from what's actually rendered."""
     s_idx, e_idx = choose_connection_indices(from_box, to_box, link)
     p1, p2 = connection_point(from_box, s_idx), connection_point(to_box, e_idx)
+    if link.waypoints:
+        # Explicit polyline: straight segments through each via. Detection walks
+        # path segments the same way it does for elbow, so no checker changes.
+        path = [p1, *[(float(x), float(y)) for x, y in link.waypoints], p2]
+        return s_idx, e_idx, "straight", path
     eff_style = effective_connector_style(link.style, p1, p2)
     path = connector_path(eff_style, p1, p2, s_idx)
     return s_idx, e_idx, eff_style, path
@@ -643,8 +690,7 @@ def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegi
         path = paths[i]
         if not link.label or path is None:
             continue
-        p1, p2 = path[0], path[-1]
-        mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+        mx, my = link_label_anchor(path)
         lw, lh = link_label_size(link.label_font_size)
         label_rects[i] = _inflate_rect((mx - lw / 2, my - lh / 2, lw, lh), margin)
 

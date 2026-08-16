@@ -113,16 +113,23 @@ def _emit_cell(lines: list[str], box: Box, parent_id: str, registry: MultiRegist
 def _emit_edges(lines: list[str], diagram: Diagram) -> None:
     for i, link in enumerate(diagram.links):
         link_id = link.id or f"__link{i}"
-        style = _EDGE_STYLE.get(link.style, "")
+        # Waypoints are an explicit polyline, so drop the routing style and let
+        # draw.io draw straight segments through the given points instead.
+        style = "" if link.waypoints else _EDGE_STYLE.get(link.style, "")
         if link.arrow == "none":
             style += "endArrow=none;"
         if link.arrow == "both":
             style += "startArrow=classic;"
         value = f' value="{escape(link.label)}"' if link.label else ""
+        if link.waypoints:
+            points = "".join(f'<mxPoint x="{x:.2f}" y="{y:.2f}"/>' for x, y in link.waypoints)
+            geometry = f'<mxGeometry relative="1" as="geometry"><Array as="points">{points}</Array></mxGeometry>'
+        else:
+            geometry = '<mxGeometry relative="1" as="geometry"/>'
         lines.append(
             f'<mxCell id="{escape(link_id)}"{value} style="{escape(style)}" edge="1" '
             f'source="{escape(link.from_id)}" target="{escape(link.to_id)}" parent="1">'
-            f'<mxGeometry relative="1" as="geometry"/></mxCell>'
+            f'{geometry}</mxCell>'
         )
 
 
