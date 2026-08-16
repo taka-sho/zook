@@ -1,5 +1,9 @@
 # ZOOK
 
+[![Tests](https://github.com/taka-sho/zook/actions/workflows/tests.yml/badge.svg)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 zook は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアーキテクチャ図を生成する CLI ツールです。draw.io で整えた見た目の変更を YAML に書き戻しながら図を育てていく運用を主眼に置いています。
 
 利用方法・機能をまとめたドキュメントサイト: **https://taka-sho.github.io/zook/**(ソースは `docs-site/`、[Zensical](https://zensical.org/) でビルドし GitHub Pages に公開)。設計・仕様一式は `docs/README-index.md` を参照してください。
