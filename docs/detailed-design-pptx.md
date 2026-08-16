@@ -1,260 +1,258 @@
-# 詳細設計メモ：PowerPoint 出力（python-pptx）
+# Detailed Design Memo: PowerPoint Output (python-pptx)
 
-**バージョン:** 0.1
-**作成日:** 2026-07-25
-**対象:** 要求仕様書 §7.2 / §7.3 / §14-3 の具体化
-**前提ライブラリ:** python-pptx 1.0.0
+**Version:** 0.1
+**Date:** 2026-07-25
+**Scope:** Concretizes requirements spec §7.2/§7.3/§14-3
+**Assumed library:** python-pptx 1.0.0
 
 ---
 
-## 1. 技術検証の結論
+## 1. Technical Validation — Conclusions
 
-| 検証項目 | 結論 | 補足 |
+| Item validated | Conclusion | Notes |
 |---|---|---|
-| 図形の階層グループ化 | 可能 | `add_group_shape()`。入れ子グループOK（再帰構造） |
-| グループ単位での移動・編集 | 可能 | PowerPoint 上でグループごと掴んで移動できる |
-| コネクタ（矢印）の図形接続 | 可能 | `begin_connect()` / `end_connect()` |
-| 図形移動時の矢印追従 | 可能（癖あり） | 相対オフセット維持。接続点への再スナップはされない |
-| 接続の安定動作 | 矩形のみ | EXPERIMENTAL。画像・長方形で正常動作 → 本用途は該当 |
+| Hierarchical grouping of shapes | Possible | `add_group_shape()`. Nested groups work (recursive structure) |
+| Moving/editing a whole group as one unit | Possible | In PowerPoint you can grab and move an entire group |
+| Connector (arrow) attached to shapes | Possible | `begin_connect()` / `end_connect()` |
+| Arrow follows when a shape is moved | Possible (with a quirk) | Maintains a relative offset. Does not re-snap to the connection point |
+| Stability of the connection feature | Rectangles only | EXPERIMENTAL. Works correctly with images/rectangles — which is exactly what we need here |
 
-## 2. グループ構造の設計
+## 2. Group Structure Design
 
-### 2.1 階層方針
+### 2.1 Hierarchy Policy
 
-編集容易性を最優先し、以下の階層でグループ化する。
+Editability is the top priority, so grouping follows this hierarchy:
 
 ```
-スライド（ルート shapeTree）
-└─ VPC グループ
-   ├─ VPC 枠（長方形／ラベル）
-   └─ AZ グループ（複数）
-      ├─ AZ 枠（長方形／ラベル）
-      └─ サービスグループ（複数）
-         ├─ アイコン（画像）
-         └─ ラベル（テキストボックス）
+Slide (root shapeTree)
+└─ VPC group
+   ├─ VPC frame (rectangle / label)
+   └─ AZ group (multiple)
+      ├─ AZ frame (rectangle / label)
+      └─ service group (multiple)
+         ├─ icon (image)
+         └─ label (textbox)
 ```
 
-- VPC 単位・AZ 単位・サービス単位で、PowerPoint 上で1オブジェクトとして掴める。
-- サービスの「アイコン＋ラベル」を1グループにすることで、移動時にラベルがアイコンから離れない。
+- Each VPC, AZ, and service can be grabbed as a single object in PowerPoint.
+- Grouping a service's "icon + label" together means the label never drifts away from its icon when moved.
 
-### 2.2 実装上の注意（グループ）
+### 2.2 Implementation Notes (Groups)
 
-- `shapes.add_group_shape()` は空のグループを返す。子は `group.shapes.add_picture()` 等で追加する。
-- グループの child offset / extent（chOff / chExt）は子要素の座標範囲に合わせて設定が必要。
-  → **ヘルパー関数 `create_group(children, bbox)` に隠蔽し、子の外接矩形から自動計算する。**
-- グループは再帰的にネスト可能なので、VPC→AZ→サービスの3階層はそのまま表現できる。
+- `shapes.add_group_shape()` returns an empty group. Children are added via `group.shapes.add_picture()` etc.
+- A group's child offset/extent (chOff/chExt) needs to be set to match the coordinate range of its children.
+  → **Hide this behind a helper function `create_group(children, bbox)` that computes it automatically from the children's bounding box.**
+- Groups can be nested recursively, so the VPC → AZ → service, three-level hierarchy can be expressed directly.
 
-## 3. コネクタ（矢印）の設計
+## 3. Connector (Arrow) Design
 
-### 3.1 接続方針
+### 3.1 Connection Policy
 
-- `slide.shapes.add_connector(connector_type, x1, y1, x2, y2)` で線を生成。
-- `begin_connect(from_shape, cxn_pt_idx)` / `end_connect(to_shape, cxn_pt_idx)` で両端を図形に接続。
-- 接続対象は矩形（アイコン画像・VPC/AZ枠）に限定する。これは EXPERIMENTAL 実装が矩形で安定動作するため。
-- 矢印の向き・矢じりは **line 側の端点スタイル**で設定する（コネクタ固有プロパティではない点に注意）。
+- Generate a line via `slide.shapes.add_connector(connector_type, x1, y1, x2, y2)`.
+- Attach both ends to shapes via `begin_connect(from_shape, cxn_pt_idx)` / `end_connect(to_shape, cxn_pt_idx)`.
+- Connection targets are limited to rectangles (icon images, VPC/AZ frames), since the EXPERIMENTAL implementation is stable only for rectangles.
+- Arrow direction/arrowhead is set on the **line's endpoint style** (note: this is not a connector-specific property).
 
-### 3.2 追従挙動の理解と割り切り
+### 3.2 Understanding — and Accepting — the Follow Behavior
 
-- 図形を動かすとコネクタも同量だけ移動する（＝追従する）。
-- ただし端点は接続点に再スナップされず、**相対オフセットが維持される**だけ。
-  → PowerPoint 上で大きく再配置すると、線の取り回しが理想的でなくなる場合がある。
-- 本ツールは「後編集の起点」を提供する方針（要求仕様書 §8-R-NF-03）のため、
-  この挙動は許容する。生成直後は正しい位置に線が引かれ、微修正は人間が行う。
+- Moving a shape moves its connector by the same amount (i.e. it follows).
+- However, the endpoint doesn't re-snap to the connection point — it just **keeps the same relative offset**.
+  → Large repositioning in PowerPoint can leave the line's routing less than ideal.
+- Since this tool's stance is to provide "a starting point for hand-editing" (requirements spec §8-R-NF-03), this behavior is accepted. The lines are drawn correctly right after generation; humans handle fine-tuning.
 
-### 3.3 接続点インデックス（cxn_pt_idx）の方針
+### 3.3 Connection Point Index (cxn_pt_idx) Policy
 
-- 矩形の接続点は通常 上/左/下/右 などに割り振られる（index 0 起点）。
-- from → to の相対位置（左右・上下）から、始点・終点それぞれ適切な接続点indexを選ぶロジックを実装する。
-  例：from が to の左にある → from の右辺・to の左辺を選ぶ。
+- A rectangle's connection points are typically assigned to top/left/bottom/right etc. (index starting at 0).
+- Implement logic that picks an appropriate connection-point index for each end, based on the relative position of `from` vs `to` (left/right, up/down).
+  Example: if `from` is to the left of `to` → pick `from`'s right edge and `to`'s left edge.
 
-## 4. YAML → PPTX マッピング
+## 4. YAML → PPTX Mapping
 
-| YAML 要素 | PPTX 表現 |
+| YAML element | PPTX representation |
 |---|---|
-| `canvas.aspectRatio` | スライドサイズ（`prs.slide_width` / `slide_height`）を設定 |
-| `vpcs[]` | VPC グループ＋長方形枠 |
-| `availabilityZones[]` | AZ グループ＋長方形枠 |
-| `children[]`（サービス） | サービスグループ（アイコン画像＋ラベル） |
-| `type`（EC2 等） | アイコン画像ファイルの参照キー |
-| `x` / `y` / `size` | 図形の絶対座標・サイズ（未指定なら自動配置） |
-| `links[]` | コネクタ（begin_connect / end_connect） |
-| `links[].label` | コネクタ中点付近のテキスト、または線に付随するラベル |
+| `canvas.aspectRatio` | sets the slide size (`prs.slide_width` / `slide_height`) |
+| `vpcs[]` | VPC group + rectangular frame |
+| `availabilityZones[]` | AZ group + rectangular frame |
+| `children[]` (services) | a service group (icon image + label) |
+| `type` (EC2 etc.) | the icon image file's lookup key |
+| `x` / `y` / `size` | the shape's absolute coordinates/size (auto-placed if omitted) |
+| `links[]` | connectors (begin_connect / end_connect) |
+| `links[].label` | text near the connector's midpoint, or a label attached to the line |
 
-## 5. 座標・単位系
+## 5. Coordinate System & Units
 
-- python-pptx の内部単位は EMU（English Metric Unit, 914400 EMU = 1 inch）。
-- YAML では扱いやすい単位（px 相当など）で記述し、内部で EMU に変換する。
-- キャンバスサイズはアスペクト比から算出（例：16:9 を既定インチ幅で確定）。
+- python-pptx's internal unit is the EMU (English Metric Unit, 914400 EMU = 1 inch).
+- YAML is written in an easier-to-work-with unit (roughly px-equivalent), converted to EMU internally.
+- Canvas size is derived from the aspect ratio (e.g. 16:9 resolved against a default inch width).
 
-## 6. アイコンの扱い
+## 6. Handling Icons
 
-- アイコンは外部フォルダ参照（要求仕様書 §7.4-R-IC-03）。`type` → ファイルパスのマッピングテーブルを持つ。
-- AWS 公式アイコンは SVG。python-pptx は画像として PNG/EMF 等を埋め込む前提のため、
-  **SVG→ラスタ（PNG）or ベクタ（EMF）変換**の要否を確認する（§8 未決）。
-- プロバイダ別ディレクトリ（`icons/aws/`, `icons/gcp/`, `icons/custom/`）でマッピングを分離する。
+- Icons are referenced from an external folder (requirements spec §7.4-R-IC-03). A mapping table from `type` to file path is maintained.
+- Official AWS icons are SVG. Since python-pptx expects embedded images as PNG/EMF etc., we need to determine whether **SVG→raster (PNG) or SVG→vector (EMF)** conversion is required (open in §8).
+- The mapping is split by per-provider directory (`icons/aws/`, `icons/gcp/`, `icons/custom/`).
 
-## 7. 自動レイアウト（位置未指定時）
+## 7. Auto-Layout (When Position Is Unspecified)
 
-- コンテナ（VPC / AZ）内で、子要素をグリッド整列する単純アルゴリズムを第一版とする。
-- 列数・間隔・余白はパラメータ化。座標指定済みの要素は固定し、未指定要素のみ整列対象とする。
-- 厳密な美観よりも「重ならず、読める」ことを優先。
+- v1 uses a simple algorithm that arranges children in a grid within their container (VPC/AZ).
+- Column count, spacing, and padding are parameterized. Elements with an explicit position stay fixed; only unspecified elements are auto-arranged.
+- Prioritizes "no overlaps, readable" over strict visual polish.
 
-## 8. 決定事項（旧・未決事項の方針確定）
+## 8. Decisions (Formerly-Open Items, Now Settled)
 
-### 8.1 SVGアイコンの埋め込み方式 → 既定 PNG、オプション EMF
+### 8.1 SVG icon embedding method → PNG by default, EMF optional
 
-- python-pptx は PIL/Pillow ベースで、Pillow はラスタ形式（PNG/JPEG/GIF/TIFF/BMP）のみ対応。**SVG の直接埋め込みは不可**。
-- **既定：SVG → PNG ラスタ化**（`cairosvg` 等）。pip 完結・外部GUI不要で CI/CD に載せやすい。アイコン用途なら高DPI PNG で実用十分。
-- **オプション：SVG → EMF ベクタ化**（Inkscape 等が必要）。拡大耐性・編集性は高いが、重い外部依存が増えるため CI/CD 向きではない。要望ベースの選択肢に留める。
-- 決定理由：CI/CD 前提（要求仕様書 R-OP-03）を優先し、標準は PNG とする。
+- python-pptx is built on PIL/Pillow, and Pillow only supports raster formats (PNG/JPEG/GIF/TIFF/BMP). **Embedding SVG directly is not possible.**
+- **Default: rasterize SVG → PNG** (via `cairosvg` etc.). Self-contained via pip with no external GUI dependency, so it's easy to run in CI/CD. A high-DPI PNG is practically sufficient for icon purposes.
+- **Optional: vectorize SVG → EMF** (requires something like Inkscape). Higher scaling fidelity and editability, but adds a heavy external dependency that doesn't suit CI/CD. Kept as an opt-in choice only.
+- Rationale: since CI/CD is assumed (requirements spec R-OP-03), that takes priority, and PNG is the standard.
 
-### 8.2 接続点インデックス → 確定(プロトタイプ検証済み)
+### 8.2 Connection point indices → settled (verified by prototype)
 
-- 接続対象(アイコン画像・VPC/AZ枠)をすべて**矩形**に統一。
-- **インデックスは `idx 0=上辺中央 / 1=左辺中央 / 2=下辺中央 / 3=右辺中央`(top起点・反時計回り)で確定。**
-  python-pptx 自身の実装(`pptx/shapes/connector.py` の `_move_begin_to_cxn`/`_move_end_to_cxn`)が接続点の実座標をこのマッピングで直接計算しており、レンダラ依存ではなく**ライブラリの仕様として確定的**。`prototype/build_prototype.py` の idx 凡例(4方向に赤丸で idx を明示)を LibreOffice headless でレンダリングし、この対応を目視でも確認済み。
-- from→to の相対位置(左右・上下、`abs(dx) >= abs(dy)` で判定)から接続する辺を選ぶヘルパーを実装・検証済み(`choose_connection_indices()`)。非矩形(角丸等)は使わない。
+- All connection targets (icon images, VPC/AZ frames) are unified as **rectangles**.
+- **Indices are settled as `idx 0 = top-center / 1 = left-center / 2 = bottom-center / 3 = right-center` (starting at top, counter-clockwise).**
+  This is determined by python-pptx's own implementation (`_move_begin_to_cxn`/`_move_end_to_cxn` in `pptx/shapes/connector.py`), which computes the connection points' actual coordinates directly from this mapping — it's **fixed as a library specification, not renderer-dependent**. We rendered `prototype/build_prototype.py`'s idx legend (red dots explicitly marking the idx at all four directions) via LibreOffice headless and visually confirmed this mapping as well.
+- A helper that picks the connecting side from the relative position of `from` vs `to` (left/right, up/down, decided via `abs(dx) >= abs(dy)`) has been implemented and validated (`choose_connection_indices()`). Non-rectangular shapes (rounded corners, etc.) aren't used.
 
-### 8.3 コネクタのラベル追従 → 中点テキストボックスに確定(txBody注入は不可と判明)
+### 8.3 Connector label tracking → settled on a midpoint textbox (txBody injection turned out to be impossible)
 
-- **OOXML スキーマ上、`p:cxnSp`(コネクタ)は `txBody` 子要素を持てない。** LibreOffice の oox ソース(`shapes.cxx`)にも「connector shape (cxnSp) cannot contain text (txBody) (according to schema)」と明記されており、コネクタへの txBody 注入という「第一候補」は技術的に不可能と確定した。
-- したがって実装は**中点テキストボックス(独立 `p:sp`)を唯一の方式として採用**する。図形移動には追従しない制約を受け入れる(§3.2 の「後編集の起点」方針と整合)。
-- 実装上の注意(プロトタイプで判明):ラベルボックスは `begin_x/y` と `end_x/y` の中点に配置するが、コンテナのラベル(§8.6 参照)と近接して重なることがあるため、生成時に周辺要素との簡易な衝突回避(オフセットや白背景での可読性確保)を入れること。プロトタイプでは白塗り背景のテキストボックスで最低限の可読性を確保した。
+- **Under the OOXML schema, `p:cxnSp` (a connector) cannot carry a `txBody` child element.** LibreOffice's oox source (`shapes.cxx`) explicitly states "connector shape (cxnSp) cannot contain text (txBody) (according to schema)," confirming that the "first choice" of injecting a txBody into a connector is technically impossible.
+- The implementation therefore **adopts the midpoint textbox (an independent `p:sp`) as the sole approach**, accepting the constraint that it won't track shape movement (consistent with the "starting point for hand-editing" stance in §3.2).
+- Implementation note (found during prototyping): the label box is placed at the midpoint of `begin_x/y` and `end_x/y`, but it can end up close to — and overlapping — a container's own label (see §8.6), so simple collision avoidance against nearby elements (an offset, or a white background for readability) needs to be applied at generation time. The prototype used a white-filled textbox background to ensure at least minimal readability.
 
-### 8.4 グループ extent の自動計算 → 1:1 マッピング固定(python-pptx 標準機能で充足、独自ヘルパー不要)
+### 8.4 Automatic computation of group extent → fixed 1:1 mapping (handled by python-pptx's built-in behavior, no custom helper needed)
 
-- 子要素の外接矩形を求め、グループの off/ext に設定。**chOff/chExt = off/ext** とし、子の絶対座標をそのまま使う(スケール変換なし)。
-- **プロトタイプで判明:python-pptx は `shapes.add_group_shape()` 経由でグループに子を追加するたびに `CT_GroupShape.recalculate_extents()` を自動呼び出しし、chOff/chExt=off/ext の 1:1 マッピングを標準で行う。** 設計メモが想定していた独自ヘルパー関数 `create_group(children, bbox)` は不要で、`group.shapes.add_picture()`/`add_shape()`/`add_textbox()`/`add_group_shape()` を素直に呼ぶだけでよい。
+- Compute the children's bounding box and set it as the group's off/ext. Use **chOff/chExt = off/ext**, using the children's absolute coordinates directly (no scale conversion).
+- **Found during prototyping: python-pptx automatically calls `CT_GroupShape.recalculate_extents()` every time a child is added to a group via `shapes.add_group_shape()`, handling the chOff/chExt = off/ext 1:1 mapping by default.** The custom helper function `create_group(children, bbox)` the design memo originally assumed would be needed turns out to be unnecessary — it's enough to call `group.shapes.add_picture()`/`add_shape()`/`add_textbox()`/`add_group_shape()` directly.
 
-### 8.5 アスペクト比 → スライド寸法の確定
+### 8.5 Aspect ratio → slide dimensions settled
 
-| 比率 | インチ (幅×高) | EMU (幅×高) | 既定 |
+| Ratio | Inches (W×H) | EMU (W×H) | Default |
 |---|---|---|---|
 | 16:9 | 13.333 × 7.5 | 12192000 × 6858000 | ◎ |
 | 4:3 | 10 × 7.5 | 9144000 × 6858000 | |
 
-- 1 inch = 914400 EMU。既定は 16:9。
-- `canvas.aspectRatio` の値からこの表を引いてスライドサイズを設定する。
-- **プロトタイプで確認した係数:1 論理単位 = 9525 EMU = 96dpi 換算で 1px。**
-  16:9(1280論理幅→13.333in)・4:3(960論理幅→10in)のどちらでも `914400 × 幅in ÷ 論理幅 = 9525` で一致する。YAML の論理単位はそのまま「96dpi ピクセル」として扱える、という単純な変換式が使える。
+- 1 inch = 914400 EMU. Default is 16:9.
+- The slide size is set by looking up this table with `canvas.aspectRatio`'s value.
+- **Coefficient confirmed by prototyping: 1 logical unit = 9525 EMU = 1px at 96dpi.**
+  This holds for both 16:9 (1280 logical width → 13.333in) and 4:3 (960 logical width → 10in): `914400 × width_in ÷ logical_width = 9525` in both cases. This means a simple conversion — treating the YAML's logical units directly as "96dpi pixels" — is valid.
 
-### 8.6 アイコン PNG のラスタライズ解像度 → 表示サイズの4倍(px)に確定
+### 8.6 Icon PNG rasterization resolution → settled at 4x the displayed size (px)
 
-- **プロトタイプで確認:SVG を表示サイズと同じピクセル数(96dpi相当、1x)でラスタライズすると、PowerPoint/LibreOffice 上での拡大描画時ににじみが視認できる。** 2x で視認上のにじみはほぼ解消し、3x/4x との差は目視では判別できない水準。
-- ファイルサイズはアイコン程度の画像なら 4x でも数十KB程度に収まり実用上問題にならないため、**印刷・プロジェクタ投影などの余裕を見て既定は 4x(= 論理単位の px 数 × 4)を採用する。**
-  例:既定アイコンサイズ 64 論理単位 → 256×256px でラスタライズ。
-- 実装:`cairosvg.svg2png(url=svg_path, output_width=size_logical_units*4, output_height=size_logical_units*4)`。
+- **Confirmed by prototyping: rasterizing an SVG at the same pixel count as its displayed size (96dpi-equivalent, 1x) shows visible blurriness when scaled up in PowerPoint/LibreOffice.** At 2x the visible blurriness is mostly gone, and 3x vs 4x is indistinguishable to the eye.
+- File size for an icon-sized image stays around tens of KB even at 4x, which is fine in practice, so **the default is 4x (= the logical-unit pixel count × 4), giving margin for printing/projector use.**
+  Example: a default icon size of 64 logical units → rasterized at 256×256px.
+- Implementation: `cairosvg.svg2png(url=svg_path, output_width=size_logical_units*4, output_height=size_logical_units*4)`.
 
-### 8.7 検証プロトタイプ(実施済み)
+### 8.7 Validation Prototype (completed)
 
-`prototype/build_prototype.py` で以下を検証した(python-pptx 1.0.2 + cairosvg + LibreOffice 26.2.5 headless で `soffice --convert-to pdf` → `pdftoppm` により画像化し目視確認)。
+The following was validated with `prototype/build_prototype.py` (python-pptx 1.0.2 + cairosvg + LibreOffice 26.2.5 headless, rasterized via `soffice --convert-to pdf` → `pdftoppm` and inspected visually).
 
-| 項目 | 結論 |
+| Item | Conclusion |
 |---|---|
-| 接続点インデックスの割り当て順 | §8.2 の通り確定(0=top/1=left/2=bottom/3=right)。python-pptx ソース由来のため確定的。 |
-| txBody 注入時のラベル表示 | 注入自体がスキーマ違反で不可と判明。中点テキストボックス方式に確定(§8.3)。 |
-| 高DPI PNG の適正解像度 | 表示px数の4倍でラスタライズ(§8.6)。 |
-| グループ化(chOff/chExt) | python-pptx の `recalculate_extents()` が自動で1:1マッピングを行うため独自実装不要と判明(§8.4)。 |
-| (副次的発見)コンテナラベルの縦位置 | `add_shape()` のデフォルトテキストフレームは縦中央寄せになり、`labelPosition: top-left` の意図(左上)通りには表示されない。実装時は `text_frame.vertical_anchor = MSO_ANCHOR.TOP` を明示的に設定する必要がある。 |
+| Order of connection-point index assignment | Settled as in §8.2 (0=top/1=left/2=bottom/3=right). Deterministic, since it comes from python-pptx's source. |
+| Label rendering via txBody injection | Injection itself is impossible — a schema violation. Settled on the midpoint-textbox approach (§8.3). |
+| The right resolution for high-DPI PNGs | Rasterize at 4x the displayed pixel count (§8.6). |
+| Grouping (chOff/chExt) | Found that python-pptx's `recalculate_extents()` handles the 1:1 mapping automatically, so no custom implementation is needed (§8.4). |
+| (Secondary finding) Vertical position of a container's label | `add_shape()`'s default text frame is vertically centered, which doesn't match the intent of `labelPosition: top-left` (top-left). The implementation needs to explicitly set `text_frame.vertical_anchor = MSO_ANCHOR.TOP`. |
 
-### 8.8 リンク経路の重複検知 → elbow の実経路まで再現して確定
+### 8.8 Link-path overlap detection → settled by reproducing elbow's actual path
 
-要求：矢印(コネクタ)が経路の途中で無関係な要素やテキストと重なっていることを機械的に検出したい。
+Requirement: mechanically detect when an arrow (connector) crosses an unrelated element or text partway along its path.
 
-- コネクタの実際の接続点座標は §8.2 のマッピング(`connection_point()`)で決定的に計算できる。`style: straight` はこの2点を結ぶ線分がそのままレンダリング結果と一致する。
-- **`elbow`(`MSO_CONNECTOR.ELBOW`)は常に OOXML プリセットジオメトリ `bentConnector3` を使う**(python-pptx の固定マッピング)。これは2屈曲・3セグメントの Z 字経路で、始点の接続辺に垂直に出て、橋渡し軸の中点で1回目に曲がり、終点の接続辺にも垂直に入る。`choose_connection_indices()` は常に同軸のペア(水平:1/3、垂直:0/2)しか返さないため、始点側の idx が水平/垂直のどちらかだけで経路の形が一意に決まる。この経路は **LibreOffice headless での実描画プローブで実測・確認済み**(`prototype/` 相当の検証。始点・終点固定シェイプに `begin_connect`/`end_connect` で `idx` を強制し、境界ボックスの縦横比に関わらず接続辺に垂直に出ることを確認)。`connector_path()` にこの Z 字経路を実装し、各セグメントごとに矩形交差を判定するため、直線近似ではなく実描画と一致する。
-- `curved` のみ実際のベジェ曲線の膨らみまでは再現しておらず、直線近似(参考値)。
-- 除外対象(祖先・子孫)を誤ると「コンテナに入っている自分の子要素と重なっている」という当然の状態を誤検知するため、Box ツリーの親子関係からリンクの始点・終点それぞれの祖先集合・子孫集合を求めて除外している。
-- `canvas.overlapMargin`(既定 0)で各要素・ラベル矩形にバッファを加えられる。0 は文字通りの交差のみ、大きくすると近接も検知する。`overlap_warnings()`(兄弟要素間の重なり)・`link_crossing_warnings()`(リンク経路)の両方に同じ margin を適用する。
-- Warning のみ(Fatal にはしない)。迂回や自動修正は行わない。
+- The connector's actual connection-point coordinates can be computed deterministically via the mapping from §8.2 (`connection_point()`). For `style: straight`, the line segment connecting those two points matches the rendered result exactly.
+- **`elbow` (`MSO_CONNECTOR.ELBOW`) always uses the OOXML preset geometry `bentConnector3`** (a fixed mapping in python-pptx). This is a two-bend, three-segment Z-shaped path: it exits perpendicular to the start shape's connected edge, bends once at the midpoint of the bridging axis, and enters perpendicular to the end shape's edge. Since `choose_connection_indices()` always returns a same-axis pair (horizontal: 1/3, vertical: 0/2), the shape of the path is uniquely determined by whether the start-side idx is horizontal or vertical. This path was **measured and confirmed via an actual rendering probe in LibreOffice headless** (equivalent to what's in `prototype/`: forcing `idx` via `begin_connect`/`end_connect` on fixed start/end shapes and confirming the path exits perpendicular to the connected edge regardless of the bounding box's aspect ratio). This Z-shaped path is implemented in `connector_path()`, and rectangle-intersection is tested per segment, so the check matches the actual rendering rather than a straight-line approximation.
+- Only `curved` doesn't reproduce the actual bezier curve's bulge — it's a straight-line approximation (reference value only).
+- Getting the exclusion set (ancestors/descendants) wrong would falsely flag "overlapping its own child element inside the container," which is expected and normal — so the ancestor/descendant sets for each link's start and end are derived from the Box tree's parent/child relationships and excluded.
+- `canvas.overlapMargin` (default 0) adds a buffer around every element/label rectangle. `0` detects literal intersection only; a larger value also flags proximity. The same margin is applied to both `overlap_warnings()` (sibling-to-sibling overlaps) and `link_crossing_warnings()` (link paths).
+- Warning only (never Fatal). No detour or auto-fix is performed.
 
-### 8.9 ラベル回避接続点・斜め線の自動 elbow 化(実装時に追加)
+### 8.9 Label-avoiding connection points, auto-elbow for diagonal lines (added during implementation)
 
-- ノードの `labelPosition: below`/`above` はアイコンの外側にラベルテキストボックスを置く。従来は `connection_point()` がアイコン自身の辺(bottom/top)を返していたため、その辺から出るリンクがラベルを貫通していた。**ラベルと同じ辺(below→idx2、above→idx0)から出る接続に限り、接続点をラベルの外側(footprint の端)まで押し出す**ことで解消した。左右方向(idx1/3)はラベル位置の影響を受けない。
-- python-pptx の `begin_connect`/`end_connect` はシェイプの実際の辺にスナップするため、上記の押し出しはそのままでは反映されない。**`begin_connect` 後に `conn.begin_x`/`begin_y`(および `end_x`/`end_y`)を直接上書き**することで解決した。`stCxn`/`endCxn` の論理接続情報(ドラッグ追従用)は保持したまま、初期描画位置だけを望む座標にできる。この上書きが実際に反映されること(接続先シェイプの辺にスナップし直されないこと)は LibreOffice レンダリングで確認済み。
-- `style` を明示しない(既定 `straight`)リンクの接続点が水平でも垂直でもない(斜め)場合、自動的に `elbow` にアップグレードする(`effective_connector_style()`)。斜めの直線は AWS 構成図の直交ルーティングの慣習と合わないための措置。`elbow`/`curved` を明示指定した場合は上書きしない。
-- `link_render_plan()` が上記(接続点 idx・実効スタイル・実経路)をまとめて1箇所で計算し、`render.py`(実描画)と `link_crossing_warnings()`(検知)の両方から呼ぶことで、検知ロジックが実際の描画から乖離しないようにしている。
+- A node's `labelPosition: below`/`above` places the label textbox outside the icon. Previously, `connection_point()` returned the icon's own edge (bottom/top), so a link leaving from that side would cut straight through the label. **This was resolved by pushing the connection point out past the label (to the edge of the footprint), but only for connections leaving from the same side as the label** (below→idx2, above→idx0). Left/right (idx1/3) are unaffected by label position.
+- Since python-pptx's `begin_connect`/`end_connect` snap to the shape's actual edge, the push-out above wouldn't take effect as-is. This was resolved by **directly overwriting `conn.begin_x`/`begin_y` (and `end_x`/`end_y`) after calling `begin_connect`**, which keeps the logical connection info (`stCxn`/`endCxn`, used for drag-follow behavior) intact while placing the initial render position wherever we want. That this override actually takes effect (i.e. isn't re-snapped to the connected shape's edge) was confirmed via LibreOffice rendering.
+- When a link with no explicit `style` (default `straight`) has connection points that aren't aligned horizontally or vertically (i.e. diagonal), it's automatically upgraded to `elbow` (`effective_connector_style()`). This avoids a plain diagonal line, which doesn't match the orthogonal-routing convention of AWS-style architecture diagrams. An explicit `elbow`/`curved` is never overridden.
+- `link_render_plan()` computes all of the above (connection-point idx, effective style, actual path) in one place, and is called by both `render.py` (actual rendering) and `link_crossing_warnings()` (detection), so the detection logic never drifts from what's actually rendered.
 
-### 8.10 コンテナラベル・リンクラベルの重複検知(実装時に追加)
+### 8.10 Overlap detection for container labels and link labels (added during implementation)
 
-要求：重複検知の対象を、要素本体だけでなく「コンテナの文字部分」「リンクのラベル」にも広げたい。
+Requirement: extend overlap detection beyond just element bodies, to also cover "a container's text area" and "a link's label."
 
-- **コンテナラベル vs 子要素**:コンテナ自身のラベルテキストが描く領域を `container_label_rect()` として定義した。位置は `resolve_container_label_position()`(`element.style.labelPosition` → レジストリの `groups.<type>.labelPosition` → 既定 `top-left` という render.py と同じ優先順位)で決まり、高さは `CONTAINER_LABEL_RESERVE`(自動配置がこの領域を避けて子を置く際に使っている値と同じ)。**この領域は通常の兄弟間重なりチェックの「親子は対象外」ルールの唯一の例外**として、直接の子要素それぞれとの重なりを個別にチェックする(自動配置の子は既にこの領域を避けているため引っかからないが、明示座標の子は避けないため意味がある)。
-- **リンクラベル vs 要素・他リンクラベル**:従来の `link_crossing_warnings()` は「経路(線)が何かを横切るか」だけを見ており、ラベルテキストボックス自体(経路の中点に浮く矩形)が無関係な要素・他リンクのラベルに重なっているかは独立してチェックしていなかった。ラベル矩形どうしの矩形交差判定を追加し、経路チェックと同じ祖先・子孫除外ルールを適用した。
-- **(気づいた追加ギャップ)リンク経路・ラベル vs コンテナラベル**:通常の経路チェックは「祖先コンテナは除外」(自分の親コンテナの中を通るのは当然)だが、これをそのまま適用すると「祖先コンテナの**ラベル文字**を貫通している」という、見た目上明らかにおかしいケースを見逃す。コンテナラベルとの交差チェックだけは除外を緩め、**リンクの `from`/`to` が当該コンテナそのものである場合のみ**除外するようにした(祖先であっても除外しない)。
-- いずれも `canvas.overlapMargin` が適用される。Warning のみ、迂回や自動修正は行わない。
-- `resolve_container_label_position()` は `render.py`(実描画)と `layout.py`(検知)の両方から呼ばれる共有関数とし、ラベル位置の解決ロジックが2箇所で乖離しないようにしている(§8.9 の `link_render_plan()` と同じ設計方針)。
+- **Container label vs. child elements**: the area a container's own label text occupies is defined as `container_label_rect()`. Its position is decided by `resolve_container_label_position()` (`element.style.labelPosition` → the registry's `groups.<type>.labelPosition` → default `top-left`, the same precedence render.py uses), and its height by `CONTAINER_LABEL_RESERVE` (the same value auto-layout uses to avoid placing children in this area). **This area is the sole exception to the usual sibling-overlap check's "parent/child pairs are excluded" rule**, checked individually against each direct child (auto-placed children already avoid this area, so they never trigger it, but explicitly-positioned children don't avoid it, which is where this actually matters).
+- **Link label vs. elements/other link labels**: the previous `link_crossing_warnings()` only looked at "does the path (the line) cross something" — it didn't independently check whether the label textbox itself (a rectangle floating at the path's midpoint) overlaps an unrelated element or another link's label. Rectangle-intersection testing between label boxes was added, applying the same ancestor/descendant exclusion rule as the path check.
+- **(Additional gap noticed) Link path/label vs. container label**: the usual path check "excludes ancestor containers" (passing through your own parent container's body is expected), but applying that rule as-is would miss a visually obvious defect: cutting straight through an ancestor container's **label text**. For the check against a container's label specifically, the exclusion was loosened so that **only the case where the link's `from`/`to` is that very container** is excluded (ancestors are not excluded).
+- `canvas.overlapMargin` applies to all of these. Warning only; no detour or auto-fix.
+- `resolve_container_label_position()` is a shared function called from both `render.py` (actual rendering) and `layout.py` (detection), so the label-position resolution logic never drifts between the two (the same design principle established for `link_render_plan()` in §8.9).
 
-### 8.11 CLI 再設計・自動回避・軽量プレビュー・マルチクラウド(実装時に追加)
+### 8.11 CLI redesign, auto-avoidance, lightweight preview, multi-cloud (added during implementation)
 
-要求:CIワークフロー改善・アイコン発見性・描画品質・マルチクラウド対応をまとめて追加したい。
+Requirement: add CI workflow improvements, icon discoverability, rendering quality, and multi-cloud support together.
 
-- **CLI をサブコマンド構成に再設計**:`zook <file> -o <out>` の単一コマンドから、`build`/`validate`/`icons list`/`preview` の click Group 構成に変更した(破壊的変更。呼び出しは `zook build <file> -o <out>` になる)。`_load_and_check()` を共通処理として切り出し、`build`/`validate` はレンダリング以外の全チェック(スキーマ・意味検証・アイコン解決・座標範囲・重なり・リンク経路)を共有する。
-  - `--strict`:Warning が1件でもあれば非ゼロ終了。
-  - `--format {text,json,github}`:CI 連携用の機械可読出力(`github` は `::warning::`/`::error::` アノテーション)。
-  - この再設計の過程で、**`validate` が `build` と同じ Warning を検出できていなかったバグ**を発見・修正した。「未知アイコン type」の Warning は従来 `render.py` の中でのみ発生しており、レンダリングをスキップする `validate` では検出できなかった。`icon_resolution_warnings()` として `layout.py` 側の純粋なチェックに切り出し、`_load_and_check()` から呼ぶことで解消。`render.py` 側の重複した警告発行は削除した。
-- **アイコン発見性**:`zook icons list` で登録済みの全 `type`・エイリアス・グループを一覧表示。表示用に `IconEntry`/`GroupEntry` へ元の大文字小文字を保持した `name` フィールドを追加(内部の lookup キーは引き続き小文字化)。
-- **自動配置の重複回避**(`_avoid_explicit_overlaps()`):自動配置の子要素が明示座標の兄弟要素と重なる場合、自動配置側だけを真下に押し出して回避する。単純な1軸方向への押し出しのみ(複数の明示座標要素が積み重なっている場合は複数回押し出す、上限 `len(explicit)+1` 回)。明示座標同士・自動配置同士は対象外(前者は著者の意図、後者は既存アルゴリズムで衝突しない)。`overlap_warnings()` は回避後も引き続き実行され、それでも解消しない重なりを検出する。
-- **軽量PNGプレビュー**(`preview.py`):LibreOffice/PowerPoint を使わず、同じ `Box` 木・`link_render_plan()` を Pillow で直接描画する第二のレンダラー。`render.py` の `resolve_container_style()`(新設。枠色・塗り・破線・ラベル位置・隅アイコンをまとめて解決する共有関数で、従来 `_add_container_rect()` に直書きされていたロジックを抽出したもの)を共用し、2つのレンダラーが見た目の解決ロジックで乖離しないようにしている。
-- **マルチクラウド**:`registry.gcp.yaml`/`registry.azure.yaml` を追加し、`Registry` を複数保持して要素の `provider` でディスパッチする `MultiRegistry` を導入した。既存の `resolve_icon`/`resolve_group` 呼び出しは全て `element.provider` を渡すよう更新(`layout.py`/`render.py`)。コンテナの `groups` はプロバイダ自身に定義がなければ AWS レジストリへフォールバックする(§8.10 で確定した `container_label_rect()` 等、ラベル位置解決も含めて一貫してこの経路を通る)。
+- **Redesigned the CLI as a subcommand structure**: changed from the single command `zook <file> -o <out>` to a click Group with `build`/`validate`/`icons list`/`preview` (a breaking change — invocation becomes `zook build <file> -o <out>`). `_load_and_check()` was extracted as shared logic; `build`/`validate` share every non-rendering check (schema, semantic validation, icon resolution, coordinate-range, overlap, link path).
+  - `--strict`: exits non-zero if there's even one Warning.
+  - `--format {text,json,github}`: machine-readable output for CI integration (`github` produces `::warning::`/`::error::` annotations).
+  - This redesign surfaced and fixed a bug: **`validate` wasn't detecting the same Warnings as `build`.** The "unknown icon type" Warning used to be raised only inside `render.py`, so `validate` (which skips rendering) never caught it. This was fixed by extracting it into a pure check on the `layout.py` side, `icon_resolution_warnings()`, called from `_load_and_check()`; the duplicate warning emission in `render.py` was removed.
+- **Icon discoverability**: `zook icons list` lists every registered `type`, alias, and group. A `name` field preserving the original casing was added to `IconEntry`/`GroupEntry` for display purposes (the internal lookup key is still lowercased).
+- **Auto-placement overlap avoidance** (`_avoid_explicit_overlaps()`): when an auto-placed child overlaps an explicitly-positioned sibling, only the auto-placed side is pushed straight down to avoid it. Just a simple single-axis push (if multiple explicitly-positioned elements are stacked, it pushes multiple times, bounded by `len(explicit)+1`). Explicit-vs-explicit and auto-vs-auto pairs aren't touched (the former is the author's intent; the latter never collides given the existing algorithm). `overlap_warnings()` still runs afterward and flags any overlap this doesn't resolve.
+- **Lightweight PNG preview** (`preview.py`): a second renderer that draws the same `Box` tree and `link_render_plan()` output directly with Pillow, with no LibreOffice/PowerPoint involved. It shares `render.py`'s `resolve_container_style()` (newly added — a shared function that resolves frame color, fill, dashing, label position, and corner icon together, extracted from logic that used to be written directly inline in `_add_container_rect()`), so the two renderers can't drift apart on how something should look.
+- **Multi-cloud**: `registry.gcp.yaml`/`registry.azure.yaml` were added, along with `MultiRegistry`, which holds multiple `Registry` instances and dispatches based on an element's `provider`. Every existing `resolve_icon`/`resolve_group` call site was updated to pass `element.provider` (`layout.py`/`render.py`). A container's `groups` fall back to the AWS registry when undefined in the provider's own registry (this consistently flows through the same path established in §8.10, including `container_label_rect()` and label-position resolution).
 
-### 8.12 アイコンサイズ・文字サイズの設定可能化(実装時に追加)
+### 8.12 Configurable icon size and font size (added during implementation)
 
-要求:出力のアイコンサイズや文字サイズ(ノード/コンテナ/リンクの各ラベル)を YAML から指定できるようにしたい。
+Requirement: allow icon size and font size (for node/container/link labels) to be specified from the YAML.
 
-- **ノードの `size`**:`width`/`height` を同時に設定するショートハンド(`node.size`)。`_measure_node()` で `element.width or element.size or default_size` として解決するため、軸ごとに `width`/`height` を明示すればそちらが優先され、`size` はその軸でのみ無視される(混在可)。
-- **ラベル文字サイズと自動配置の反比例しない連動**:`nodeStyle.labelFontSize`(既定9pt)・`containerStyle.labelFontSize`(既定10pt)・`link.labelFontSize`(既定8pt)を追加した。文字サイズだけを大きくしてラベルの表示領域(フットプリント高さ・コンテナの上下余白・リンクラベルボックス)がそのままだと文字がはみ出すため、これらの自動配置予約量も同じ倍率で連動してスケールするようにした。
-  - `label_box_height(font_size) = font_size * 2`:1pt = 4/3論理単位、かつ行送り係数1.5を掛けた値(`4/3 * 1.5 = 2`)。ノードのフットプリント計算(`_label_reserve()`)はこの関数を使う。既定値(9pt)では `18`(旧 `LABEL_BOX_HEIGHT` 定数と完全一致)。
-  - `container_label_reserve(font_size) = CONTAINER_LABEL_RESERVE * (font_size / CONTAINER_LABEL_FONT_SIZE_DEFAULT)`:既定10ptを基準に比例配分。
-  - `link_label_size(font_size)`:既定8pt時の `LINK_LABEL_SIZE = (60, 18)` を基準に、幅・高さとも `font_size / LINK_LABEL_FONT_SIZE_DEFAULT` 倍する。
-  - いずれも既定値を代入すると変更前の固定定数と厳密に一致するため、`labelFontSize` を省略した既存の図(`example.yaml`/`example-cloud-actors.yaml`含む)はレイアウト結果が一切変わらない。
-- **`render.py`/`preview.py` 両方を更新**:pptx版は `Pt(font_size)` を各テキストフレームに設定し、テキストボックスの寸法にも `label_box_height()`/`link_label_size()` を使う。PNG プレビュー版も同じ解決関数(`node_label_font_size()`/`resolve_container_style().label_font_size`/`link.label_font_size`)を参照し、フォントサイズと矩形サイズが2つのレンダラー間で乖離しないようにした(§8.11 で確立した「共有関数で解決ロジックを1箇所にまとめる」方針を踏襲)。
-- LibreOffice レンダリングと `zook preview` の両方で、コンテナラベル・ノードアイコン+ラベル・リンクラベルそれぞれを既定値/拡大値で比較し、両レンダラーの見た目が一致することを目視確認済み。
+- **A node's `size`**: shorthand for setting `width`/`height` together (`node.size`). `_measure_node()` resolves it as `element.width or element.size or default_size`, so explicitly setting `width`/`height` per axis wins, with `size` ignored only on that axis (mixing is fine).
+- **Label font size, kept proportionally in sync with auto-layout**: added `nodeStyle.labelFontSize` (default 9pt), `containerStyle.labelFontSize` (default 10pt), and `link.labelFontSize` (default 8pt). Simply enlarging the font size while leaving the reserved label area (footprint height, a container's top/bottom padding, a link's label box) unchanged would make text spill out, so these auto-layout reservations now scale by the same ratio.
+  - `label_box_height(font_size) = font_size * 2`: 1pt = 4/3 logical units, times a line-height factor of 1.5 (`4/3 * 1.5 = 2`). A node's footprint calculation (`_label_reserve()`) uses this function. At the default (9pt) this gives `18`, matching the old `LABEL_BOX_HEIGHT` constant exactly.
+  - `container_label_reserve(font_size) = CONTAINER_LABEL_RESERVE * (font_size / CONTAINER_LABEL_FONT_SIZE_DEFAULT)`: scaled proportionally against the 10pt default.
+  - `link_label_size(font_size)`: scales both width and height by `font_size / LINK_LABEL_FONT_SIZE_DEFAULT`, relative to `LINK_LABEL_SIZE = (60, 18)` at the default 8pt.
+  - Substituting the default value into any of these reproduces the old fixed constant exactly, so an existing diagram that omits `labelFontSize` (including `example.yaml`/`example-cloud-actors.yaml`) has an identical layout result.
+- **Both `render.py`/`preview.py` were updated**: the pptx renderer sets `Pt(font_size)` on each text frame, and also uses `label_box_height()`/`link_label_size()` for textbox dimensions. The PNG preview renderer references the same resolution functions (`node_label_font_size()`/`resolve_container_style().label_font_size`/`link.label_font_size`), so font size and box size never drift between the two renderers.
+- Visually confirmed via both LibreOffice rendering and `zook preview` that container labels, node icon+label, and link labels match between the two renderers at both default and enlarged font sizes.
 
-### 8.13 Z ルートの false edge aliasing 検出(外部バグ報告により追加)
+### 8.13 Detecting false edge aliasing in Z-routes (added following an external bug report)
 
-要求(外部バグ報告):2本のリンクが共通ノードの同一接続点(例:コンテナの上端中央)を経由すると、`elbow` の Z ルートの線分が同一直線上で連続し、無関係な2要素が直接つながっているように見える。報告された具体例:水平レイアウトの中間ノード(ALB)を挟む `ALB→VPC`・`VPC→S3` の2本が、どちらも `choose_connection_indices()` の判定(`|dy|>|dx|`)で VPC の同じ辺(上端中央)を選び、Z ルートの水平区間が接触・整列して ALB→S3 の直接接続に見えてしまう。
+Requirement (external bug report): when two links pass through the same connection point of a shared node (e.g. a container's top-center), the `elbow` Z-route's segments end up collinear and continuous, making two unrelated elements look directly connected. The reported example: in a horizontal layout, two links straddling an intermediate node (an ALB) — `ALB→VPC` and `VPC→S3` — both had `choose_connection_indices()`'s decision (`|dy|>|dx|`) pick the same side of VPC (top-center), so the Z-route's horizontal segments touched and aligned, making it look like a direct ALB→S3 connection.
 
-- **根本原因**:`choose_connection_indices()`/`connector_path()` は各リンクを1本ずつ独立に経路計算するため、複数リンクの経路が結果的に同一直線上に並ぶ状況を検知できない。既存の `link_crossing_warnings()` はリンクが無関係な要素・ラベルを**横切る**(交差する)ケースしか見ておらず、2本のリンクが同一直線上で**接触・整列**するケースは対象外だった。
-- **検出方式(報告書の案1を採用)**:新関数 `link_aliasing_warnings()` を追加。各リンクの経路(`link_render_plan()` で算出、既存の検知と同じ実描画ジオメトリ)を線分単位に分解し、全リンクペアについて総当たりで「軸(水平/垂直)が同じ・同一座標(直線)上にあり・範囲が重なるか1点でも触れる」線分の組を探す。1点だけ触れる(重複範囲がゼロ長)場合も検出対象に含めている点が肝で、報告書の例では2本の水平区間が VPC の接続点で1点だけ接触しているにすぎないが、それでも見た目上は連続した1本の線に見えるため。
-  - `_segment_axis_range()`:線分を `('h', y, (x_lo,x_hi))` / `('v', x, (y_lo,y_hi))` に正規化(斜めの線分は対象外 = None)。
-  - `_collinear_overlap()`:同じ軸・同じ座標で、範囲が `lo <= hi + epsilon` (touching含む)なら共有区間を返す。
-  - 検出は**交差(横切り)ではなく整列**を見ているため、`_segments_intersect()`/`_segment_intersects_rect()` とは別の判定ロジック(垂直に交わる場合は誤検知しない)。
-- Warning のみ。接続点をずらす・迂回するといった自動修正(報告書の案2・案3)は行わない - 既存の重なり検知と同じく「機械的検出 + 手直しは利用者側」という方針を踏襲(§8.8/§8.10 と同じ設計判断)。
-- **実例で検証**:この検出を実装した結果、同梱サンプル `example-cloud-actors.yaml` で実際に警告が発生することが判明した(`user→aws-cloud` と `admin→aws-cloud` が、どちらも `aws-cloud` コンテナの左辺中央という同一点に接続していたため)。`connection_point()` の左右接続(idx1/3)は常にそのボックス自身の辺の中心を返す設計(§8.2 で確定済み)であるため、相手ノードの位置に関わらず複数リンクが同じ点に収束しうる。サンプルは `admin` を VPC の下方に配置し直し(左辺ではなく下辺から接続させる)ことで解消し、"canonical な example は警告ゼロ" という既存の不変条件を回復した。
-- `tests/test_render_smoke.py` の `_build()` ヘルパーは、従来 `icon_resolution_warnings()` のみを集計しており、`overlap_warnings()`/`link_crossing_warnings()`/`link_aliasing_warnings()` を素通りしていた(=これらの回帰テストが実質チェックしていなかった)。CLI(`_load_and_check()`)が実際に集計する全チェックと揃うよう `_build()` を修正した。
+- **Root cause**: `choose_connection_indices()`/`connector_path()` compute each link's path independently, so there's no way to detect multiple links' paths ending up collinear. The existing `link_crossing_warnings()` only looked at a link **crossing** an unrelated element or label — a case where two links **touch and align** on the same line was out of scope.
+- **Detection approach (adopting option 1 from the report)**: added a new function, `link_aliasing_warnings()`. It breaks each link's path (computed via `link_render_plan()`, the same actual-rendering geometry the existing checks use) into segments, and checks every pair of links exhaustively for segment pairs that share an axis (horizontal/vertical), lie on the same coordinate (collinear), and either overlap or touch at even a single point. The key detail is including the single-point-touch case: in the report's example, the two horizontal segments only meet at VPC's connection point (zero-length overlap), yet it still visually reads as one continuous line.
+  - `_segment_axis_range()`: normalizes a segment to `('h', y, (x_lo,x_hi))` / `('v', x, (y_lo,y_hi))` (a diagonal segment is out of scope, returning None).
+  - `_collinear_overlap()`: on the same axis and coordinate, returns the shared range if `lo <= hi + epsilon` (including touching).
+  - Since this detects **alignment**, not **crossing**, it's a separate check from `_segments_intersect()`/`_segment_intersects_rect()` (a perpendicular crossing is not a false positive here).
+- Warning only. No automatic fix — shifting the connection point or rerouting (options 2/3 from the report) is not performed, keeping the same "mechanical detection, manual fix on the user's side" policy as the existing overlap checks (the same design decision made in §8.8/§8.10).
+- **Verified against a real case**: implementing this detection revealed that the bundled sample `example-cloud-actors.yaml` actually triggered the warning (`user→aws-cloud` and `admin→aws-cloud` both connected to the same point — the left-center of the `aws-cloud` container). Since `connection_point()`'s left/right connection (idx 1/3) always returns the center of that box's own edge by design (settled in §8.2), multiple links can converge on the same point regardless of where the other node sits. The sample was fixed by repositioning `admin` below the VPC (so it connects from the bottom edge instead of the left edge), restoring the existing invariant that "the canonical examples produce zero warnings."
+- The `_build()` helper in `tests/test_render_smoke.py` previously only aggregated `icon_resolution_warnings()`, letting `overlap_warnings()`/`link_crossing_warnings()`/`link_aliasing_warnings()` pass through unchecked (i.e. these regression tests weren't actually exercising them). `_build()` was fixed to match the full set of checks the CLI (`_load_and_check()`) actually aggregates.
 
-### 8.14 draw.io連携(エクスポート・同期・CI自動PR)
+### 8.14 draw.io Integration (Export, Sync, CI Auto-PR)
 
-要求:構成図を継続的に管理したい。ツールで生成したベース構成図を draw.io(self-hosted)で手直しし、その変更を再びYAMLに反映したい。
+Requirement: manage architecture diagrams continuously. Hand-tune a base diagram generated by the tool in (self-hosted) draw.io, then feed those changes back into the YAML.
 
-- **PowerPointではなくdraw.ioを選定した理由**:PowerPointのグループ(コンテナ)は `chOff`/`chExt` という子座標系のオフセット・スケールを持ち、グループをリサイズすると子要素の座標が暗黙にスケーリングされる(§8.4)。これをpptxから読み取って正しく座標復元するには、ネストしたグループ変換を再帰的に解決するロジックが要る。draw.io(mxGraph)のコンテナ(`container=1`)は子要素の座標が親からの単純な相対オフセットのままで、リサイズしても子はスケールされない設計であることを `jgraph/drawio` の公式ソース(後述)で確認済みで、この罠がそもそも存在しない。加えてmxGraph XMLはテキスト形式でgit diffが取れ、self-hostも可能(構成図を社外クラウドに預けずに完結できる)。
-- **`zook export-drawio`**(`drawio.py: export_drawio()`):`Box` 木を mxGraph XML に変換する。座標変換は不要 — `Box.local_x/local_y`(親相対のcontent位置)は mxGraph の子要素 `<mxGeometry>` の座標系とまったく同じ意味論(親からの単純な相対オフセット)なので、そのまま使える。コンテナは `parent` 属性を実際の親要素idにし `container=1` を付与、ノードのラベルは別テキストボックスを作らず mxCell自身の `value` + `verticalLabelPosition=bottom` に任せる(draw.io側の慣習に合わせた簡略化。pptx/preview用の footprint 計算とは無関係)。
-- **公式シェイプライブラリの検証**:`jgraph/drawio` リポジトリ(`dev`ブランチ)の `Sidebar-AWS4.js` を直接取得し、実際に使われている `resIcon`/`grIcon` 識別子を(推測ではなく)ソースから確認した上で、既存のAWSレジストリ(26アイコン+7グループ)の `drawioShape` フィールドに投入した。GCP2/Azure2は識別子が複数ファイル・複数ヘルパー関数に分散しており、今回の実装時間内では確実な検証ができなかったため見送り、`drawioShape` 未設定分は既存のPNGをbase64データURIとして埋め込むフォールバックに委ねている(3プロバイダ共通の仕組みなので、GCP/Azureへの拡張は後日の追加作業で対応可能)。
-- **`zook sync`**(`drawio.py: sync_from_drawio()`):元のYAMLを`build_layout()`にかけ「本来の自動配置座標」をベースラインとして計算し、編集後の`.drawio`から同idのセルの座標を読み取って比較する。差分がある要素だけ明示 `x`/`y`/`width`/`height` を書き込み、触れていない要素は自動配置のまま維持する。ruamel.yaml(round-trip)でYAMLを読み書きするため、コメント・キー順序を保持する。未知セル(id不一致)・見つからないセル(削除された可能性)はいずれもWarningのみで、ノード/コンテナの追加・削除・色変更は同期対象外(§8.8/§8.10/§8.13で確立した「機械的検出+手直しは利用者側」の方針を踏襲)。
-- **`.drawio`の圧縮形式**:draw.io本体が保存すると `<diagram>` 要素の中身は既定で `encodeURIComponent → raw deflate → base64` により圧縮される。一方 `export_drawio()` が書き出す形式は非圧縮(`<mxGraphModel>` を生のXML子要素としてそのまま埋め込む)。`_diagram_model_root()` は両方の形式を判別して読めるようにしている(圧縮側のみ実装が必要 — 非圧縮側はXMLとしてそのまま子要素になる)。
-- **CI自動PR**(`.github/workflows/drawio-sync.yml`):`**/*.drawio` の変更をトリガーに起動。同名ファイル規約(`X.yaml`⇔`X.drawio`)で対応するYAMLを特定し `zook sync` を実行、差分があれば `peter-evans/create-pull-request` でPRを自動作成する。直接コミットではなくPR作成なので、保護ブランチのポリシーと衝突しない。
+- **Why draw.io instead of PowerPoint**: a PowerPoint group (container) has a child coordinate system with an offset/scale (`chOff`/`chExt`, §8.4) — resizing a group implicitly scales its children's coordinates. Reading that back out of a pptx and correctly recovering coordinates would require recursively resolving nested group transforms. draw.io's (mxGraph's) containers (`container=1`) keep a child element's coordinates as a plain relative offset from the parent, with no child scaling on resize — confirmed against the official `jgraph/drawio` source (below) — so this trap simply doesn't exist there. On top of that, mxGraph XML is a text format that diffs cleanly in Git, and it can be self-hosted (diagrams never have to leave your own infrastructure).
+- **`zook export-drawio`** (`drawio.py: export_drawio()`): converts the `Box` tree to mxGraph XML. No coordinate conversion is needed — `Box.local_x/local_y` (a content position relative to its parent) has exactly the same semantics as mxGraph's child `<mxGeometry>` coordinates (a plain relative offset from the parent), so it's used as-is. Containers get their `parent` attribute set to the actual parent element's id plus `container=1`; a node's label isn't a separate textbox but is handled via the mxCell's own `value` + `verticalLabelPosition=bottom` (a simplification matching draw.io's own convention — unrelated to the footprint calculation used for pptx/preview).
+- **Validating the official shape library**: the `Sidebar-AWS4.js` file was pulled directly from the `jgraph/drawio` repository (`dev` branch), and the `resIcon`/`grIcon` identifiers actually in use were confirmed from the source (not guessed), then fed into the `drawioShape` field of the existing AWS registry (26 icons + 7 groups). GCP2/Azure2's identifiers are scattered across multiple files and helper functions, and couldn't be reliably verified within this implementation's time budget, so that was deferred — entries without `drawioShape` fall back to embedding the existing PNG as a base64 data URI (the mechanism is shared across all three providers, so extending to GCP/Azure is future work).
+- **`zook sync`** (`drawio.py: sync_from_drawio()`): runs the original YAML through `build_layout()` to compute the "intended auto-layout coordinates" as a baseline, then reads the coordinates of same-id cells from the edited `.drawio` and compares. Only elements with an actual difference get explicit `x`/`y`/`width`/`height` written; untouched elements stay auto-placed. YAML is read/written via ruamel.yaml (round-trip mode), so comments and key ordering are preserved. Unknown cells (id mismatch) and missing cells (possibly deleted) both produce Warnings only — adding/removing nodes/containers, or color changes, are out of scope for syncing (following the same "mechanical detection, manual fix on the user's side" policy established in §8.8/§8.10/§8.13).
+- **`.drawio` compression format**: when draw.io itself saves a file, the contents of its `<diagram>` element are compressed by default via `encodeURIComponent → raw deflate → base64`. The format `export_drawio()` writes, on the other hand, is uncompressed (the `<mxGraphModel>` is embedded directly as raw XML child elements). `_diagram_model_root()` can read either form (only the compressed form needed actual implementation — the uncompressed form is already a plain XML child element).
+- **CI auto-PR** (`.github/workflows/drawio-sync.yml`): triggered by changes to `**/*.drawio`. It identifies the corresponding YAML via a same-basename convention (`X.yaml` ⇔ `X.drawio`), runs `zook sync`, and — if there's a diff — automatically opens a PR via `peter-evans/create-pull-request`. Opening a PR rather than committing directly avoids conflicting with protected-branch policies.
 
-### 8.15 接続辺の明示指定 + 経路長ベースの自動選択
+### 8.15 Explicit connection-side selection + path-length-based auto-selection
 
-要求:リンクの接続辺(上下左右どれから出入りするか)を明示指定できるようにしたい。指定しない場合は、経路が最短かつ自然になるように自動選択してほしい。
+Requirement: allow a link's connection side (which edge it exits/enters from: top/bottom/left/right) to be specified explicitly. When unspecified, auto-select it so the path is as short and natural as possible.
 
-- **軸ペア制約の維持**:`choose_connection_indices()` は引き続き「両端とも水平ペア(左右)、または両端とも垂直ペア(上下)」のみを返す。これは `connector_path()` の elbow 実装(bentConnector3、§8.8)が両端同軸の exit/entry を前提に組まれているため。任意の辺の組み合わせ(軸が食い違う組)を許すには新しい1屈曲ルーティングの実装が要り、費用対効果を検討した結果、今回は既存の軸ペア制約を維持する形に決定した。
-- **`link.fromSide`/`link.toSide`**(新設、任意):
-  - 両方指定:そのまま採用。軸が矛盾する組み合わせ(例: `fromSide: bottom` + `toSide: left`)は `validate.py` で Fatal エラーにする(構造的な矛盾として即時検出、他のFatal項目と同じ扱い)。
-  - 片方だけ指定:指定した側が軸を確定させ、もう片方は自動選択(以下の自動ロジックのうち、軸が確定した状態での相手側の選択だけを流用)。
-  - 両方省略:完全自動。
-- **完全自動選択のアルゴリズム(見直し)**:旧実装は `|dx| >= |dy|` だけで水平/垂直ペアを決める近似だった。新実装は両ペア候補の**実際の描画経路**(`connection_point()` のラベル回避オフセット・`connector_path()` の elbow 経路まで含む)を計算し、経路長で比較する。ただし**純粋な最短距離だけで決めると不安定になることが実装中に判明した**:`docs/example.yaml` の `web-c → bucket`(誰が見ても水平方向に見える配置)で検証したところ、ラベル回避オフセットの影響でわずか2.6%の差で垂直側が選ばれてしまい、同じノードから出る別リンクと接続辺が重複して false edge aliasing 警告(§8.13)を新たに誘発した。このため、**支配軸(|dx|/|dy| の大きい方)を基本採用しつつ、逆軸の経路が `_AXIS_SWITCH_MARGIN`(20%)以上短い場合のみ切り替える**ヒステリシス付きの判定に変更した。僅差では常に支配軸が勝つため、直感的な配置ほど安定して同じ辺が選ばれる。
-- `link_render_plan()` はこの選択ロジックを含めて `render.py`/`preview.py`/`link_crossing_warnings()`/`link_aliasing_warnings()` から共通で呼ばれるため、描画結果と警告検知が乖離しない(§8.9 で確立した設計方針を踏襲)。
+- **Keeping the same-axis-pair constraint**: `choose_connection_indices()` continues to only ever return "both ends on the horizontal pair (left/right)" or "both ends on the vertical pair (top/bottom)." This is because `connector_path()`'s elbow implementation (bentConnector3, §8.8) is built assuming both ends exit/enter on the same axis. Supporting an arbitrary combination of sides (a mismatched-axis pair) would require implementing a new single-bend routing scheme; weighing the cost against the benefit, the decision was to keep the existing same-axis-pair constraint for now.
+- **`link.fromSide`/`link.toSide`** (new, optional):
+  - Both set: used as-is. A mismatched-axis combination (e.g. `fromSide: bottom` + `toSide: left`) is a Fatal error in `validate.py` (detected immediately as a structural contradiction, handled the same as every other Fatal case).
+  - Only one set: the side given fixes the axis; the other is auto-selected (reusing just the "pick the other side once the axis is fixed" part of the auto logic below).
+  - Both omitted: fully automatic.
+- **The fully-automatic selection algorithm (revised)**: the old implementation was an approximation that decided the horizontal/vertical pair purely from `|dx| >= |dy|`. The new implementation computes the **actual rendered path** for both pair candidates (including `connection_point()`'s label-avoidance offset and `connector_path()`'s elbow routing) and compares path length. However, **deciding purely by shortest distance turned out to be unstable**, discovered during implementation: testing against `docs/example.yaml`'s `web-c → bucket` (a pair that visually reads as obviously horizontal), the label-avoidance offset's influence caused the vertical side to win by a mere 2.6%, which then collided with another link's connection side on the same node and newly triggered a false-edge-aliasing warning (§8.13). To fix this, the logic was changed to a hysteresis-based decision: **generally use the dominant axis (whichever of `|dx|`/`|dy|` is larger), and only switch when the other axis's path is shorter by at least `_AXIS_SWITCH_MARGIN` (20%)**. On a near-tie, the dominant axis always wins, so the more intuitive the layout, the more stably the same side gets picked.
+- `link_render_plan()` includes this selection logic and is called uniformly from `render.py`/`preview.py`/`link_crossing_warnings()`/`link_aliasing_warnings()`, so the rendered result and the warning detection never drift apart (following the design principle established in §8.9).
 
-## 9. 次アクション
+## 9. Next Actions
 
-- [x] python-pptx で「VPC枠＋AZ＋アイコン＋ラベル」を階層グループ化する最小プロトタイプを作成(`prototype/build_prototype.py`)
-- [x] コネクタ接続＋図形移動追従、および txBody ラベル注入の実挙動を確認 → txBody は不可、中点テキストボックスに確定
-- [x] SVG→PNG 変換(cairosvg)を組み込み、適正 DPI を確定 → 表示px数の4倍
-- [ ] YAML スキーマ(JSON Schema)の正式定義 → `zook.schema.json` で完了済み(要件定義フェーズ、`README-index.md` 参照)
-- [ ] アイコン実ファイル(AWS公式アセット)の調達・配置は未着手。本プロトタイプはライセンス上の理由から自作プレースホルダSVGのみで技術検証した。
+- [x] Build a minimal prototype in python-pptx that hierarchically groups "VPC frame + AZ + icon + label" (`prototype/build_prototype.py`)
+- [x] Confirm actual behavior of connector attachment + follow-on-move, and of txBody label injection → txBody turns out to be impossible; settled on a midpoint textbox
+- [x] Wire in SVG→PNG conversion (cairosvg) and settle on the right DPI → 4x the displayed pixel count
+- [ ] Formal definition of the YAML schema (JSON Schema) → done via `zook.schema.json` (requirements-definition phase; see `README-index.md`)
+- [ ] Sourcing and placing the actual icon files (official AWS assets) hasn't started. This prototype used only self-made placeholder SVGs for technical validation, for licensing reasons.
 
 ---
 
-*本メモは要求仕様書に対する技術検証・詳細設計の第一版です。§8.2〜8.4/8.6 はプロトタイプ検証により確定済み。*
+*This memo is version 1 of the technical validation and detailed design against the requirements spec. §8.2–8.4/8.6 have been settled through prototype validation.*

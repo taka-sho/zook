@@ -1,7 +1,7 @@
 version: "1.0"
-# GCPでのサーバーレスAPI構成(serverless-api.yamlのGCP版)。
-# API GatewayでHTTPSリクエストを受け、Cloud Functionsで処理し、Firestoreに永続化する。
-# 認証はIdentity Platformで行う。GCPを指定された場合の土台に向く。
+# Serverless API setup on GCP (the GCP counterpart of serverless-api.yaml).
+# API Gateway receives HTTPS requests, Cloud Functions processes them, and Firestore persists the data.
+# Auth is via Identity Platform. A good base when GCP is explicitly required.
 
 canvas:
   aspectRatio: "16:9"

@@ -1,7 +1,7 @@
 version: "1.0"
-# コンテナ基盤(Fargate)の構成。
-# ALB配下でECS(Fargate)がアプリを実行し、Auroraに永続化・ElastiCacheでキャッシュする。
-# 「サーバー管理は減らしたいがコンテナのまま動かしたい」に向く。
+# A container platform (Fargate) setup.
+# ECS (Fargate) behind an ALB runs the app, persisting to Aurora and caching via ElastiCache.
+# Fits "want less server management but still want to run as a container."
 
 canvas:
   aspectRatio: "16:9"

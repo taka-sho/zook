@@ -1,111 +1,111 @@
-# アーキテクチャ図生成ツール — 設計一式インデックス
+# Architecture Diagram Generator — Design Package Index
 
-**バージョン:** 1.0
-**作成日:** 2026-07-25
-**フェーズ:** 要件・設計 完了 → 実装(Claude Code)へ引き渡し
+**Version:** 1.0
+**Date:** 2026-07-25
+**Phase:** Requirements & design complete → handed off to implementation (Claude Code)
 
-このリポジトリ一式は、YAML から AWS(将来はマルチクラウド)アーキテクチャ図を **PowerPoint** に生成するツールの、要件・設計フェーズの成果物です。実装・プロトタイプは Claude Code 側で行う前提で、本一式を「決定の唯一の真実源」として参照してください。
+This repository package is the requirements/design-phase deliverable for a tool that generates **PowerPoint** architecture diagrams from YAML, initially for AWS (multi-cloud later). Implementation and prototyping are assumed to happen on the Claude Code side; treat this package as the "single source of truth" for decisions made.
 
 ---
 
-## 1. 成果物一覧
+## 1. Deliverables
 
-| # | ファイル | 種別 | 役割 |
+| # | File | Type | Role |
 |---|---|---|---|
-| 1 | `architecture-diagram-tool-requirements.md` | 要求仕様書 | 目的・スコープ・ペルソナ・機能/非機能要件 |
-| 2 | `detailed-design-pptx.md` | 詳細設計メモ | python-pptx でのグループ化・コネクタ・座標系の決定事項 |
-| 3 | `yaml-spec.md` | YAML入力仕様書 | 入力YAMLの構造・座標系・レイアウト・リンク・エラー方針 |
-| 4 | `zook.schema.json` | JSON Schema | 入力YAMLの形式定義(検証の真実源) |
-| 5 | `example.yaml` | サンプル | 主要機能を網羅した入力例(検証済み) |
-| 5b | `example-cloud-actors.yaml` | サンプル | AWS Cloud境界+User/Adminアクターを含む入力例(検証済み) |
-| 6 | `icon-registry-and-vocabulary.md` | 仕様書 | サービス語彙とアイコン解決の方針 |
-| 7 | `icon-registry.schema.json` | JSON Schema | アイコンレジストリの形式定義 |
-| 8 | `registry.aws.yaml` | サンプル | AWS向け初期レジストリ(検証済み) |
-| 8b | `registry.gcp.yaml` | サンプル | GCP向け初期レジストリ(検証済み、実装フェーズで追加) |
-| 8c | `registry.azure.yaml` | サンプル | Azure向け初期レジストリ(検証済み、実装フェーズで追加) |
+| 1 | `architecture-diagram-tool-requirements.md` | Requirements spec | Purpose, scope, personas, functional/non-functional requirements |
+| 2 | `detailed-design-pptx.md` | Detailed design memo | Decisions on grouping, connectors, and coordinate systems in python-pptx |
+| 3 | `yaml-spec.md` | YAML input spec | Structure, coordinate system, layout, links, and error policy for the input YAML |
+| 4 | `zook.schema.json` | JSON Schema | Format definition for the input YAML (source of truth for validation) |
+| 5 | `example.yaml` | Sample | Input example covering the main features (validated) |
+| 5b | `example-cloud-actors.yaml` | Sample | Input example including an AWS Cloud boundary + User/Admin actors (validated) |
+| 6 | `icon-registry-and-vocabulary.md` | Spec | Policy for service vocabulary and icon resolution |
+| 7 | `icon-registry.schema.json` | JSON Schema | Format definition for the icon registry |
+| 8 | `registry.aws.yaml` | Sample | Initial registry for AWS (validated) |
+| 8b | `registry.gcp.yaml` | Sample | Initial registry for GCP (validated; added during the implementation phase) |
+| 8c | `registry.azure.yaml` | Sample | Initial registry for Azure (validated; added during the implementation phase) |
 
-読む順序の推奨：**1 → 3 → 4/5 → 6 → 7/8 → 2**(要件で全体像、次に入力仕様、実装直前に pptx 詳細)。
-
----
-
-## 2. コア決定事項サマリ
-
-### プロダクト
-- 入力 **YAML**、出力 **PowerPoint(.pptx)**、**1 YAML = 1 スライド**。
-- 主目的：コードで図を管理(Git 差分)、パワポで後編集、LLM による半自動生成を想定。
-- 利用者：PM/営業/SRE/エンジニア。頻度：週1〜月2程度。品質：後編集前提で「そこそこ」でよい。
-
-### データモデル(抽象化)
-- **container(枠)** と **node(アイコン)** の2概念に抽象化。VPC/AZ/subnet 等はすべて `type` の異なる container。
-- 階層は `children` の入れ子で再帰表現。マルチクラウドは `provider` + `type` で拡張。
-- リンクは任意。省略すれば「線なし・エリア配置のみ」。
-
-### 座標・レイアウト
-- 論理単位。16:9 = 1280×720、4:3 = 960×720(原点左上)。EMU 変換表は `yaml-spec.md §2`。
-- `x`/`y` 指定で絶対配置、省略で自動整列。両者混在可。`x`/`y` はセット必須。
-
-### PowerPoint 実装(python-pptx)
-- **階層グループ化**：VPC→AZ→(アイコン+ラベル)。`add_group_shape` + chOff/chExt=off/ext の 1:1 マッピング。
-- **コネクタ**：`begin_connect`/`end_connect` で図形接続、移動追従。矩形限定で安定運用。
-- **ラベル追従**：コネクタに txBody 注入(第一候補)、不可なら中点テキストボックス。
-- **アイコン埋め込み**：既定 **PNG ラスタ**(cairosvg 変換、CI/CD 向き)。EMF ベクタはオプション。
-
-### アイコン・語彙
-- `type` は enum で固定しない。**レジストリが語彙の真実源**。未知 type は Warning + プレースホルダ。
-- 初期同梱 Tier 1 = 26 サービス(AWSサービス22 + General(アクター:User/Admin/Developer/Client)4)。追加はレジストリ追記のみ(スキーマ改修不要)。
-- コンテナ側にも `cloud`(境界。隅アイコン付き)を含む 7 種の枠スタイルを組み込み。
-- 解決は **エイリアス込み・大小文字無視**。ユーザーレジストリで**オーバーライド可**。
-- AWS は四半期更新 → `iconSet` にリリース記録し、キー安定・ファイル差し替え運用。
-- **マルチクラウド対応済み**(実装フェーズで追加):GCP(19サービス)・Azure(18サービス)の組み込みレジストリを追加し、要素の `provider` に応じて解決先レジストリを切り替える `MultiRegistry` を実装。コンテナの `groups` はプロバイダ自身に未定義ならAWSレジストリへフォールバック。`zook icons list` で確認可能。
-
-### エラー方針
-- 構造破綻(スキーマ違反・id 重複・リンク先不在)= **Fatal で即停止**(CI/CD は非ゼロ終了。`--strict` で Warning もこの扱いに変更可能)。
-- 描画上の軽微問題(未知アイコン・座標範囲外・要素/ラベル同士の重なり)= **Warning で継続**。座標ベースの重複検知は明示座標・自動配置どちらで置かれた要素にも同じロジックで適用される。
-- 自動配置の子要素が明示座標の兄弟要素と重なる場合のみ、自動配置側を押し出して回避する(実装フェーズで追加)。それ以外は自動修正せず検出のみ。
-- CLI は `build`(生成)/`validate`(検証のみ・レンダリングなし)/`icons list`(語彙確認)/`preview`(軽量PNG)/`export-drawio`/`sync`(draw.io連携、実装フェーズで追加)のサブコマンド構成(実装フェーズで追加)。
+Recommended reading order: **1 → 3 → 4/5 → 6 → 7/8 → 2** (requirements for the big picture, then the input spec, then the pptx details right before implementation).
 
 ---
 
-## 3. 検証済みの事項
+## 2. Summary of Core Decisions
 
-- `zook.schema.json` は Draft 2020-12 準拠。`example.yaml` が適合。不正入力(x単独/不正id/未知kind/範囲外比率/余計なフィールド)は棄却を確認。
-- `icon-registry.schema.json` に `registry.aws.yaml`(26 icons + 7 group styles)が適合。エイリアス lookup 46 キー、衝突なし。
+### Product
+- Input **YAML**, output **PowerPoint (.pptx)**, **1 YAML = 1 slide**.
+- Primary purpose: manage diagrams as code (reviewable via Git diffs), hand-edit in PowerPoint afterward, and support semi-automated generation by an LLM.
+- Users: PMs/sales/SREs/engineers. Frequency: roughly weekly to a couple of times a month. Quality: "good enough" is fine, since hand-editing afterward is assumed.
 
----
+### Data Model (Abstraction)
+- Abstracted into two concepts: **container** (a frame) and **node** (an icon). VPC/AZ/subnet etc. are all containers that differ only in `type`.
+- Hierarchy is expressed recursively via nested `children`. Multi-cloud is extended through `provider` + `type`.
+- Links are optional. Omitting them yields "no lines, elements just placed in an area."
 
-## 4. 実装フェーズ(Claude Code)への申し送り
+### Coordinates & Layout
+- Logical units. 16:9 = 1280×720, 4:3 = 960×720 (origin at top-left). The EMU conversion table is in `yaml-spec.md §2`.
+- `x`/`y` give absolute placement; omitting them triggers auto-layout. The two can be mixed. `x`/`y` must be set together.
 
-### プロトタイプで確定済みの項目(2026-07-25 検証)
+### PowerPoint Implementation (python-pptx)
+- **Hierarchical grouping**: VPC → AZ → (icon + label). `add_group_shape` with a 1:1 mapping of chOff/chExt to off/ext.
+- **Connectors**: shapes are connected via `begin_connect`/`end_connect`, so they follow the shapes when moved. Limited to rectangles for stable behavior.
+- **Label tracking**: inject `txBody` into the connector where possible (first choice); fall back to a midpoint textbox where not.
+- **Icon embedding**: **PNG raster** by default (converted via cairosvg, suited to CI/CD). EMF vector is optional.
 
-`prototype/build_prototype.py` を作成し、python-pptx 1.0.2 + cairosvg + LibreOffice headless(`soffice --convert-to pdf` → `pdftoppm`)で目視検証した。詳細は `detailed-design-pptx.md` §8.2〜8.4/§8.6/§8.7 参照。
+### Icons & Vocabulary
+- `type` is not fixed as an enum. **The registry is the source of truth for vocabulary.** An unknown `type` produces a Warning plus a placeholder.
+- Initial built-in Tier 1 = 26 services (22 AWS services + 4 General actors: User/Admin/Developer/Client). Additions only require appending to the registry (no schema change needed).
+- Containers also ship with 7 built-in frame styles, including `cloud` (a boundary, with a corner icon).
+- Resolution is **alias-aware and case-insensitive**. **Overridable** via a user registry.
+- AWS icons are updated quarterly → releases are recorded in `iconSet`, keeping keys stable while swapping files.
+- **Multi-cloud support** (added during the implementation phase): built-in registries for GCP (19 services) and Azure (18 services) were added, along with a `MultiRegistry` that switches the resolution target based on an element's `provider`. A container's `groups` fall back to the AWS registry when undefined in the provider's own registry. Check with `zook icons list`.
 
-- **接続点インデックス**:`idx 0=上辺中央 / 1=左辺中央 / 2=下辺中央 / 3=右辺中央`(top起点・反時計回り)。python-pptx 自身のソースコードが実座標をこのマッピングで計算しており確定的。
-- **コネクタのラベル**:`p:cxnSp` は OOXML スキーマ上 `txBody` を持てないと判明(txBody注入は不可能)。中点テキストボックス方式に確定。
-- **アイコン PNG の解像度**:表示ピクセル数の **4倍** でラスタライズ(1論理単位=9525EMU=96dpi換算1pxを基準)。
-- (副次的発見)グループの chOff/chExt 1:1マッピングは python-pptx の `recalculate_extents()` が自動で行うため、設計メモが想定していた独自ヘルパーは不要。
-- (副次的発見)コンテナのラベルを左上に出すには `text_frame.vertical_anchor = MSO_ANCHOR.TOP` を明示指定する必要がある(デフォルトは縦中央寄せ)。
-
-### 実装作業として残るもの
-- **アイコン実ファイルの調達・配置**：公式アセット取得 → PNG 変換 → `registry.aws.yaml` の `file` パスに合わせて配置。
-- YAML 検証の組み込み：**描画前に必ず** `zook.schema.json` で検証。
-- 論理単位 → EMU 変換の実装(`yaml-spec.md §2` の表)。
-- 自動レイアウトは既定値で第一版実装。重なり回避の高度化は次版送り可。
-- CLI と CI/CD 連携(YAML → PPTX、Fatal は非ゼロ終了)。
-
-### 守るべき原則
-- 2つの JSON Schema を**検証の単一の真実源**として扱う。
-- レジストリを**語彙の単一の真実源**として扱う(型を実装内にハードコードしない)。
-
----
-
-## 5. 次版以降の候補(スコープ外)
-
-- リンクの高度なルーティング(障害物を迂回する経路探索。現状は自動配置 vs 明示座標の単純な押し出しのみ)。
-- EMF ベクタ経路の標準化(Inkscape 依存の扱い)。
-- AWS/GCP/Azure 公式アイコンアセットの実際の調達・同梱(現状は自作プレースホルダーのみ)。
-- Tier 2 サービス(各クラウド300超)の組み込み拡充。
-- MCP サーバー化(要件を渡す→YAML生成→図出力の半自動化)。
+### Error Policy
+- Structural breakage (schema violation, duplicate id, dangling link target) = **Fatal, stops immediately** (non-zero exit for CI/CD; `--strict` can additionally treat Warnings this way).
+- Minor drawing issues (unknown icon, out-of-canvas coordinates, elements/labels overlapping) = **Warning, continues**. Coordinate-based overlap detection applies the same logic regardless of whether an element was placed explicitly or automatically.
+- Only when an auto-placed child overlaps an explicitly-positioned sibling is the auto-placed side pushed to avoid it (added during the implementation phase). All other overlaps are detected only, not auto-corrected.
+- The CLI is organized into subcommands: `build` (generate), `validate` (check only, no rendering), `icons list` (inspect vocabulary), `preview` (lightweight PNG), `export-drawio`/`sync` (draw.io round-trip, added during the implementation phase) (all added during the implementation phase).
 
 ---
 
-*本インデックスは要件・設計フェーズの総括です。以降の変更は各仕様ファイルとこのインデックスへ反映してください。*
+## 3. What's Been Verified
+
+- `zook.schema.json` conforms to Draft 2020-12. `example.yaml` validates against it. Confirmed that invalid input (x alone, an invalid id, an unknown kind, an out-of-range aspect ratio, extra fields) is rejected.
+- `registry.aws.yaml` (26 icons + 7 group styles) validates against `icon-registry.schema.json`. 46 alias lookup keys, no collisions.
+
+---
+
+## 4. Handoff to the Implementation Phase (Claude Code)
+
+### Items Settled by Prototyping (verified 2026-07-25)
+
+`prototype/build_prototype.py` was written and visually verified with python-pptx 1.0.2 + cairosvg + LibreOffice headless (`soffice --convert-to pdf` → `pdftoppm`). See `detailed-design-pptx.md` §8.2–8.4/§8.6/§8.7 for details.
+
+- **Connection point indices**: `idx 0 = top-center / 1 = left-center / 2 = bottom-center / 3 = right-center` (starting at top, counter-clockwise). This is definitive, since python-pptx's own source code computes the actual coordinates using this mapping.
+- **Connector labels**: confirmed that `p:cxnSp` cannot carry a `txBody` under the OOXML schema (injecting one is impossible). Settled on the midpoint-textbox approach.
+- **Icon PNG resolution**: rasterize at **4x** the displayed pixel count (based on 1 logical unit = 9525 EMU = 1px at 96dpi).
+- (Secondary finding) A group's 1:1 chOff/chExt mapping is handled automatically by python-pptx's `recalculate_extents()`, so the custom helper the design memo assumed would be needed turns out to be unnecessary.
+- (Secondary finding) Getting a container's label to appear at the top-left requires explicitly setting `text_frame.vertical_anchor = MSO_ANCHOR.TOP` (the default is vertically centered).
+
+### Work Remaining for Implementation
+- **Sourcing and placing actual icon files**: obtain official assets → convert to PNG → place per the `file` paths in `registry.aws.yaml`.
+- Wire in YAML validation: **always validate** against `zook.schema.json` before rendering.
+- Implement the logical-unit → EMU conversion (the table in `yaml-spec.md §2`).
+- Ship auto-layout with sensible defaults for v1; more sophisticated overlap avoidance can wait for a later version.
+- Wire up the CLI and CI/CD integration (YAML → PPTX, non-zero exit on Fatal).
+
+### Principles to Preserve
+- Treat the two JSON Schemas as the **single source of truth for validation**.
+- Treat the registry as the **single source of truth for vocabulary** (never hard-code types in the implementation).
+
+---
+
+## 5. Candidates for Future Versions (Out of Scope)
+
+- Advanced link routing (pathfinding that detours around obstacles; currently only a simple push-apart between auto-placed and explicitly-positioned elements).
+- Standardizing the EMF vector path (handling the Inkscape dependency).
+- Actually sourcing and bundling official AWS/GCP/Azure icon assets (currently only self-made placeholders).
+- Broader Tier 2 service coverage (300+ per cloud).
+- An MCP server (semi-automating requirements → YAML generation → diagram output).
+
+---
+
+*This index summarizes the requirements/design phase. Reflect any subsequent changes in both the individual spec files and this index.*

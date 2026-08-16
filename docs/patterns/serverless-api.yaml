@@ -1,7 +1,7 @@
 version: "1.0"
-# サーバーレスAPIの構成。
-# API GatewayでHTTPSリクエストを受け、Lambdaで処理し、DynamoDBに永続化する。
-# 認証はCognitoで行う。「サーバー管理をしたくない」「まず小さく作って伸ばしたい」に向く。
+# A serverless API setup.
+# API Gateway receives HTTPS requests, Lambda processes them, and DynamoDB persists the data.
+# Auth is via Cognito. Fits "no server management wanted" / "start small and grow."
 
 canvas:
   aspectRatio: "16:9"

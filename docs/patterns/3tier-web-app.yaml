@@ -1,7 +1,7 @@
 version: "1.0"
-# 3層Webアプリケーションの定番構成。
-# ALB配下に複数AZのEC2 Webサーバーを並べ、各AZにRDSを置いた冗長構成。
-# 「Webアプリを新しく作りたい」「まずは王道構成から」という要件に向く。
+# The classic 3-tier web app.
+# Multiple EC2 web servers across AZs behind an ALB, with an RDS in each AZ for redundancy.
+# Fits "I want to build a new web app" / "start with a proven setup" requirements.
 
 canvas:
   aspectRatio: "16:9"

@@ -1,196 +1,196 @@
-# YAML 入力仕様書（v1.0）
+# YAML Input Specification (v1.0)
 
-**バージョン:** 1.0
-**作成日:** 2026-07-25
-**対象:** 要求仕様書 §7.1 / §9 の具体化、および §14-1（スキーマ正式定義）の確定
-**関連ファイル:** `zook.schema.json`（JSON Schema）, `example.yaml`（サンプル）
+**Version:** 1.0
+**Date:** 2026-07-25
+**Scope:** Concretizes requirements spec §7.1/§9, and settles §14-1 (formal schema definition)
+**Related files:** `zook.schema.json` (JSON Schema), `example.yaml` (sample)
 
 ---
 
-## 1. 設計原則
+## 1. Design Principles
 
-- **機械可読性を最優先**：LLM が生成する前提のため、曖昧さを排し JSON Schema で厳密に制約する。
-- **抽象化で拡張性を確保**：AWS 固有語彙に縛らず、「コンテナ（枠）」と「ノード（アイコン）」の2概念で表現する。VPC も AZ も subnet も region も、すべて `type` の異なるコンテナとして扱う。これにより GCP / Azure / 任意アイコンへ拡張できる。
-- **明示と自動の併用**：座標は書けば絶対指定、書かなければ自動配置。混在可。
-- **後編集前提**：生成物は PowerPoint 手編集の起点。過剰な最適化はしない。
+- **Machine readability first**: since an LLM is expected to generate this, ambiguity is eliminated and strictly constrained via JSON Schema.
+- **Extensibility through abstraction**: not tied to AWS-specific vocabulary — expressed through two concepts, **container** (a frame) and **node** (an icon). VPC, AZ, subnet, region — all are containers that differ only in `type`. This is what makes extending to GCP/Azure/arbitrary icons possible.
+- **Explicit and automatic coexist**: writing coordinates gives absolute placement; omitting them triggers auto-layout. The two can be mixed.
+- **Assumes hand-editing afterward**: the output is a starting point for hand-editing in PowerPoint. We don't over-optimize.
 
-## 2. 座標系と単位
+## 2. Coordinate System & Units
 
-- 論理単位（logical unit）で記述し、ツールが内部で EMU に変換する。
-- キャンバスの論理サイズはアスペクト比で決まる。
+- Written in logical units; the tool converts to EMU internally.
+- The canvas's logical size is determined by the aspect ratio.
 
-| aspectRatio | 論理サイズ (幅×高) | 実寸 | EMU |
+| aspectRatio | Logical size (W×H) | Physical size | EMU |
 |---|---|---|---|
 | `16:9` | 1280 × 720 | 13.333in × 7.5in | 12192000 × 6858000 |
 | `4:3` | 960 × 720 | 10in × 7.5in | 9144000 × 6858000 |
 
-- 原点は左上。+x が右、+y が下。
-- `x` / `y` / `width` / `height` / `gap` / `padding` はすべて論理単位。
+- Origin is top-left. +x is right, +y is down.
+- `x` / `y` / `width` / `height` / `gap` / `padding` are all logical units.
 
-## 3. トップレベル構造
+## 3. Top-Level Structure
 
 ```yaml
-version: "1.0"        # 必須。固定値 "1.0"
-canvas: {...}         # 必須。スライド設定
-elements: [...]       # 必須。コンテナ／ノードの配列
-links: [...]          # 任意。接続線。無ければ線なしの図
+version: "1.0"        # required. fixed value "1.0"
+canvas: {...}         # required. slide settings
+elements: [...]       # required. array of containers/nodes
+links: [...]          # optional. connectors. no links -> a lineless diagram
 ```
 
 ## 4. canvas
 
-| フィールド | 必須 | 型 | 既定 | 説明 |
+| Field | Required | Type | Default | Description |
 |---|---|---|---|---|
-| `aspectRatio` | ○ | enum(`16:9`,`4:3`) | — | スライド比率 |
-| `padding` | | number ≥ 0 | 40 | スライド端と最上位要素の余白 |
-| `background` | | `#RRGGBB` | — | 背景色 |
-| `overlapMargin` | | number ≥ 0 | 0 | 重なり検知(§9)で各要素の周囲に追加するバッファ(論理単位)。0は文字通りの重なりのみ検知、大きくすると近接している要素・リンク経路も検知対象になる |
+| `aspectRatio` | Yes | enum(`16:9`,`4:3`) | — | slide aspect ratio |
+| `padding` | | number ≥ 0 | 40 | margin between the slide edge and top-level elements |
+| `background` | | `#RRGGBB` | — | background color |
+| `overlapMargin` | | number ≥ 0 | 0 | buffer (logical units) added around each element for overlap detection (§9). `0` detects literal overlaps only; a larger value also flags elements/link paths that are merely close together |
 
-## 5. element（コンテナ / ノード）
+## 5. element (container / node)
 
-`elements` と `children` に入るのは、`kind` で判別される2種類。
+Entries in `elements` and `children` are one of two kinds, distinguished by `kind`.
 
-### 5.1 container（枠：VPC / AZ / subnet など）
+### 5.1 container (a frame: VPC / AZ / subnet, etc.)
 
-| フィールド | 必須 | 型 | 既定 | 説明 |
+| Field | Required | Type | Default | Description |
 |---|---|---|---|---|
-| `kind` | ○ | `"container"` | — | 判別子 |
-| `id` | ○ | id 文字列 | — | 一意。リンク参照に使う |
-| `type` | ○ | string | — | `vpc`/`az`/`subnet`/`region`/`account`/`group` 等（拡張可） |
+| `kind` | Yes | `"container"` | — | discriminator |
+| `id` | Yes | id string | — | unique; used for link references |
+| `type` | Yes | string | — | `vpc`/`az`/`subnet`/`region`/`account`/`group` etc. (extensible) |
 | `provider` | | enum | `generic` | `aws`/`gcp`/`azure`/`custom`/`generic` |
-| `label` | | string | — | 枠に描くラベル |
-| `x`,`y` | | number | — | 絶対位置（両方セットで指定。片方だけは不可） |
-| `width`,`height` | | number > 0 | — | 明示サイズ。省略時は子に合わせ自動 |
-| `layout` | | object | — | 子の自動配置ルール（§7） |
-| `style` | | object | — | 枠線色・塗り・線幅・ラベル位置・ラベル文字サイズ |
-| `children` | | element[] | — | 入れ子（再帰） |
+| `label` | | string | — | label drawn on the frame |
+| `x`,`y` | | number | — | absolute position (must be set together; one alone is not allowed) |
+| `width`,`height` | | number > 0 | — | explicit size; auto-sized to fit children if omitted |
+| `layout` | | object | — | auto-placement rule for children (§7) |
+| `style` | | object | — | border color/fill/line width/label position/label font size |
+| `children` | | element[] | — | nested elements (recursive) |
 
-`style.labelFontSize`（number > 0、既定 10、pt）：コンテナ自身のラベル文字サイズ。自動レイアウトがラベル用に確保する上下スペースも、この値に比例して拡大/縮小する。
+`style.labelFontSize` (number > 0, default 10, pt): the container's own label font size. The top/bottom space auto-layout reserves for the label also scales proportionally with this value.
 
-`style.borderColor`/`style.fillColor`（`#RRGGBB`）・`style.borderWidth`（number ≥ 0、既定 1）：枠線色・塗り・線幅。省略時はアイコンレジストリの `groups.<type>` に定義された既定スタイルを使う（`groups` にも無ければ枠線色 `#5A6B86`・塗りなし・線幅1）。個別要素だけレジストリの既定から色を変えたい場合に指定する。
+`style.borderColor`/`style.fillColor` (`#RRGGBB`), `style.borderWidth` (number ≥ 0, default 1): the frame's border color, fill, and line width. If omitted, the default style defined at `groups.<type>` in the icon registry is used (and if not defined there either: border `#5A6B86`, no fill, line width 1). Set these when you want to override the registry default's color for one specific element.
 
-`style.labelPosition`（enum: `top-left`/`top-center`/`bottom-left`、既定 `top-left`）：コンテナ自身のラベルの表示位置。省略時はレジストリの `groups.<type>.labelPosition` に従う。
+`style.labelPosition` (enum: `top-left`/`top-center`/`bottom-left`, default `top-left`): where the container's own label is drawn. If omitted, follows the registry's `groups.<type>.labelPosition`.
 
-### 5.2 node（アイコン：EC2 / Lambda / RDS / S3 など）
+### 5.2 node (an icon: EC2 / Lambda / RDS / S3, etc.)
 
-| フィールド | 必須 | 型 | 既定 | 説明 |
+| Field | Required | Type | Default | Description |
 |---|---|---|---|---|
-| `kind` | ○ | `"node"` | — | 判別子 |
-| `id` | ○ | id 文字列 | — | 一意。リンク参照に使う |
-| `type` | ○ | string | — | `EC2`/`Lambda`/`RDS`/`S3` 等（拡張可）。アイコン解決キー |
+| `kind` | Yes | `"node"` | — | discriminator |
+| `id` | Yes | id string | — | unique; used for link references |
+| `type` | Yes | string | — | `EC2`/`Lambda`/`RDS`/`S3` etc. (extensible); the icon-resolution key |
 | `provider` | | enum | `aws` | `aws`/`gcp`/`azure`/`custom` |
-| `label` | | string | — | アイコンのラベル |
-| `x`,`y` | | number | — | 絶対位置（両方セットで指定） |
-| `width`,`height` | | number > 0 | — | アイコンサイズ。省略時は `size`、それも無ければ既定サイズ |
-| `size` | | number > 0 | — | `width`/`height` を同時に設定するショートハンド。片方の軸だけ `width`/`height` を明示した場合、その軸では無視される |
-| `style` | | object | — | ラベル位置（`labelPosition`: below/above/right/none）・ラベル間隔（`labelGap`）・ラベル文字サイズ（`labelFontSize`）・プレーン図形化（`shape`/`fillColor`/`borderColor`、後述） |
+| `label` | | string | — | the icon's label |
+| `x`,`y` | | number | — | absolute position (must be set together) |
+| `width`,`height` | | number > 0 | — | icon size; falls back to `size`, then to a default size if omitted |
+| `size` | | number > 0 | — | shorthand for setting `width`/`height` together. If `width`/`height` is explicitly set on one axis, `size` is ignored on that axis |
+| `style` | | object | — | label position (`labelPosition`: below/above/right/none), label spacing (`labelGap`), label font size (`labelFontSize`), plain-shape mode (`shape`/`fillColor`/`borderColor`, below) |
 
-`style.labelGap`（number ≥ 0、既定 4、論理単位）：アイコンとラベルの間隔。`labelPosition: none` のときは効果なし。狭いレイアウトでラベル同士・リンクラベルとの重なりを避けたい場合に個別調整できる。
+`style.labelGap` (number ≥ 0, default 4, logical units): spacing between the icon and its label. Has no effect when `labelPosition: none`. Useful for avoiding label-vs-label or label-vs-link-label overlaps in tight layouts.
 
-`style.labelFontSize`（number > 0、既定 9、pt）：ノードのラベル文字サイズ。自動レイアウトがラベル用に確保するフットプリント（高さ）も、この値に比例して拡大/縮小する。`labelPosition: none` のときは効果なし。
+`style.labelFontSize` (number > 0, default 9, pt): the node's label font size. The footprint (height) auto-layout reserves for the label also scales proportionally with this value. Has no effect when `labelPosition: none`.
 
-`style.shape`（enum: `rect`/`rounded`/`diamond`/`circle`）：指定すると、`type` によるアイコン解決を行わず、図形内部にラベルを直接描画する「プレーン図形ノード」になる（Mermaidのフローチャート記法のような、箱の中にテキストがある見た目）。`type` はスキーマ上引き続き必須だが、`shape` 指定時は実質未使用（値は何でもよい）。`labelPosition`/`labelGap` は効果なし（ラベルは常に図形中央）。
+`style.shape` (enum: `rect`/`rounded`/`diamond`/`circle`): when set, the node skips icon resolution via `type` and instead becomes a "plain shape node" with the label drawn directly inside the shape (a box-with-text-inside look, similar to Mermaid flowchart notation). `type` is still required by the schema, but is effectively unused when `shape` is set (any value works). `labelPosition`/`labelGap` have no effect (the label always sits centered in the shape).
 
-`style.fillColor`/`style.borderColor`（`#RRGGBB`）：`shape` 指定時の塗り・枠線色。省略時は白背景・黒枠。`shape` 未指定時は効果なし。
+`style.fillColor`/`style.borderColor` (`#RRGGBB`): fill and border color when `shape` is set. Default is a white background with a black border. Has no effect when `shape` is not set.
 
-### 5.3 id 規則
+### 5.3 id Rules
 
-- パターン：`^[A-Za-z][A-Za-z0-9_-]*$`（英字始まり、英数・`_`・`-`）。
-- 図全体で一意。重複はエラー（§9）。
+- Pattern: `^[A-Za-z][A-Za-z0-9_-]*$` (starts with a letter; letters, digits, `_`, `-`).
+- Must be unique across the whole diagram. A duplicate is an error (§9).
 
-## 6. 位置とサイズの規則
+## 6. Position & Size Rules
 
-- `x`/`y` を指定 → その親コンテナ（または最上位）内での絶対配置。
-- `x`/`y` を省略 → 親の `layout` に従って自動配置。
-- `x` と `y` は**セット必須**（片方だけの指定はスキーマエラー）。
-- `width`/`height` 省略時：コンテナは子に合わせ自動サイズ、ノードは既定アイコンサイズ。
-- ノードの `size` は `width`/`height` を同時に設定するショートハンド。`width`/`height` を軸ごとに明示した場合はそちらが優先され、`size` はその軸で無視される（例：`size: 80, width: 40` → 幅40・高さ80）。
-- 同一コンテナ内で「座標指定の子」と「自動配置の子」は混在可。自動配置は指定済みの子を避けずに詰める第一版仕様（重なりは後編集で調整）。
+- `x`/`y` specified → absolute placement within the parent container (or the top level).
+- `x`/`y` omitted → auto-placed according to the parent's `layout`.
+- `x` and `y` **must be set together** (specifying only one is a schema error).
+- `width`/`height` omitted: a container auto-sizes to fit its children; a node uses its default icon size.
+- A node's `size` is shorthand for setting `width`/`height` together. If `width`/`height` is set explicitly per axis, that value wins and `size` is ignored on that axis (e.g. `size: 80, width: 40` → width 40, height 80).
+- Within the same container, "children with explicit coordinates" and "auto-placed children" can be mixed. In v1, auto-placement packs without avoiding already-positioned children (overlaps are expected to be adjusted afterward).
 
-## 7. 自動レイアウト（layout）
+## 7. Auto-Layout (layout)
 
-`x`/`y` を持たない子に適用。
+Applies to children with no `x`/`y`.
 
-| フィールド | 型 | 既定 | 説明 |
+| Field | Type | Default | Description |
 |---|---|---|---|
-| `direction` | enum(`horizontal`,`vertical`,`grid`) | `grid` | 並べ方 |
-| `columns` | integer ≥ 1 | 自動 | grid の列数 |
-| `gap` | number ≥ 0 | 24 | 子どうしの間隔 |
-| `padding` | number ≥ 0 | 32 | コンテナ内側の余白 |
+| `direction` | enum(`horizontal`,`vertical`,`grid`) | `grid` | arrangement |
+| `columns` | integer ≥ 1 | auto | number of grid columns |
+| `gap` | number ≥ 0 | 24 | spacing between children |
+| `padding` | number ≥ 0 | 32 | inner padding of the container |
 
-- `grid`：`columns` 未指定なら子の数から自動決定。
-- `horizontal` / `vertical`：一列に並べる。
-- コンテナサイズ未指定時は、配置結果の外接矩形 + `padding` で自動確定。
+- `grid`: if `columns` is omitted, it's derived automatically from the number of children.
+- `horizontal` / `vertical`: arranged in a single row/column.
+- When the container's size is unspecified, it's auto-determined from the bounding box of the placed children plus `padding`.
 
-## 8. links（接続線）
+## 8. links (connectors)
 
-| フィールド | 必須 | 型 | 既定 | 説明 |
+| Field | Required | Type | Default | Description |
 |---|---|---|---|---|
-| `from` | ○ | string | — | 始点の element id |
-| `to` | ○ | string | — | 終点の element id |
-| `id` | | id 文字列 | — | リンク自身の id（任意） |
-| `arrow` | | enum(`end`,`both`,`none`) | `end` | 矢じり。`none` は素の線 |
-| `style` | | enum(`straight`,`elbow`,`curved`) | `straight` | 線の取り回し |
-| `label` | | string | — | 線に載せるラベル（例：ポート番号） |
-| `labelFontSize` | | number > 0 | 8 | ラベル文字サイズ（pt）。中点に置くラベルボックス自体もこの値に比例して拡大/縮小する。`label` が無ければ無効 |
-| `fromSide` | | enum(`top`,`bottom`,`left`,`right`) | — | `from` 側の接続辺を明示指定。省略時は自動選択 |
-| `toSide` | | enum(`top`,`bottom`,`left`,`right`) | — | `to` 側の接続辺を明示指定。省略時は自動選択 |
-| `waypoints` | | `{x,y}` の配列（1 個以上） | — | 経路が通る中間点（キャンバス絶対座標）を順に指定。両端の間を直線折れ線で結ぶ。`style` の取り回しより優先。障害物を避けて迂回させたいときに使う |
+| `from` | Yes | string | — | source element id |
+| `to` | Yes | string | — | target element id |
+| `id` | | id string | — | the link's own id (optional) |
+| `arrow` | | enum(`end`,`both`,`none`) | `end` | arrowhead placement. `none` draws a plain line |
+| `style` | | enum(`straight`,`elbow`,`curved`) | `straight` | connector routing style |
+| `label` | | string | — | a label carried on the line (e.g. a port number) |
+| `labelFontSize` | | number > 0 | 8 | label font size (pt). The midpoint label box itself also scales proportionally with this value. No effect without `label` |
+| `fromSide` | | enum(`top`,`bottom`,`left`,`right`) | — | force the connection side on the `from` end. Auto-selected if omitted |
+| `toSide` | | enum(`top`,`bottom`,`left`,`right`) | — | force the connection side on the `to` end. Auto-selected if omitted |
+| `waypoints` | | array of `{x,y}` (1 or more) | — | intermediate points (absolute canvas coordinates) the path threads through, in order, connected by straight segments. Takes priority over `style` routing. Use it to detour a connector around an obstacle |
 
-- `links` を丸ごと省略すれば「線なし、エリア内に配置するだけ」の図になる。
-- `from`/`to` はノードでもコンテナでも参照可。
-- 接続は矩形前提（設計メモ §8.2）。ラベルはコネクタに追従（設計メモ §8.3）。
-- `style` を明示しない（既定 `straight`）場合、接続点同士が水平でも垂直でもない（斜め）ときは自動的に `elbow`(直角の折れ線)として描画する。斜めの直線は AWS 構成図の慣習である直交ルーティングと馴染まないための措置。`elbow`/`curved` を明示指定した場合は上書きしない。
-- ノードに `label`（既定 `below`/`above`）がある場合、その辺から出る接続はラベルの外側に接続点を置く（例：`below` ラベル付きノードから下方向に矢印を伸ばすと、ラベルの下から接続される）。左右方向の接続はラベルの影響を受けない。
-- `fromSide`/`toSide`：接続する辺を明示したい場合に使う。
-  - **両方指定**：そのまま採用する。ただし `top`/`bottom`（垂直）と `left`/`right`（水平）を混ぜる（軸が矛盾する）指定は Fatal（§9）。
-  - **片方だけ指定**：指定した側が軸（水平/垂直）を確定させ、もう片方は同じ軸内で相手の位置関係から自動選択する。
-  - **両方省略（既定）**：`|dx|`/`|dy|` の大きい方（支配軸）を基本採用しつつ、逆の軸の実経路（ラベル回避のオフセット込み）が20%以上短い場合のみそちらに切り替える（詳細は `detailed-design-pptx.md` §8.15）。
-- `waypoints`：経路を明示したい／障害物を迂回させたいときに使う。指定した中間点を順に通る直線折れ線として描画し（pptx では区間ごとに直線コネクタを連結、矢じりは最終区間のみ）、`style` の自動取り回しは無効になる。両端は各中間点の向いている辺に自動接続する（`fromSide`/`toSide` を指定すればそちらが優先）。中間点を明示するため、`fromSide`/`toSide` の軸一致ルール（§9）は `waypoints` 併用時には適用されない。座標はキャンバス絶対座標（要素の `x`/`y` はローカル座標だが、リンクはどのコンテナにも属さないため絶対座標で指定する）。ラベルは折れ線の実長中点に置かれる。
+- Omitting `links` entirely produces "no lines, elements just placed in an area."
+- `from`/`to` can reference either a node or a container.
+- Connections assume rectangular targets (design memo §8.2). Labels track the connector (design memo §8.3).
+- When `style` isn't set explicitly (default `straight`), a connection whose two endpoints aren't aligned horizontally or vertically (i.e. diagonal) is automatically drawn as `elbow` (a right-angle bend) instead. This avoids a plain diagonal line, which doesn't match the orthogonal-routing convention of AWS-style architecture diagrams. An explicit `elbow`/`curved` is never overridden.
+- If a node has a `label` (default position `below`/`above`), a connection leaving from that same side attaches outside the label (e.g. an arrow going downward from a node with a `below` label connects below the label). Left/right connections are unaffected by the label.
+- `fromSide`/`toSide`: use these to force a specific connection side.
+  - **Both set**: used as-is. However, mixing `top`/`bottom` (vertical) with `left`/`right` (horizontal) — an axis mismatch — is Fatal (§9).
+  - **Only one set**: the side given fixes the axis (horizontal/vertical); the other side is auto-chosen within the same axis based on the relative position of the two endpoints.
+  - **Both omitted (default)**: generally uses whichever of `|dx|`/`|dy|` is larger (the dominant axis), but switches to the other axis if its actual routed path (including label-avoidance offsets) is more than 20% shorter (see `detailed-design-pptx.md` §8.15 for details).
+- `waypoints`: use this when you want to make the routing explicit, e.g. to detour around an obstacle. It's drawn as a straight polyline through the given intermediate points in order (in the pptx, one straight connector per segment, with the arrowhead only on the final segment), and `style`'s automatic routing no longer applies. Each end auto-attaches to whichever side of its shape faces the nearest waypoint (a `fromSide`/`toSide` you set takes priority). Since the intermediate points make the routing explicit, the `fromSide`/`toSide` axis-match rule (§9) doesn't apply when `waypoints` is used. Coordinates are absolute canvas coordinates (unlike an element's `x`/`y`, which are local to its parent — a link belongs to no container, so it's given in absolute coordinates). The label sits at the polyline's true midpoint (by arc length).
 
-| 事象 | 分類 | 挙動 |
+| Condition | Class | Behavior |
 |---|---|---|
-| スキーマ違反（必須欠落・型不一致・未知フィールド） | Fatal | 生成中止・エラー終了 |
-| `id` 重複 | Fatal | 生成中止 |
-| `link.from`/`to` が存在しない id | Fatal | 生成中止 |
-| 未知の `type`（アイコン未解決） | Warning | プレースホルダアイコンで継続 |
-| 座標がキャンバス範囲外 | Warning | そのまま配置し警告（クリップしない） |
-| 要素同士の座標が重なる（兄弟要素間） | Warning | そのまま配置し警告（回避・自動修正はしない） |
-| 子要素がコンテナ自身のラベル文字と重なる | Warning | そのまま配置し警告 |
-| リンクの経路・リンクラベルが無関係な要素・他リンクのラベル・コンテナのラベルと重なる | Warning | そのまま配置し警告（迂回はしない） |
-| 2本の別リンクの Z ルートが共通ノードの同一接続点で連続し、直接接続に見える（false edge aliasing） | Warning | そのまま配置し警告（接続点はずらさない） |
-| `link.fromSide`/`toSide` を両方指定し、かつ軸（水平/垂直）が矛盾する（`waypoints` 未指定時のみ） | Fatal | 生成中止 |
-| `x`/`y` 片方のみ | Fatal | スキーマで拒否 |
+| Schema violation (missing required field, type mismatch, unknown field) | Fatal | generation stops, errors out |
+| Duplicate `id` | Fatal | generation stops |
+| `link.from`/`to` references a nonexistent id | Fatal | generation stops |
+| Unknown `type` (icon unresolved) | Warning | continues with a placeholder icon |
+| Coordinates outside the canvas | Warning | placed as-is, with a warning (not clipped) |
+| Elements overlap (between siblings) | Warning | placed as-is, with a warning (no avoidance/auto-fix) |
+| A child overlaps its container's own label text | Warning | placed as-is, with a warning |
+| A link's path or label overlaps an unrelated element, another link's label, or a container's label | Warning | placed as-is, with a warning (no detour) |
+| Two separate links' Z-routes run collinear through a shared node's connection point, reading as one direct connection (false edge aliasing) | Warning | placed as-is, with a warning (connection points aren't shifted) |
+| Both `link.fromSide`/`toSide` set with a mismatched axis (horizontal/vertical) (only when `waypoints` is not set) | Fatal | generation stops |
+| Only one of `x`/`y` set | Fatal | rejected by the schema |
 
-- 基本方針：**構造の破綻は Fatal で即停止、描画上の軽微な問題は Warning で継続**。
-- CI/CD 前提のため、Fatal は非ゼロ終了コードで返す。
-- 重なりチェックは、計算後の座標（明示指定・自動配置のいずれで決まった座標か問わない）から機械的に矩形交差を判定する。判定は同一親コンテナ内の兄弟要素間のみで行い、親子（コンテナとその内部要素）は重なって当然のため対象外とする。ただし**コンテナ自身のラベル文字の領域**は例外で、直接の子要素との重なりを個別にチェックする（自動配置は既にこの領域を避けて配置されるが、明示座標の子要素は避けない）。`canvas.overlapMargin` を設定すると、各要素・ラベルの周囲にその分のバッファを加えた上で判定する（近接検知）。
-- リンク経路チェックは、コネクタの実接続点から実際に描画される経路（`straight` は直線、`elbow` は実描画と一致する2屈曲のZ字経路）を求め、始点・終点の要素とその祖先・子孫を除く全要素、他リンクのラベル矩形、および全コンテナのラベル矩形との交差を判定する。`curved` のみ、実際の曲線の膨らみまでは再現していないため直線近似による参考値にとどまる（`detailed-design-pptx.md` 参照）。
-- **リンクラベル自体**も、経路とは独立に一つの矩形として、無関係な要素・他リンクのラベル・コンテナのラベルとの重なりをチェックする（経路がそれらを避けていても、ラベルの表示位置だけが重なることがあるため）。
-- コンテナのラベルとの重なりチェックは、祖先コンテナであっても除外しない（自身の親コンテナの本体を通り抜けるのは正常だが、親コンテナの**ラベル文字**を貫通するのは見た目上望ましくないため）。リンクの `from`/`to` が当該コンテナそのものである場合のみ除外する。
-- `overlapMargin` は上記すべてのチェックに適用される。
-- **false edge aliasing チェック**は上記の「交差」検知とは別物で、「無関係な要素を横切る」のではなく「2本の別リンクの経路が同一直線上で連続（接触・重複）し、1本の直接接続に見える」状態を検出する。典型例は、共通ノード X を挟む2本のリンク（X を終点とするリンクと、X を始点とするリンクなど）が、`choose_connection_indices()` によりどちらも X の同じ辺を選んでしまうケース。各リンクの経路を線分単位に分解し、別リンクの線分と同一直線上（同じ軸・同じ座標）にあり範囲が接する（1点でも触れる）ペアを機械的に検出する（`detailed-design-pptx.md` §8.13 参照）。
+- Basic policy: **structural breakage is Fatal and stops generation immediately; minor drawing issues are Warnings that let generation continue**.
+- Since CI/CD is assumed, a Fatal returns a non-zero exit code.
+- The overlap check mechanically tests for rectangle intersection using the computed coordinates (regardless of whether they came from explicit positioning or auto-layout). It only compares siblings within the same parent container — a parent and its own contents are expected to overlap and are excluded. The one exception is a **container's own label text area**, which is checked individually against its direct children (auto-placed children already avoid this area, but explicitly-positioned children don't). Setting `canvas.overlapMargin` adds that much buffer around every element/label before testing (proximity detection).
+- The link-path check derives the connector's actual rendered path from its real connection points (`straight` is a straight line; `elbow` is the exact two-bend Z-route that's actually rendered) and tests it against every element except the endpoints and their ancestors/descendants, every other link's label rectangle, and every container's label rectangle. Only `curved` doesn't reproduce the actual curve's bulge, so it's approximated as a straight line for reference purposes only (see `detailed-design-pptx.md`).
+- **A link's own label** is also checked, independently of its path, as its own rectangle against unrelated elements, other links' labels, and container labels (since the label's displayed position can overlap something even when the path itself avoids it).
+- The check against a container's label doesn't exclude ancestor containers either (passing through an ancestor container's body is normal, but visually cutting through its **label text** specifically is undesirable). The only exclusion is when the link's `from`/`to` is that very container.
+- `overlapMargin` applies to all of the checks above.
+- The **false-edge-aliasing check** is distinct from the "crossing" detection above: instead of "crosses an unrelated element," it detects "two separate links' paths run collinear (touching or overlapping) on the same line, reading as one direct connection." The typical case is two links sharing a common node X (one ending at X, one starting from X) where `choose_connection_indices()` happens to pick the same side of X for both. Each link's path is broken into segments, and any pair of segments from different links that lie on the same line (same axis, same coordinate) with touching ranges (even a single point of contact) is mechanically flagged (see `detailed-design-pptx.md` §8.13).
 
-## 10. アイコン解決規則
+## 10. Icon Resolution Rules
 
-- 解決キー：`icons/<provider>/<type>.<ext>`（例：`icons/aws/EC2.png`）。
-- 既定拡張子は PNG（設計メモ §8.1）。SVG 原本は事前に PNG へ変換して配置、または変換ステップを内包。
-- `provider` ディレクトリでプロバイダを分離し、`custom` で任意アイコンを追加可能。
-- マッピングは外部設定（レジストリ）で上書きできる余地を残す。
+- Resolution key: `icons/<provider>/<type>.<ext>` (e.g. `icons/aws/EC2.png`).
+- Default extension is PNG (design memo §8.1). Original SVGs are pre-converted to PNG and placed accordingly, or the conversion step is built in.
+- Providers are separated by directory, and `custom` lets arbitrary icons be added.
+- Room is left for the mapping to be overridden via external configuration (the registry).
 
-## 11. 完全なサンプル
+## 11. Complete Samples
 
-- `example.yaml` — VPC 内に2つの AZ、各 AZ にサービス、VPC 外に絶対座標指定の S3、3種類のリンク（ラベル付き／エルボー／矢じりなし）を含む。JSON Schema 検証済み。
-- `example-cloud-actors.yaml` — 最外周の `cloud`（AWS Cloud）コンテナ、その外側に `User`/`Admin` アクターノード、コンテナ参照リンク（アクター→コンテナ）を含む。JSON Schema 検証済み・重なりなし。
+- `example.yaml` — two AZs inside a VPC, services in each AZ, an S3 outside the VPC at an explicit position, and three kinds of links (labeled / elbow / no arrowhead). Validated against the JSON Schema.
+- `example-cloud-actors.yaml` — an outermost `cloud` (AWS Cloud) container, `User`/`Admin` actor nodes outside it, and links referencing the container (actor → container). Validated against the JSON Schema, with no overlaps.
 
-## 12. 確定状況
+## 12. Status
 
-- 本仕様は JSON Schema（`zook.schema.json`）として形式化済み。
-- スキーマ自体が Draft 2020-12 準拠であること、サンプルが適合すること、不正入力が棄却されることを検証済み。
-- 実装（Claude Code 側）はこのスキーマをバリデーションの単一の真実源として使用する。
+- This spec has been formalized as a JSON Schema (`zook.schema.json`).
+- Verified: the schema itself conforms to Draft 2020-12, the samples validate against it, and invalid input is rejected.
+- The implementation (Claude Code side) uses this schema as the single source of truth for validation.
 
-## 13. 実装側（Claude Code）への申し送り
+## 13. Handoff to the Implementation Side (Claude Code)
 
-- 入力 YAML は**必ず本スキーマで検証してから**描画処理に入ること。
-- §8.2/§8.3/§8.6（接続点インデックス、txBody ラベル、PNG DPI）は実装時にプロトタイプで実挙動を確認して確定すること。
-- 論理単位 → EMU 変換は §2 の対応表に従うこと。
-- 自動レイアウトは §7 の既定値で第一版を実装し、重なり回避の高度化は次版送りでよい。
+- Input YAML must **always be validated against this schema before** entering the rendering pipeline.
+- §8.2/§8.3/§8.6 (connection point indices, txBody labels, PNG DPI) should be confirmed against real prototype behavior at implementation time.
+- Logical-unit → EMU conversion must follow the table in §2.
+- Auto-layout should ship in v1 with the defaults in §7; more sophisticated overlap avoidance can wait for a later version.
