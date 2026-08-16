@@ -1,59 +1,61 @@
-# 内部設計メモ
+# Design Notes
 
-zook の PowerPoint 生成部分([python-pptx](https://python-pptx.readthedocs.io/)を使用)は、実装前にプロトタイプで検証したいくつかの技術的決定に基づいています。詳細は [`docs/detailed-design-pptx.md`](https://github.com/taka-sho/zook/blob/main/docs/detailed-design-pptx.md) にありますが、要点は以下の通りです。
+[🇯🇵 日本語版](/zook/ja/design-notes/){ .md-button }
 
-## 座標系
+zook's PowerPoint generation (built on [python-pptx](https://python-pptx.readthedocs.io/)) rests on a handful of technical decisions validated by prototyping before implementation. The details live in [`docs/detailed-design-pptx.md`](https://github.com/taka-sho/zook/blob/main/docs/detailed-design-pptx.md); the key points are below.
 
-論理単位で記述し、内部で EMU(English Metric Unit)に変換します。
+## Coordinate System
 
-| aspectRatio | 論理サイズ | 実寸 |
+Written in logical units, converted internally to EMU (English Metric Unit).
+
+| aspectRatio | Logical size | Physical size |
 |---|---|---|
 | `16:9` | 1280 × 720 | 13.333in × 7.5in |
 | `4:3` | 960 × 720 | 10in × 7.5in |
 
-**1 論理単位 = 9525 EMU = 96dpi 換算で 1px** という単純な変換式が、どちらのアスペクト比でも成り立ちます。
+The simple conversion **1 logical unit = 9525 EMU = 1px at 96dpi** holds for both aspect ratios.
 
-## 階層グループ化
+## Hierarchical Grouping
 
-VPC → AZ → サービスのような入れ子構造は、`add_group_shape()` による PowerPoint 上の入れ子グループとして表現されます。python-pptx はグループへの子要素追加のたびに `chOff`/`chExt`(グループの子座標系オフセット・範囲)を子要素の外接矩形に合わせて自動再計算するため、独自のヘルパー実装は不要でした。
+A nested structure like VPC → AZ → service is expressed as nested groups in PowerPoint via `add_group_shape()`. python-pptx automatically recalculates `chOff`/`chExt` (a group's child-coordinate-system offset/extent) to match its children's bounding box every time a child is added, so no custom helper implementation was needed.
 
-## コネクタの接続点インデックス
+## Connector Connection-Point Indices
 
-矩形図形(アイコン画像・コンテナ枠)同士を `begin_connect()`/`end_connect()` で接続する際の接続点インデックスは、以下の通り確定しています。
+When connecting rectangular shapes (icon images, container frames) to each other via `begin_connect()`/`end_connect()`, the connection-point index is settled as follows:
 
 ```
-idx 0 = 上辺中央
-idx 1 = 左辺中央
-idx 2 = 下辺中央
-idx 3 = 右辺中央
+idx 0 = top-center
+idx 1 = left-center
+idx 2 = bottom-center
+idx 3 = right-center
 ```
 
-これは python-pptx 自身の実装(`_move_begin_to_cxn`/`_move_end_to_cxn`)が接続点の実座標をこのマッピングで直接計算しているためで、レンダラー依存ではなくライブラリ仕様として確定的です。
+This is fixed as a library specification, not renderer-dependent, since python-pptx's own implementation (`_move_begin_to_cxn`/`_move_end_to_cxn`) computes the connection points' actual coordinates directly from this mapping.
 
-接続辺は `link.fromSide`/`toSide` で明示指定できます(両方指定時は軸が一致している必要があり、矛盾するとFatalエラー)。省略した辺は自動選択され、単純な相対位置(dx/dyの大小)だけでなく、ラベル回避のオフセットまで含めた実際の経路長を両軸候補で計算して比較します。ただし僅差(20%未満)では支配的な軸(dx/dyの大きい方)を優先し、明確に(20%以上)短い場合のみ逆の軸に切り替えるヒステリシスを設けています。純粋な最短距離だけで決めると、僅差で軸が入れ替わり不安定になることが実装時の検証で判明したためです。
+A connection side can be set explicitly via `link.fromSide`/`toSide` (if both are set, they must share an axis — a mismatch is a Fatal error). An omitted side is auto-selected: rather than just the simple relative position (which of dx/dy is larger), the actual routed path length is computed and compared for both axis candidates, including the label-avoidance offset. On a near-tie (under 20%), though, the dominant axis (whichever of dx/dy is larger) is preferred, with a hysteresis that only switches to the other axis when it's clearly (20%+) shorter. This is because deciding purely by shortest distance was found, during implementation validation, to be unstable — the axis would flip on a near-tie.
 
-## コネクタラベル {: #connector-labels }
+## Connector Labels {: #connector-labels }
 
-OOXML スキーマ上、コネクタ要素(`p:cxnSp`)は `txBody`(テキスト本体)を持てません。そのため、リンクの `label` は**コネクタの中点に配置する独立したテキストボックス**として描画されます。図形を移動してもラベル自体はコネクタには追従しません(後編集前提の設計方針と整合)。
+Under the OOXML schema, a connector element (`p:cxnSp`) cannot carry a `txBody` (text body). Because of this, a link's `label` is drawn as an **independent textbox placed at the connector's midpoint**. The label itself doesn't follow the connector when shapes are moved (consistent with the design's assumption of hand-editing afterward).
 
-## アイコンのラスタライズ解像度 {: #icon-raster-resolution }
+## Icon Rasterization Resolution {: #icon-raster-resolution }
 
-SVG アイコンを PNG 化する際は、**表示ピクセル数の4倍**の解像度でラスタライズします。1倍(96dpi 相当)ではPowerPoint/LibreOffice上での拡大描画時ににじみが視認できましたが、2倍以降でほぼ解消し、3倍・4倍との違いは目視で判別できない水準でした。アイコン程度の画像サイズであれば4倍でもファイルサイズは軽微(数十KB程度)です。
+When rasterizing an SVG icon to PNG, it's rendered at **4x the displayed pixel count**. At 1x (96dpi-equivalent), blurriness was visible when scaled up in PowerPoint/LibreOffice; at 2x and above it was mostly gone, and 3x vs. 4x was indistinguishable to the eye. For an icon-sized image, the file size at 4x is still minor (on the order of tens of KB).
 
-## 軽量PNGプレビューとの見た目の一貫性
+## Visual Consistency With the Lightweight PNG Preview
 
-`zook preview` は python-pptx を使わず、同じレイアウト計算結果(`Box` 木・接続点計算)を Pillow で直接描画する第二のレンダラーです。枠線色・塗り・破線・ラベル位置・隅アイコンといったコンテナの見た目は `resolve_container_style()` という共有関数で1箇所にまとめて解決しており、pptx用レンダラーとPNGプレビューが見た目のロジックで食い違わないようにしています。
+`zook preview` is a second renderer that skips python-pptx entirely, drawing the same layout results (the `Box` tree, connection-point calculations) directly with Pillow. A container's look — border color, fill, dashing, label position, corner icon — is resolved in one place via the shared function `resolve_container_style()`, so the pptx renderer and the PNG preview can never drift apart on how something should look.
 
-## マルチクラウドの解決
+## Multi-Cloud Resolution
 
-要素の `provider`(`aws`/`gcp`/`azure`/任意のカスタム値)ごとに別々のレジストリを保持し、`MultiRegistry` が振り分けます。アイコンは各プロバイダのレジストリにしかない前提ですが、コンテナの `groups`(vpc/az/subnet など)は該当プロバイダに定義がなければ AWS レジストリへフォールバックします。これは、クラウド間で共通する構造概念(VPCやAZなど)を GCP/Azure のレジストリで毎回再定義しなくて済むようにするための設計判断です。
+A separate registry is held per element `provider` (`aws`/`gcp`/`azure`/any custom value), and `MultiRegistry` dispatches between them. Icons are assumed to exist only in their own provider's registry, but a container's `groups` (vpc/az/subnet, etc.) fall back to the AWS registry when undefined for that provider. This is a deliberate design choice so that structural concepts common across clouds (VPC, AZ, etc.) don't need to be redefined in the GCP/Azure registries every time.
 
-## draw.io連携
+## draw.io Integration
 
-`zook export-drawio`/`sync`(詳細は[draw.io連携](drawio-sync.md))は、pptxとは別のもう一つの出力先としてdraw.io(mxGraph XML)を扱います。PowerPointのグループとは異なり、draw.ioのコンテナ(`container=1`)は子要素の座標が親からの単純な相対オフセットのままで、リサイズしても子要素の座標がスケールされません。これは `jgraph/drawio` の公式ソースで確認済みの挙動で、pptxのグループが持つ `chOff`/`chExt` のスケーリングの罠がそもそも存在しないため、座標変換なしにレイアウト計算結果(`Box.local_x`/`local_y`)をそのままmxGraphの子座標として使えます。
+`zook export-drawio`/`sync` (see [draw.io Integration](drawio-sync.md) for details) treats draw.io (mxGraph XML) as a second output target alongside pptx. Unlike a PowerPoint group, draw.io's container (`container=1`) keeps a child element's coordinates as a plain relative offset from the parent, with no scaling of child coordinates on resize — confirmed against the official `jgraph/drawio` source. Since the scaling trap that pptx groups' `chOff`/`chExt` carry simply doesn't exist here, the layout results (`Box.local_x`/`local_y`) can be used directly as mxGraph child coordinates, with no coordinate conversion needed.
 
-AWSのアイコン・コンテナは、draw.io公式のAWS4シェイプライブラリの識別子(`resIcon`/`grIcon`)を実際のソースコードから直接確認した上でレジストリに追加しており(推測ではありません)、draw.io上でも見慣れた公式の見た目で表示されます。GCP/Azureは同様の対応表がまだ無く、zook自身のプレースホルダーPNGにフォールバックします([既知の制約](limitations.md)参照)。
+AWS icons/containers were added to the registry after confirming draw.io's official AWS4 shape-library identifiers (`resIcon`/`grIcon`) directly from its source code (not guessed), so they display with the familiar official look in draw.io too. GCP/Azure don't have an equivalent mapping table yet and fall back to zook's own placeholder PNGs (see [Known Limitations](limitations.md)).
 
-## 検証方法
+## How This Was Validated
 
-これらの決定は、`prototype/build_prototype.py` で実際に pptx を生成し、LibreOffice headless(`soffice --convert-to pdf` → `pdftoppm`)で画像化して目視確認しています。再現手順は [`prototype/README.md`](https://github.com/taka-sho/zook/blob/main/prototype/README.md) を参照してください。
+These decisions were validated by actually generating a pptx with `prototype/build_prototype.py` and visually inspecting it, rendered to an image via LibreOffice headless (`soffice --convert-to pdf` → `pdftoppm`). See [`prototype/README.md`](https://github.com/taka-sho/zook/blob/main/prototype/README.md) for the reproduction steps.

@@ -1,10 +1,12 @@
-# アイコン・レジストリ
+# Icon Registry
 
-サービスの `type`(`EC2`、`ComputeEngine` など)は YAML スキーマ上 enum で固定されていません。**アイコンレジストリが語彙の唯一の真実源**です。これにより、新サービスの追加にコード改修は不要で、レジストリへの追記だけで済みます。
+[🇯🇵 日本語版](/zook/ja/icons/){ .md-button }
 
-## マルチクラウド対応
+A service's `type` (`EC2`, `ComputeEngine`, etc.) is not fixed by an enum in the YAML schema. **The icon registry is the single source of truth for vocabulary.** This means adding a new service requires no code changes — just appending to the registry.
 
-`aws`/`gcp`/`azure` それぞれに組み込みレジストリがあり、要素の `provider` フィールドでどのレジストリを引くかが決まります(ノードの既定は `aws`)。1つの図の中で複数のプロバイダを混在させることもできます。
+## Multi-Cloud Support
+
+`aws`/`gcp`/`azure` each have a built-in registry, and an element's `provider` field decides which one gets looked up (a node's default is `aws`). Multiple providers can coexist within a single diagram.
 
 ```yaml
 - kind: node
@@ -14,18 +16,18 @@
   label: "Web VM"
 ```
 
-実際に登録されているアイコン・コンテナ種別は `icons list` サブコマンドで確認できます。
+Check the actually-registered icon/container types with the `icons list` subcommand.
 
 ```bash
-zook icons list                # aws/gcp/azure すべて
-zook icons list --provider gcp  # 特定プロバイダのみ
+zook icons list                # all of aws/gcp/azure
+zook icons list --provider gcp  # a specific provider only
 ```
 
-## 組み込み Tier-1 語彙
+## Built-in Tier-1 Vocabulary
 
-### AWS(26)
+### AWS (26)
 
-| カテゴリ | サービス |
+| Category | Services |
 |---|---|
 | Compute | EC2, Lambda, ECS, EKS, Fargate |
 | Storage | S3, EFS, EBS |
@@ -33,11 +35,11 @@ zook icons list --provider gcp  # 特定プロバイダのみ
 | Networking | ELB(ALB), CloudFront, Route53, APIGateway, NATGateway |
 | Integration | SNS, SQS, EventBridge |
 | Security | IAM, Cognito |
-| General | User, Admin, Developer, Client(クラウドサービスではなく、図に登場する人物・役割を表すアクター。プロバイダを問わず使える) |
+| General | User, Admin, Developer, Client (not cloud services — actors representing people/roles in a diagram, usable regardless of provider) |
 
-### GCP(19)
+### GCP (19)
 
-| カテゴリ | サービス |
+| Category | Services |
 |---|---|
 | Compute | ComputeEngine, CloudFunctions, GKE, CloudRun |
 | Storage | CloudStorage, PersistentDisk |
@@ -46,9 +48,9 @@ zook icons list --provider gcp  # 特定プロバイダのみ
 | Integration | PubSub, Eventarc |
 | Security | CloudIAM, IdentityPlatform |
 
-### Azure(18)
+### Azure (18)
 
-| カテゴリ | サービス |
+| Category | Services |
 |---|---|
 | Compute | VirtualMachine, Functions, AKS, ContainerApps |
 | Storage | BlobStorage, ManagedDisk |
@@ -57,7 +59,7 @@ zook icons list --provider gcp  # 特定プロバイダのみ
 | Integration | ServiceBus, EventGrid |
 | Security | EntraID, KeyVault |
 
-General(User/Admin/Developer/Client)カテゴリのアイコンはクラウドサービスではなく、「誰がこの構成にアクセスするか」を表す汎用アクターです。エンドユーザーや管理者をノードとして配置し、システムへのリンクを引くことで、構成図に人の視点を加えられます。AWS レジストリにのみ定義されていますが、`provider` を明示しなければどの図でも(既定 `aws` なので)使えます。
+The General (User/Admin/Developer/Client) category isn't cloud services — they're general-purpose actors representing "who's accessing this system." Placing an end user or administrator as a node and drawing a link to the system adds a human perspective to the diagram. They're only defined in the AWS registry, but since a node's default `provider` is `aws`, they're usable in any diagram as long as you don't set `provider` explicitly.
 
 ```yaml
 - kind: node
@@ -66,20 +68,20 @@ General(User/Admin/Developer/Client)カテゴリのアイコンはクラウド�
   label: "End User"
 ```
 
-定義は `docs/registry.aws.yaml` / `docs/registry.gcp.yaml` / `docs/registry.azure.yaml` にあります(実装が読み込むコピーはそれぞれ `src/zook/data/icons/<provider>/registry.<provider>.yaml`)。
+Definitions live in `docs/registry.aws.yaml` / `docs/registry.gcp.yaml` / `docs/registry.azure.yaml` (the copies the implementation actually loads are `src/zook/data/icons/<provider>/registry.<provider>.yaml`).
 
-## 解決アルゴリズム
+## Resolution Algorithm
 
-1. 要素の `provider`(ノードの既定は `aws`)で対象レジストリを選ぶ。
-2. `type` をキーに、**エイリアス込み・大小文字無視**で lookup(例:`alb` → `ELB`、`ddb` → `DynamoDB`、`AmazonEC2` → `EC2`)。
-3. ヒットすればアイコンファイルを解決。
-4. ミスすれば **Warning を出してプレースホルダーアイコンで継続**(Fatal にはしない)。
+1. Pick the target registry based on the element's `provider` (a node's default is `aws`).
+2. Look up `type` as the key, **alias-aware and case-insensitive** (e.g. `alb` → `ELB`, `ddb` → `DynamoDB`, `AmazonEC2` → `EC2`).
+3. On a hit, resolve the icon file.
+4. On a miss, **emit a Warning and continue with a placeholder icon** (never Fatal).
 
-コンテナの `type`(`cloud`/`vpc`/`az`/`subnet` など)も同様に、要素の `provider` に対応する `groups` エントリを引きます。**その provider 自身に定義がなければ AWS レジストリの `groups` にフォールバック**します(`vpc`/`az`/`subnet` のような一般的な概念を、GCP/Azure のレジストリで毎回再定義しなくて済むようにするためです)。`cloud`(クラウド境界)のようにプロバイダごとに固有の見た目にしたいものだけ、各プロバイダのレジストリで上書きします。
+A container's `type` (`cloud`/`vpc`/`az`/`subnet`, etc.) works the same way, looking up the `groups` entry corresponding to the element's `provider`. **If not defined in that provider's own registry, it falls back to the AWS registry's `groups`** (so a general concept like `vpc`/`az`/`subnet` doesn't need to be redefined in the GCP/Azure registries every time). Only things meant to look provider-specific, like `cloud` (the cloud boundary), are overridden in each provider's own registry.
 
-### クラウド境界
+### Cloud Boundaries
 
-`type: cloud` は、構成図全体がどこからそのクラウドの境界なのかを示す、最も外側のコンテナです。枠の左上(または左下)にはプロバイダごとのブランドカラーのバッジアイコンが自動で描画され、ラベルもその分だけインデントされます(AWS Cloud は濃紺、Google Cloud は青、Microsoft Azure は青系)。
+`type: cloud` is the outermost container, marking where the whole diagram falls within that cloud's boundary. A brand-colored badge icon for the provider is automatically drawn at the top-left (or bottom-left) of the frame, with the label indented to make room (AWS Cloud is dark navy, Google Cloud is blue, Microsoft Azure is a blue tone).
 
 ```yaml
 - kind: container
@@ -94,11 +96,11 @@ General(User/Admin/Developer/Client)カテゴリのアイコンはクラウド�
       children: [...]
 ```
 
-`groups` エントリの `icon` フィールドで、任意のコンテナ種別に同様の隅アイコンを設定できます。
+A `groups` entry's `icon` field can set the same kind of corner icon on any container type.
 
-## 独自アイコン・スタイルで上書きする
+## Overriding With Your Own Icons/Styles
 
-`--registry` オプションで、ユーザー独自のレジストリ YAML を組み込みレジストリの上に重ねられます。同じキーはユーザー側が優先されます。レジストリファイル自身の `provider` フィールドが、どのプロバイダに重ねるかを決めます(`aws`/`gcp`/`azure` のいずれでもない値、例えば `custom` を指定すると、独立した新しいプロバイダとして追加されます)。
+The `--registry` option lets you layer your own registry YAML on top of the built-in registries. The user side wins on a matching key. The registry file's own `provider` field decides which provider it layers onto (a value that's none of `aws`/`gcp`/`azure` — e.g. `custom` — is added as an independent new provider).
 
 ```yaml
 # my-registry.yaml
@@ -111,22 +113,22 @@ icons:
     aliases: [mis]
 groups:
   vpc:
-    borderColor: "#FF0000"   # 組み込みの vpc スタイルを上書き
+    borderColor: "#FF0000"   # overrides the built-in vpc style
 ```
 
 ```bash
 zook build diagram.yaml -o diagram.pptx --registry my-registry.yaml
 ```
 
-形式は [`icon-registry.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry.schema.json) で検証されます。詳細仕様は [`docs/icon-registry-and-vocabulary.md`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry-and-vocabulary.md) を参照してください。
+The format is validated against [`icon-registry.schema.json`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry.schema.json). See [`docs/icon-registry-and-vocabulary.md`](https://github.com/taka-sho/zook/blob/main/docs/icon-registry-and-vocabulary.md) for the detailed spec.
 
-## draw.io連携でのアイコン表示
+## Icon Display in draw.io Integration
 
-`zook export-drawio`(詳細は[draw.io連携](drawio-sync.md))で書き出す際、レジストリの各エントリに任意で `drawioShape` フィールドを設定できます。設定されていれば draw.io 公式のシェイプ(AWS4等)として書き出され、未設定ならこのツール自身のPNGアイコンをそのまま埋め込みます。現時点では組み込みのAWSレジストリのみ `drawioShape` を設定済みです(GCP/Azureは未設定 → PNGフォールバック)。
+When exporting via `zook export-drawio` (see [draw.io Integration](drawio-sync.md)), each registry entry can optionally set a `drawioShape` field. If set, it's exported as an official draw.io shape (AWS4, etc.); if not, this tool's own PNG icon is embedded as-is. Currently only the built-in AWS registry has `drawioShape` set (GCP/Azure are unset → PNG fallback).
 
-## アイコン画像について {: #icon-assets }
+## About the Icon Images {: #icon-assets }
 
-!!! warning "同梱アイコンは各社の公式アイコンではありません"
-    `src/zook/data/icons/<provider>/` に同梱されている PNG は、`scripts/generate_placeholder_icons.py` で生成した**自作のプレースホルダー**(カテゴリ別配色 + サービス名の略称)です。ライセンス上の理由から AWS/GCP/Azure の公式アイコンはリポジトリに含めていません。
+!!! warning "The bundled icons are not the official vendor icons"
+    The PNGs bundled under `src/zook/data/icons/<provider>/` are **self-made placeholders** generated by `scripts/generate_placeholder_icons.py` (category-based colors + a service-name abbreviation). Official AWS/GCP/Azure icons aren't included in the repository, for licensing reasons.
 
-実際の公式アイコンに差し替える場合は、各 `registry.<provider>.yaml` の `file` パスに合わせて画像を配置するだけで済みます(コード変更不要)。ラスタライズする場合は、表示ピクセル数の **4倍**の解像度で PNG 化することを推奨します(理由は[内部設計メモ](design-notes.md#icon-raster-resolution)を参照)。
+To swap in the actual official icons, just place the image files to match the `file` path in each `registry.<provider>.yaml` (no code changes needed). If rasterizing, we recommend rendering the PNG at **4x** the displayed pixel count (see [Design Notes](design-notes.md#icon-raster-resolution) for why).

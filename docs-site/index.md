@@ -1,8 +1,10 @@
 # ZOOK
 
-YAML で書いたクラウドアーキテクチャ定義から、PowerPoint(.pptx)スライドを生成するCLIツールです。
+[🇯🇵 日本語版](/zook/ja/){ .md-button }
 
-図をコードとして Git 管理し、差分をレビュー可能にしつつ、最終成果物は PowerPoint 上で人間が自由に手編集できる形で出力します。
+A CLI tool that generates PowerPoint (.pptx) slides from a cloud architecture definition written in YAML.
+
+Diagrams are managed as code in Git, so changes are reviewable — while the final output is a form a human can freely hand-edit in PowerPoint.
 
 ```yaml
 version: "1.0"
@@ -32,47 +34,47 @@ links:
 zook build diagram.yaml -o diagram.pptx
 ```
 
-## なぜ zook なのか
+## Why zook
 
-- **コードとしての構成図** — YAML はテキストなので Git 差分でレビューできます。既存の diagram-as-code ツールは PowerPoint 直接出力やアスペクト比の厳密指定に制約があり、変換ステップを挟む運用は妥協とメンテコストが発生しがちでした。zook は YAML → PPTX を一本化します。
-- **後編集前提の「そこそこ」の品質** — 完璧な自動レイアウトは目指さず、PowerPoint 上で人間がすぐ手を入れられる状態の出力を優先します。
-- **拡張しやすい語彙** — サービスの `type` はスキーマで固定せず、[アイコンレジストリ](icons.md)が語彙の真実源です。新サービスの追加はコード改修なしにレジストリへの追記だけで済みます。
-- **LLM 生成を見据えた設計** — 人間可読性よりも機械(LLM)が曖昧さなく生成・パースできることを優先した、JSON Schema で厳密化された入力仕様です。
+- **Diagrams as code** — YAML is text, so it reviews cleanly as a Git diff. Existing diagrams-as-code tools are often constrained on direct PowerPoint output or precise aspect-ratio control, and running an extra conversion step tends to mean compromises and ongoing maintenance cost. zook unifies YAML → PPTX into one pipeline.
+- **"Good enough" quality, on the assumption of hand-editing afterward** — rather than a perfect automatic layout, output prioritizes being immediately hand-editable in PowerPoint.
+- **A vocabulary that's easy to extend** — a service's `type` isn't fixed by the schema; the [icon registry](icons.md) is the source of truth for vocabulary. Adding a new service is just appending to the registry, with no code changes needed.
+- **Designed with LLM generation in mind** — an input spec strictly formalized via JSON Schema, prioritizing unambiguous machine (LLM) generation and parsing over human readability.
 
-## 主な機能
+## Key Features
 
-| 機能 | 概要 |
+| Feature | Overview |
 |---|---|
-| マルチクラウド | AWS/GCP/Azure の組み込みレジストリを同梱。ノードごとに `provider` を指定して混在可能 |
-| 階層コンテナ | Cloud → VPC → AZ → subnet のような入れ子構造を `container` の再帰 `children` で表現 |
-| クラウド境界 | `type: cloud` でクラウド境界そのものを枠として描画。プロバイダごとのブランドカラー・バッジアイコン付き |
-| アクターアイコン | User/Admin/Developer/Client など、構成にアクセスする人物・役割をノードとして配置可能 |
-| 自動レイアウト | 座標未指定の要素を grid/horizontal/vertical で自動整列。明示座標との混在も可能。自動配置の要素は明示座標の兄弟と重ならないよう自動でずれる |
-| コネクタ | サービス間の関係を矢印付き線で接続。ラベル(ポート番号等)も付与可能。コンテナへのリンクも可。斜めになる接続は自動で直角の折れ線に切り替え |
-| 接続辺の指定 | `link.fromSide`/`toSide` で接続する辺(上下左右)を明示指定可能。省略時は実際の経路長を比較して自動選択 |
-| 経路の明示(経由点) | `link.waypoints` で中間点(絶対座標)を指定し、任意の折れ線経路を描画。障害物の迂回やL字経路に。指定時は `style` の自動取り回しと接続辺の軸一致ルールが無効になる |
-| ラベル回避接続 | ラベル付きノードから同じ方向に矢印を伸ばすと、ラベルを避けてその外側に接続 |
-| アイコン解決 | エイリアス込み・大小文字無視でサービス名からアイコンを解決。未知のサービスは警告付きプレースホルダーで継続。`zook icons list` で一覧表示 |
-| レジストリ上書き | 組み込みレジストリの上にユーザー独自のアイコン/スタイル定義を重ねられる |
-| 重なり検知 | 計算済みの座標から、兄弟要素同士・コンテナのラベル文字・矢印の経路・リンクラベルが互いに重なっていないかを機械的に検出し Warning で通知。`overlapMargin` で近接判定のバッファも設定可能 |
-| 衝突の自動解消 | `zook doctor` で4段階に自動解消: 要素の重なりを座標調整、リンクのノード貫通・見かけ上の直接接続を接続辺の割り当て、迂回できない貫通は障害物要素の退避、動かせない障害物はリンクに経由点を挿入して迂回(いずれも悪化しない範囲のみ)。既定はドライラン(提案のみ)、`--fix`/`-o` で YAML に書き戻し([使い方](usage.md)の doctor 節) |
-| 構造差分 | `zook diff` で2つの図を**意味で比較**。要素を id、リンクを id/両端で対応付け、追加・削除・**コンテナ間の移動**・フィールド変更・リンク変化・canvas変更だけを報告。子要素の並び替えやデフォルト値の明示はノイズにしない([使い方](usage.md)の diff 節) |
-| サイズ・文字サイズ調整 | ノードの `size` でアイコンサイズを、`labelFontSize`(ノード/コンテナ/リンク)でラベル文字サイズを個別に指定可能。自動レイアウトが確保するラベル用スペースも連動して拡大/縮小 |
-| 軽量プレビュー | `zook preview` で PowerPoint も LibreOffice も使わずにPNGですぐ確認 |
-| draw.io連携 | `zook export-drawio`/`sync` で draw.io 上での位置・サイズ変更をYAMLに反映。継続的な構成図管理を想定([draw.io連携](drawio-sync.md)) |
-| Mermaidインポート | `zook from-mermaid` で Mermaid の `flowchart`/`graph` 記法をYAMLに変換([Mermaidフローチャートのインポート](mermaid-import.md)) |
-| プレーン図形ノード | アイコンの代わりに四角/角丸/ひし形/円の図形+内部ラベルでノードを描画(`style.shape`)。Mermaidインポートが内部的に使う汎用機能 |
-| CI/CD 対応 | 構造的な誤り(スキーマ違反・id重複・リンク参照先不在)は非ゼロ終了。`--strict` で Warning もゲート可能。`--format json`/`github` で機械可読出力。`zook validate` でレンダリングなしの高速チェックも可能 |
+| Multi-cloud | Ships with built-in registries for AWS/GCP/Azure. Set `provider` per node to mix providers within one diagram |
+| Hierarchical containers | Nested structures like Cloud → VPC → AZ → subnet, expressed via a `container`'s recursive `children` |
+| Cloud boundaries | `type: cloud` draws the cloud boundary itself as a frame, with a provider-specific brand color and badge icon |
+| Actor icons | Place actors like User/Admin/Developer/Client as nodes to represent who accesses the system |
+| Auto-layout | Elements with no coordinates auto-arrange via grid/horizontal/vertical. Can mix with explicit coordinates — auto-placed elements automatically shift to avoid overlapping an explicitly-positioned sibling |
+| Connectors | Connect services with arrow-tipped lines. Labels (e.g. port numbers) supported. Links to containers also work. A diagonal connection auto-switches to a right-angle bend |
+| Explicit connection sides | `link.fromSide`/`toSide` explicitly picks which side (top/bottom/left/right) a connector attaches to. Auto-selected by comparing actual path length if omitted |
+| Explicit routing (waypoints) | `link.waypoints` specifies intermediate points (absolute coordinates) to draw an arbitrary polyline path — for detouring around obstacles or drawing an L-shaped route. Disables `style`'s auto-routing and the connection-side axis-match rule when set |
+| Label-avoiding connections | An arrow leaving a labeled node in the same direction as the label attaches outside it, avoiding the label |
+| Icon resolution | Resolves a service name to an icon, alias-aware and case-insensitive. An unknown service continues with a placeholder plus a warning. List everything with `zook icons list` |
+| Registry overrides | Layer your own icon/style definitions on top of the built-in registries |
+| Overlap detection | Mechanically detects — from the computed coordinates — whether sibling elements, a container's label text, an arrow's path, or a link's label overlap each other, and reports a Warning. `overlapMargin` also lets you flag near-misses |
+| Automatic collision resolution | `zook doctor` auto-resolves in four stages: nudge element overlaps apart, assign connection sides to fix link crossings/apparent-direct-connections, displace an obstacle that still blocks a path, and detour a link with waypoints around an obstacle that can't move (each stage only ever applies a change that doesn't make things worse). Defaults to a dry run (proposal only); write back to the YAML with `--fix`/`-o` (see the doctor section in [Usage](usage.md)) |
+| Structural diff | `zook diff` compares two diagrams **by meaning**. Elements matched by id, links by id/endpoints — reports only additions, removals, **moves between containers**, field changes, and link/canvas changes. Reordering children or writing out a default value explicitly produces no noise (see the diff section in [Usage](usage.md)) |
+| Size/font-size tuning | A node's `size` sets icon size; `labelFontSize` (node/container/link) sets label font size individually. The space auto-layout reserves for labels scales proportionally too |
+| Lightweight preview | `zook preview` gives an instant PNG check with no PowerPoint or LibreOffice needed |
+| draw.io integration | `zook export-drawio`/`sync` reflect position/size changes made in draw.io back into the YAML — built for continuous diagram management (see [draw.io integration](drawio-sync.md)) |
+| Mermaid import | `zook from-mermaid` converts Mermaid `flowchart`/`graph` notation to YAML (see [Mermaid flowchart import](mermaid-import.md)) |
+| Plain shape nodes | Draw a node as a rectangle/rounded-rectangle/diamond/circle with an inline label instead of an icon (`style.shape`) — a general-purpose feature the Mermaid importer uses internally |
+| CI/CD-friendly | Structural errors (schema violations, duplicate ids, dangling link references) exit non-zero. `--strict` can gate on Warnings too. `--format json`/`github` gives machine-readable output. `zook validate` offers a fast check with no rendering |
 
-## ドキュメント構成
+## Documentation
 
-- [インストール](installation.md) — セットアップ手順
-- [使い方](usage.md) — CLI コマンドとエラーハンドリング
-- [YAML入力仕様](yaml-guide.md) — 図の書き方(コンテナ・ノード・リンク・レイアウト)
-- [アイコン・レジストリ](icons.md) — サービス語彙とアイコンの仕組み、カスタマイズ方法
-- [draw.io連携](drawio-sync.md) — 継続的な構成図管理のためのdraw.ioエクスポート・同期ワークフロー
-- [Mermaidフローチャートのインポート](mermaid-import.md) — Mermaidの`flowchart`/`graph`記法からの変換
-- [内部設計メモ](design-notes.md) — pptx生成の実装方針(グループ化・コネクタ・座標系)
-- [既知の制約](limitations.md) — v1 時点でのスコープ外事項
+- [Installation](installation.md) — setup steps
+- [Usage](usage.md) — CLI commands and error handling
+- [YAML Input Guide](yaml-guide.md) — how to write a diagram (containers, nodes, links, layout)
+- [Icon Registry](icons.md) — the service vocabulary and icon mechanism, and how to customize it
+- [draw.io Integration](drawio-sync.md) — the draw.io export/sync workflow for continuous diagram management
+- [Mermaid Flowchart Import](mermaid-import.md) — converting from Mermaid's `flowchart`/`graph` notation
+- [Design Notes](design-notes.md) — implementation approach for pptx generation (grouping, connectors, coordinate system)
+- [Known Limitations](limitations.md) — what's out of scope as of v1
 
-より詳細な要件定義・JSON Schema・設計検証の一次資料は、リポジトリの [`docs/`](https://github.com/taka-sho/zook/tree/main/docs) ディレクトリにあります。
+The detailed requirements, JSON Schemas, and design-validation source material live in the repository's [`docs/`](https://github.com/taka-sho/zook/tree/main/docs) directory.

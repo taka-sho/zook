@@ -1,29 +1,30 @@
 [project]
 site_name = "ZOOK"
-site_description = "A CLI tool that generates PowerPoint architecture diagrams from YAML"
+site_description = "YAML から PowerPoint アーキテクチャ図を生成する CLI ツール"
 site_author = "taka-sho"
-site_url = "https://taka-sho.github.io/zook/"
-docs_dir = "docs-site"
+site_url = "https://taka-sho.github.io/zook/ja/"
+docs_dir = "docs-site-ja"
+site_dir = "site/ja"
 copyright = "Copyright &copy; 2026 taka-sho"
 
 repo_url = "https://github.com/taka-sho/zook"
 repo_name = "taka-sho/zook"
-edit_uri = "edit/main/docs-site/"
+edit_uri = "edit/main/docs-site-ja/"
 
 nav = [
-    { "Introduction" = "index.md" },
-    { "Installation" = "installation.md" },
-    { "Usage" = "usage.md" },
-    { "YAML Input Guide" = "yaml-guide.md" },
-    { "Icon Registry" = "icons.md" },
-    { "draw.io Integration (Continuous Diagram Management)" = "drawio-sync.md" },
-    { "Mermaid Flowchart Import" = "mermaid-import.md" },
-    { "Design Notes" = "design-notes.md" },
-    { "Known Limitations" = "limitations.md" },
+    { "はじめに" = "index.md" },
+    { "インストール" = "installation.md" },
+    { "使い方" = "usage.md" },
+    { "YAML入力仕様" = "yaml-guide.md" },
+    { "アイコン・レジストリ" = "icons.md" },
+    { "draw.io連携(継続的な構成図管理)" = "drawio-sync.md" },
+    { "Mermaidフローチャートのインポート" = "mermaid-import.md" },
+    { "内部設計メモ" = "design-notes.md" },
+    { "既知の制約" = "limitations.md" },
 ]
 
 [project.theme]
-language = "en"
+language = "ja"
 features = [
     "content.action.edit",
     "content.action.view",
