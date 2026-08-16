@@ -1,6 +1,8 @@
 # ZOOK
 
 [![Tests](https://github.com/taka-sho/zook/actions/workflows/tests.yml/badge.svg)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
+[![Test results](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/taka-sho/zook/main/.github/badges/tests.json)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/taka-sho/zook/main/.github/badges/coverage.json)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
@@ -88,11 +90,17 @@ zook は CI/CD での利用を想定し、構造の破綻と描画上の軽微�
 
 `export-drawio` は AWS のアイコン・コンテナに限り、draw.io 公式の AWS4 シェイプライブラリで書き出します。GCP/Azure は対応表がまだ無く、このツール自身のプレースホルダー PNG が埋め込まれます。
 
-## テスト
+## テスト・品質保証
+
+`main` への push ごとに CI がテストを実行し、ブランチカバレッジを計測します。**カバレッジは85%を下回るとCIが失敗する品質ゲート**として機能しており(現状の実測値は上のバッジの通り)、README冒頭のバッジは third-party サービスではなく、その実行結果から生成した JSON([`.github/badges/`](.github/badges/))を shields.io で描画したものです — 表示されている数値は常に `main` の最新の実行結果そのものです。
 
 ```bash
-.venv/bin/pytest tests/ -v
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest tests/ -v                                              # テストのみ
+.venv/bin/pytest tests/ --cov=zook --cov-report=term-missing            # カバレッジ内訳付き
 ```
+
+CI の設定は [`.github/workflows/tests.yml`](.github/workflows/tests.yml)、カバレッジ計測範囲・除外設定は `pyproject.toml` の `[tool.coverage.*]` を参照してください。
 
 ## 既知の制約(v1)
 

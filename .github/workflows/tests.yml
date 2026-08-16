@@ -9,10 +9,54 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used by the "update badges" step below, on push to main
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
       - run: pip install -e ".[dev]"
-      - run: pytest tests/ -v
+
+      # Coverage is a real quality gate here, not just a number for the badge:
+      # the build fails if branch coverage on src/zook drops below 85%
+      # (current baseline is ~88%; see pyproject.toml [tool.coverage.*]).
+      - name: Run tests with coverage
+        run: >
+          pytest tests/ -v
+          --cov=zook --cov-report=term-missing --cov-report=json
+          --cov-fail-under=85
+          --junitxml=junit.xml
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Coverage" >> "$GITHUB_STEP_SUMMARY"
+          python -c "
+          import json
+          d = json.load(open('coverage.json'))['totals']
+          print(f\"- Line coverage: {d['percent_covered']:.1f}% ({d['covered_lines']}/{d['num_statements']} statements)\")
+          " >> "$GITHUB_STEP_SUMMARY"
+
+      # README.md's coverage/tests badges read .github/badges/*.json (shields.io
+      # "endpoint badge" format) via raw.githubusercontent.com, so they always
+      # show the real result of the latest run on main - not a number that can
+      # go stale or depend on a third-party dashboard. Only pushes to main can
+      # write back (PRs from forks can't and shouldn't); a no-op when the
+      # numbers haven't moved, so this never creates commit noise or loops.
+      - name: Update README badges
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: python scripts/update_badges.py --coverage-json coverage.json --junit-xml junit.xml
+
+      - name: Commit updated badges
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          if ! git diff --quiet -- .github/badges/; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/badges/
+            git commit -m "chore: update coverage/tests badges [skip ci]"
+            git push
+          else
+            echo "Badges unchanged, nothing to commit."
+          fi

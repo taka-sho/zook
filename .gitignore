@@ -5,6 +5,11 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+/.coverage
+/coverage.xml
+/coverage.json
+/junit.xml
+/htmlcov/
 .DS_Store
 .claude/
 prototype/prototype_output.pptx

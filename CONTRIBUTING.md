@@ -29,6 +29,7 @@ python -m venv .venv
 ## Before opening a pull request
 
 - **Run the tests.** `.venv/bin/pytest tests/` must pass.
+- **Add tests for new code paths.** CI fails if branch coverage on `src/zook` drops below 85% (`pytest --cov=zook --cov-fail-under=85`, see `pyproject.toml`'s `[tool.coverage.*]`). The README's coverage/tests badges are generated from this same run - see `scripts/update_badges.py`.
 - **Keep the schema copies in sync.** If you edit `docs/zook.schema.json` or
   `docs/icon-registry.schema.json`, copy the same content to the matching file
   under `src/zook/schemas/` — the two are required to be byte-identical. Same
@@ -36,8 +37,8 @@ python -m venv .venv
 - **Keep the reference diagrams warning-free.** `docs/example.yaml`,
   `docs/example-cloud-actors.yaml` and `docs/patterns/*.yaml` are regression
   fixtures expected to validate with zero warnings; check with `zook validate`.
-- **Add tests** for new behavior, and update the docs (`docs-site/` and the
-  spec under `docs/`) when you change the input format or CLI.
+- **Update the docs** (`docs-site/` and the spec under `docs/`) when you
+  change the input format or CLI.
 
 ## Reporting bugs
 
