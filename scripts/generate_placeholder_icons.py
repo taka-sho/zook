@@ -10,11 +10,15 @@ Rasterization follows the confirmed decision in
 docs/detailed-design-pptx.md sec8.6: render at 4x the logical display size
 (here, the registry's default icon size of 64 logical units -> 256px).
 
-Usage: .venv/bin/python scripts/generate_placeholder_icons.py
+Usage: .venv/bin/python scripts/generate_placeholder_icons.py [--missing-only]
+
+--missing-only writes just the icons that don't exist yet (after adding
+registry entries), leaving the committed PNGs byte-for-byte alone.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import cairosvg
@@ -31,12 +35,49 @@ CATEGORY_COLORS = {
     "Networking": "#8C4FFF",
     "Integration": "#E7157B",
     "Security": "#DD344C",
+    "Management": "#E7157B",
+    "Analytics": "#8C4FFF",
+    "MachineLearning": "#01A88D",
     "General": "#3B48CC",
+    "Generic": "#545B64",
+}
+# Readable badges where the first four letters aren't (INTE, ONPR, ...).
+ABBREVIATIONS = {
+    "Internet": "WWW", "OnPremises": "DC", "Database": "DB", "Mobile": "MOB", "Server": "SRV",
+    "InternetGateway": "IGW", "TransitGateway": "TGW", "SiteToSiteVPN": "VPN", "VPCEndpoint": "VPCE",
+    "DirectConnect": "DX", "GlobalAccelerator": "GA", "StepFunctions": "SFN", "SecretsManager": "SECR",
+    "CloudWatch": "CW", "CloudTrail": "CT", "SystemsManager": "SSM", "CloudFormation": "CFN",
+    "CodePipeline": "PIPE", "ElasticBeanstalk": "EB", "AutoScaling": "ASG", "StorageGateway": "SGW",
+    "DocumentDB": "DOCD", "NetworkFirewall": "NFW", "SecurityHub": "SHUB", "GuardDuty": "GDTY",
+    "OpenSearch": "OSS", "SageMaker": "SGMK", "AppRunner": "APPR", "AppEngine": "GAE", "VertexAI": "VRTX",
+    "CloudVPN": "VPN", "CloudInterconnect": "ICNT", "CloudArmor": "ARMR", "CloudTasks": "TASK",
+    "CloudScheduler": "SCHD", "SecretManager": "SECR", "CloudKMS": "KMS", "CloudLogging": "LOG",
+    "CloudMonitoring": "MON", "CloudBuild": "BLD", "ArtifactRegistry": "GAR", "AppService": "APP",
+    "ContainerRegistry": "ACR", "StorageAccount": "STOR", "PostgreSQL": "PSQL", "ApplicationGateway": "AGW",
+    "Firewall": "FW", "VPNGateway": "VPN", "ExpressRoute": "ER", "TrafficManager": "TM",
+    "DDoSProtection": "DDOS", "EventHubs": "EVH", "LogicApps": "LOGC", "ApplicationInsights": "AI",
+    "DataFactory": "ADF", "Synapse": "SYN", "Databricks": "DBX", "OpenAI": "AOAI", "MachineLearning": "AML",
+    "CloudFront": "CF", "CloudFunctions": "FN", "CloudStorage": "GCS", "CloudLoadBalancing": "LB",
+    "ComputeEngine": "GCE", "PersistentDisk": "PD", "VirtualMachine": "VM", "ManagedDisk": "DISK",
+    "CosmosDB": "COSM", "CacheForRedis": "REDI", "LoadBalancer": "LB", "FrontDoor": "FD",
+    "APIManagement": "APIM", "ServiceBus": "SB", "EventGrid": "EG", "EntraID": "ENTR", "KeyVault": "KV",
+    "IdentityPlatform": "IDP", "APIGateway": "APIG", "Dataflow": "DFLW", "Dataproc": "DPRC",
 }
 DEFAULT_COLOR = "#5A6B86"
 
 
+# Stripped before abbreviating, so CloudRun/CloudSQL/CloudDNS don't all
+# become "CLOU".
+_PREFIXES = ("Cloud", "Azure", "Amazon", "AWS")
+
+
 def _abbrev(key: str) -> str:
+    if key in ABBREVIATIONS:
+        return ABBREVIATIONS[key]
+    for prefix in _PREFIXES:
+        if key.startswith(prefix) and len(key) > len(prefix):
+            key = key[len(prefix):]
+            break
     return key[:4].upper()
 
 
@@ -86,7 +127,7 @@ def _rasterize(svg_text: str, out_path: Path, size_logical_units: float) -> None
     cairosvg.svg2png(bytestring=svg_text.encode("utf-8"), write_to=str(out_path), output_width=px, output_height=px)
 
 
-def _generate_for_provider(provider: str) -> None:
+def _generate_for_provider(provider: str, missing_only: bool = False) -> None:
     registry_path = REPO_ROOT / f"src/zook/data/icons/{provider}/registry.{provider}.yaml"
     out_dir = registry_path.parent
     registry = yaml.safe_load(registry_path.read_text())
@@ -97,19 +138,24 @@ def _generate_for_provider(provider: str) -> None:
         color = CATEGORY_COLORS.get(category, DEFAULT_COLOR)
         svg_text = _actor_svg(_abbrev(key), color) if category == "General" else _icon_svg(_abbrev(key), color)
         out_path = out_dir / spec["file"]
+        if missing_only and out_path.exists():
+            continue
         size = spec.get("size", default_size)
         _rasterize(svg_text, out_path, size)
         print(f"wrote {out_path}")
 
     placeholder_path = out_dir / "_placeholder.png"
-    _rasterize(_placeholder_svg(), placeholder_path, default_size)
-    print(f"wrote {placeholder_path}")
+    if not (missing_only and placeholder_path.exists()):
+        _rasterize(_placeholder_svg(), placeholder_path, default_size)
+        print(f"wrote {placeholder_path}")
 
     badge_size = 28  # corner badge, smaller than a regular service icon
     for spec in registry.get("groups", {}).values():
         if not spec.get("icon"):
             continue
         out_path = out_dir / spec["icon"]
+        if missing_only and out_path.exists():
+            continue
         # Corner badge uses the group's own brand border color (e.g. AWS
         # squid ink, Google blue, Azure blue) instead of one fixed color.
         _rasterize(_cloud_badge_svg(spec.get("borderColor", DEFAULT_COLOR)), out_path, badge_size)
@@ -117,8 +163,9 @@ def _generate_for_provider(provider: str) -> None:
 
 
 def main() -> None:
+    missing_only = "--missing-only" in sys.argv[1:]
     for provider in PROVIDERS:
-        _generate_for_provider(provider)
+        _generate_for_provider(provider, missing_only)
 
 
 if __name__ == "__main__":

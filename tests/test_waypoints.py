@@ -67,7 +67,7 @@ def test_render_plan_threads_the_waypoints_between_endpoints():
     diagram, root = _root(_doc({"waypoints": _DETOUR}))
     by_id = {b.element.id: b for b in root.children}
     _s, _e, style, path = link_render_plan(by_id["A"], by_id["X"], diagram.links[0])
-    assert style == "straight"
+    assert style == "polyline"  # drawn as one straight connector per segment
     assert path[1:-1] == [(470.0, 150.0), (470.0, 360.0)]  # vias, in order, between the two endpoints
 
 

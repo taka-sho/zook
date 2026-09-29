@@ -4,14 +4,7 @@ import yaml
 from pptx import Presentation
 
 from zook.errors import Warnings
-from zook.layout import (
-    build_layout,
-    icon_resolution_warnings,
-    link_aliasing_warnings,
-    link_crossing_warnings,
-    out_of_canvas_warnings,
-    overlap_warnings,
-)
+from zook.layout import build_layout, diagram_warnings
 from zook.model import parse_diagram
 from zook.registry import load_registries
 from zook.render import render
@@ -27,16 +20,7 @@ def _build(raw):
     registry = load_registries()
     root_box = build_layout(diagram, registry)
     warnings = Warnings()
-    margin = diagram.canvas.overlap_margin
-    for message in icon_resolution_warnings(root_box, registry):
-        warnings.add(message)
-    for message in out_of_canvas_warnings(root_box, *diagram.canvas.size):
-        warnings.add(message)
-    for message in overlap_warnings(root_box, registry, margin):
-        warnings.add(message)
-    for message in link_crossing_warnings(root_box, diagram.links, registry, margin):
-        warnings.add(message)
-    for message in link_aliasing_warnings(root_box, diagram.links):
+    for message in diagram_warnings(diagram, root_box, registry):
         warnings.add(message)
     presentation = render(diagram, root_box, registry)
     return presentation, warnings

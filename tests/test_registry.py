@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from zook.registry import load_registries, load_registry
 
 
@@ -121,3 +123,51 @@ icons:
         assert multi.resolve_icon("InternalService", "custom") is not None
         # A node that forgets to set provider: custom doesn't accidentally pick it up.
         assert multi.resolve_icon("InternalService", "aws") is None
+
+
+def _write_registry(tmp_path, name, body):
+    import shutil
+
+    shutil.copy(Path(__file__).parent.parent / "src/zook/data/icons/aws/Compute/EC2.png", tmp_path / "x.png")
+    path = tmp_path / name
+    path.write_text('registryVersion: "1.0"\n' + body, encoding="utf-8")
+    return str(path)
+
+
+def test_overriding_a_type_merges_and_keeps_its_aliases(tmp_path):
+    reg = _write_registry(tmp_path, "r.yaml", 'provider: aws\nicons:\n  ELB: { file: "x.png" }\ngroups:\n  vpc: { borderColor: "#FF0000" }\n')
+    multi = load_registries(user_registry_path=reg)
+    elb, alb = multi.resolve_icon("ELB", "aws"), multi.resolve_icon("ALB", "aws")
+    assert elb is alb and elb.file.name == "x.png"
+    assert elb.category == "Networking"  # kept from the built-in entry
+    assert elb.drawio_shape is None  # a new image: draw.io embeds it instead of the old official shape
+    vpc = multi.resolve_group("vpc", "aws")
+    assert vpc.border_color == "#FF0000" and vpc.label == "VPC" and vpc.drawio_shape
+
+
+def test_a_user_alias_cannot_take_over_a_builtin_type(tmp_path):
+    reg = _write_registry(tmp_path, "r.yaml", 'icons:\n  Mine: { file: "x.png", aliases: [S3, mymine] }\n')
+    multi = load_registries(user_registry_path=reg)
+    assert multi.resolve_icon("S3", "aws").name == "S3"
+    assert multi.resolve_icon("mymine", "aws").name == "Mine"
+    (warning,) = multi.warnings
+    assert "alias 'S3'" in warning and "ignored" in warning
+
+
+def test_several_registries_layer_in_order(tmp_path):
+    aws = _write_registry(tmp_path, "a.yaml", 'icons:\n  Foo: { file: "x.png", category: A }\n')
+    later = _write_registry(tmp_path, "b.yaml", 'icons:\n  Foo: { file: "x.png", category: B }\n')
+    gcp = _write_registry(tmp_path, "g.yaml", 'provider: gcp\nicons:\n  Bar: { file: "x.png" }\n')
+    multi = load_registries(user_registry_path=[aws, gcp, later])
+    assert multi.resolve_icon("Foo", "aws").category == "B"
+    assert multi.resolve_icon("Bar", "gcp") is not None
+
+
+def test_a_registry_provider_must_be_one_a_diagram_can_name(tmp_path):
+    import pytest
+
+    from zook.errors import DiagramError
+
+    reg = _write_registry(tmp_path, "r.yaml", 'provider: mycorp\nicons:\n  Foo: { file: "x.png" }\n')
+    with pytest.raises(DiagramError, match="custom"):
+        load_registries(user_registry_path=reg)

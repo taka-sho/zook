@@ -4,30 +4,21 @@ on:
   push:
     branches:
       - main
+  pull_request: # build (strict) only - catches a broken page before merge; deploys stay on main
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/configure-pages@v6
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
-      - run: pip install zensical
+      - run: pip install -r requirements-docs.txt
       # English (docs-site/) is the primary site, built to site/. Japanese
       # (docs-site-ja/) is a completely separate docs tree, built into site/ja/
       # via its own config (site_dir differs, so this doesn't clobber the
@@ -35,7 +26,24 @@ jobs:
       - run: zensical build --clean --strict -f zensical.toml
       - run: zensical build --clean --strict -f zensical.ja.toml
       - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
         with:
           path: site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
       - uses: actions/deploy-pages@v5
         id: deployment

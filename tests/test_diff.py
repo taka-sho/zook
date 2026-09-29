@@ -43,10 +43,47 @@ def test_identical_diagrams_report_no_differences():
     assert diff_diagrams(_clone(), _clone()).identical
 
 
-def test_reordering_children_is_not_a_difference():
+def test_reordering_auto_placed_children_is_reported():
+    # Their order is their placement: web left of db, or db left of web.
     reordered = _clone()
     reordered["elements"][0]["children"].reverse()
-    assert diff_diagrams(_clone(), reordered).identical
+    result = diff_diagrams(_clone(), reordered)
+    (reorder,) = result.reordered
+    assert (reorder.parent, reorder.old_order, reorder.new_order) == ("vpc", ["web", "db"], ["db", "web"])
+
+
+def test_reordering_explicitly_positioned_children_is_not_a_difference():
+    old = _clone()
+    for i, child in enumerate(old["elements"][0]["children"]):
+        child.update(x=20 + 100 * i, y=40)
+    new = _clone()
+    new["elements"][0]["children"] = [dict(c) for c in old["elements"][0]["children"]][::-1]
+    assert diff_diagrams(old, new).identical
+
+
+def test_style_and_size_equal_to_their_defaults_are_not_differences():
+    new = _clone()
+    new["elements"][0]["children"][0]["style"] = {"labelPosition": "below", "labelFontSize": 9}
+    new["elements"][0]["children"][0]["size"] = 64
+    new["elements"][0]["style"] = {"borderColor": "#8c4fff"}  # the registry's vpc colour, any case
+    assert diff_diagrams(_clone(), new).identical
+
+
+def test_removing_the_first_of_two_parallel_links_is_one_removal():
+    old = _clone(links=[{"from": "web", "to": "db", "label": "read"}, {"from": "web", "to": "db", "label": "write"}])
+    new = _clone(links=[{"from": "web", "to": "db", "label": "write"}])
+    result = diff_diagrams(old, new)
+    assert not result.modified_links
+    (removed,) = result.removed_links
+    assert removed.label == "read"
+
+
+def test_giving_a_link_an_id_is_a_modification_of_its_id():
+    new = _clone(links=[{"id": "sql", "from": "web", "to": "db", "label": "3306"}])
+    result = diff_diagrams(_clone(), new)
+    assert not result.added_links and not result.removed_links
+    (mod,) = result.modified_links
+    assert [(c.field, c.old, c.new) for c in mod.changes] == [("id", None, "sql")]
 
 
 def test_explicit_default_value_is_not_a_difference():
@@ -172,5 +209,9 @@ def test_cli_fatal_on_invalid_input(tmp_path):
     bad.write_text("version: '1.0'\ncanvas: {aspectRatio: '16:9'}\nelements:\n  - {kind: node, id: a, type: EC2}\n"
                    "links:\n  - {from: a, to: ghost}\n")
     result = CliRunner().invoke(main, ["diff", good, str(bad), "--format", "json"])
-    assert result.exit_code == 1
-    assert json.loads(result.stdout)["status"] == "error"
+    # 2, not 1: `--exit-code` uses 1 for "the diagrams differ", so an invalid
+    # input must be distinguishable from a real difference (like diff(1)).
+    assert result.exit_code == 2
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert "new diagram" in payload["error"] and "bad.yaml" in payload["error"]

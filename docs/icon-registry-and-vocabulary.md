@@ -119,6 +119,18 @@ Containers work the same way, looking up `groups`. **If not defined in that prov
 - Resolution must be implemented as "alias-aware and case-insensitive" (§4).
 - Color/category/kind can be adjusted as needed to match the official deck.
 
+
+## 9. Tier 2, Forgiving Lookup, Shared Icons (added after v0.1.0)
+
+This section supersedes the parts of §2, §4 and §8 it contradicts.
+
+- **Tier 2 vocabulary.** The built-in registries grew from 26/19/18 to 77 AWS, 39 GCP and 40 Azure types: the services the first dogfooding diagrams kept reaching for (WAF, CloudWatch, Secrets Manager, KMS, Step Functions, Kinesis, Internet/Transit Gateway, VPC endpoints, SageMaker/Bedrock; GCP Spanner/Dataflow/Vertex AI/Cloud Armor; Azure App Service/Application Gateway/Firewall/Event Hubs/OpenAI, ...). Every new AWS `drawioShape` was checked against jgraph/drawio's `Sidebar-AWS4.js`; `zook icons list` is the current list.
+- **Shared icons.** The AWS registry's `General` (actors) and new `Generic` (Server, Database, Internet, Mobile, OnPremises, SaaS) categories resolve for *every* provider (`registry.SHARED_CATEGORIES`), so a GCP or Azure diagram can use them without `provider: aws`.
+- **AWS groups.** `publicSubnet` / `privateSubnet` (the official green/blue), `securityGroup`, `autoScalingGroup`, `corporateDataCenter`; `az` also answers to `availabilityZone`/`zone`. Plain `subnet` keeps its public-subnet look.
+- **Lookup (replaces "case-insensitive", §4).** Keys and aliases are compared after `normalize_type()`: lowercase, with spaces, hyphens, underscores and dots removed — `API Gateway`, `api-gateway` and `APIGateway` are one key. Aliases that only differed in case were dropped as redundant; `tests/test_vocabulary.py` checks no two entries of a provider share a key.
+- **Unresolved types.** The Warning carries a fix: the close matches in that provider's vocabulary (`did you mean 'Lambda'?`), or the providers that define the type (`set provider: gcp`). An unknown *container* type is now a Warning too (it used to fall back to the default frame silently), with the closest container type.
+- **Icon formats (replaces "SVGs are converted before placing", §8).** Every icon is read through `registry.icon_png()`: PNG/JPEG as-is, SVG rasterized with cairosvg at 4x the default size (§8.6 of the design memo). A file that can't be read as an image is a Warning and the placeholder is drawn - it used to crash `build` with a traceback.
+
 ---
 
 *This spec settles every open item from requirements spec §7.4 and the icon-related questions. What remains is sourcing and placing the actual icon files, which is implementation-phase work.*

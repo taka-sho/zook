@@ -1,0 +1,3 @@
+# Docs-site builder (docs.yml). Pinned so a new release cannot silently change
+# the published site; Dependabot proposes updates.
+zensical==0.0.51

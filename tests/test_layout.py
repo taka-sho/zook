@@ -91,8 +91,10 @@ def test_explicit_and_auto_children_coexist():
 def test_auto_child_is_nudged_clear_of_an_overlapping_explicit_sibling():
     explicit = Element(kind="node", id="fixed", type="EC2", provider="aws", x=0, y=0)
     auto = Element(kind="node", id="auto", type="S3", provider="aws")
+    # `group` has no default label: a `vpc` draws "VPC" in its top band even
+    # without a `label`, which `fixed` at (0, 0) would genuinely cover.
     container = Element(
-        kind="container", id="c", type="vpc", provider="aws", layout=Layout(direction="grid"), children=[explicit, auto]
+        kind="container", id="c", type="group", provider="aws", layout=Layout(direction="grid"), children=[explicit, auto]
     )
     diagram = _diagram([container])
     root = build_layout(diagram, REGISTRY)
@@ -135,7 +137,7 @@ def test_avoidance_handles_multiple_stacked_explicit_obstacles():
     e2 = Element(kind="node", id="e2", type="EC2", provider="aws", x=0, y=90)
     auto = Element(kind="node", id="auto", type="S3", provider="aws")
     container = Element(
-        kind="container", id="c", type="vpc", provider="aws", layout=Layout(direction="grid"), children=[e1, e2, auto]
+        kind="container", id="c", type="group", provider="aws", layout=Layout(direction="grid"), children=[e1, e2, auto]
     )
     diagram = _diagram([container])
     root = build_layout(diagram, REGISTRY)
@@ -218,7 +220,7 @@ def test_parent_and_child_are_not_falsely_flagged_as_overlapping():
 def test_overlap_check_applies_within_nested_containers_too():
     a = Element(kind="node", id="a", type="EC2", provider="aws", x=10, y=10)
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=12, y=12)
-    inner = Element(kind="container", id="inner", type="az", provider="aws", children=[a, b])
+    inner = Element(kind="container", id="inner", type="group", provider="aws", children=[a, b])
     diagram = _diagram([inner])
     root = build_layout(diagram, REGISTRY)
     warnings = overlap_warnings(root, REGISTRY)
@@ -433,11 +435,25 @@ def test_elbow_crossing_check_catches_a_hit_a_straight_approximation_would_miss(
     a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=500, y=400)
     obstacle = Element(kind="node", id="obstacle", type="RDS", provider="aws", x=280, y=100, style={"labelPosition": "none"})
-    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b")])
+    # Sides pinned to the horizontal elbow: left to itself, routing would now
+    # pick the other axis precisely because this one crosses the obstacle.
+    link = Link(from_id="a", to_id="b", from_side="right", to_side="left")
+    diagram = _diagram([a, b, obstacle], links=[link])
     root = build_layout(diagram, REGISTRY)
 
     warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert any("obstacle" in w for w in warnings)
+
+
+def test_auto_routing_prefers_the_axis_that_clears_other_elements():
+    # Same geometry, sides left to routing: the dominant (horizontal) elbow
+    # would cross `obstacle`, the vertical one is clear - so it's chosen.
+    a = Element(kind="node", id="a", type="EC2", provider="aws", x=100, y=100)
+    b = Element(kind="node", id="b", type="EC2", provider="aws", x=500, y=400)
+    obstacle = Element(kind="node", id="obstacle", type="RDS", provider="aws", x=280, y=100, style={"labelPosition": "none"})
+    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b")])
+    root = build_layout(diagram, REGISTRY)
+    assert link_crossing_warnings(root, diagram.links, REGISTRY) == []
 
 
 def test_elbow_crossing_check_does_not_flag_the_unused_diagonal_chord():
@@ -539,9 +555,9 @@ def test_link_label_overlapping_unrelated_element_is_flagged():
     assert any("the label of link 'a' -> 'b' overlaps element 'obstacle'" in w for w in warnings)
 
 
-def test_two_link_labels_on_the_same_pair_overlap():
-    # Two labeled links between the same endpoints compute identical
-    # midpoints - a guaranteed, deterministic label/label overlap.
+def test_two_links_on_the_same_pair_get_separate_lanes():
+    # Two labeled links between the same endpoints used to compute identical
+    # paths and midpoints - one line, labels stacked. Each now has a lane.
     a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=300, y=100)
     diagram = _diagram(
@@ -550,7 +566,10 @@ def test_two_link_labels_on_the_same_pair_overlap():
     )
     root = build_layout(diagram, REGISTRY)
     warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
-    assert any("overlaps the label of link" in w for w in warnings)
+    assert not any("overlaps the label of link" in w for w in warnings)
+    boxes = _boxes_by_id(root)
+    paths = [link_render_plan(boxes["a"], boxes["b"], link)[3] for link in diagram.links]
+    assert paths[0] != paths[1] and paths[0][0][1] != paths[1][0][1]
 
 
 def test_link_label_does_not_overlap_a_distant_element():

@@ -52,9 +52,9 @@ Recommended reading order: **1 → 3 → 4/5 → 6 → 7/8 → 2** (requirements
 
 ### Icons & Vocabulary
 - `type` is not fixed as an enum. **The registry is the source of truth for vocabulary.** An unknown `type` produces a Warning plus a placeholder.
-- Initial built-in Tier 1 = 26 services (22 AWS services + 4 General actors: User/Admin/Developer/Client). Additions only require appending to the registry (no schema change needed).
+- Initial built-in Tier 1 = 26 services (22 AWS services + 4 General actors: User/Admin/Developer/Client), since extended with a Tier 2 (77 AWS / 39 GCP / 40 Azure types in all - see icon-registry-and-vocabulary.md §9). Additions only require appending to the registry (no schema change needed).
 - Containers also ship with 7 built-in frame styles, including `cloud` (a boundary, with a corner icon).
-- Resolution is **alias-aware and case-insensitive**. **Overridable** via a user registry.
+- Resolution is **alias-aware, ignoring case, spaces and hyphens**; an unresolved type's Warning suggests the fix. **Overridable** via a user registry.
 - AWS icons are updated quarterly → releases are recorded in `iconSet`, keeping keys stable while swapping files.
 - **Multi-cloud support** (added during the implementation phase): built-in registries for GCP (19 services) and Azure (18 services) were added, along with a `MultiRegistry` that switches the resolution target based on an element's `provider`. A container's `groups` fall back to the AWS registry when undefined in the provider's own registry. Check with `zook icons list`.
 
@@ -62,7 +62,7 @@ Recommended reading order: **1 → 3 → 4/5 → 6 → 7/8 → 2** (requirements
 - Structural breakage (schema violation, duplicate id, dangling link target) = **Fatal, stops immediately** (non-zero exit for CI/CD; `--strict` can additionally treat Warnings this way).
 - Minor drawing issues (unknown icon, out-of-canvas coordinates, elements/labels overlapping) = **Warning, continues**. Coordinate-based overlap detection applies the same logic regardless of whether an element was placed explicitly or automatically.
 - Only when an auto-placed child overlaps an explicitly-positioned sibling is the auto-placed side pushed to avoid it (added during the implementation phase). All other overlaps are detected only, not auto-corrected.
-- The CLI is organized into subcommands: `build` (generate), `validate` (check only, no rendering), `icons list` (inspect vocabulary), `preview` (lightweight PNG), `export-drawio`/`sync` (draw.io round-trip, added during the implementation phase) (all added during the implementation phase).
+- The CLI is organized into subcommands: `build` (generate), `validate` (check only, no rendering), `doctor` (auto-resolve overlap/routing Warnings), `diff` (structural diff), `icons list` (inspect vocabulary), `preview` (lightweight PNG), `export-drawio`/`sync` (draw.io round-trip), `from-mermaid` (Mermaid flowchart import), and `guide`/`schema`/`patterns`/`init` (the bundled docs, schema and patterns) - all added during the implementation phase; `zook --help` is the current list.
 
 ---
 

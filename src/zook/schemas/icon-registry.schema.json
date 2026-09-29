@@ -1,16 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/zook/icon-registry.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/taka-sho/zook/main/docs/icon-registry.schema.json",
   "title": "Icon Registry",
   "description": "Maps diagram element types to icon files (nodes) and frame styles (containers), per provider.",
   "type": "object",
-  "required": ["registryVersion", "provider", "icons"],
+  "required": ["registryVersion"],
   "additionalProperties": false,
   "properties": {
     "registryVersion": { "type": "string", "const": "1.0" },
     "provider": {
-      "type": "string",
-      "description": "Provider namespace this registry serves (aws, gcp, azure, custom)."
+      "enum": ["aws", "gcp", "azure", "custom"],
+      "default": "aws",
+      "description": "Provider namespace this registry serves - the built-in one it layers onto (aws, gcp, azure), or custom for a vocabulary of its own that diagram nodes select with provider: custom. A user registry without it layers onto aws."
     },
     "iconSet": {
       "type": "string",
