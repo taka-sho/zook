@@ -77,7 +77,7 @@ Confirm you can generate from the bundled sample. Success looks like `Wrote exam
 |---|---|
 | `build` | Generate a PowerPoint (.pptx) from YAML |
 | `validate` | Check schema/overlaps/etc. without rendering |
-| `doctor` | Auto-resolve collisions in four stages (element overlaps = coordinate adjustment / link routing = connection-side assignment / an obstacle blocking a path = displaced / an obstacle that can't move = detoured with waypoints) |
+| `doctor` | Auto-resolve collisions in five stages (arrangement along the links = `layout.order: flow` / element overlaps = coordinate adjustment / link routing = connection-side assignment / an obstacle blocking a path = displaced / an obstacle that can't move = detoured with waypoints) |
 | `diff` | Take the **structural diff** of two diagrams (elements added/removed/moved, link changes, canvas changes — matched by id and reported with no text-diff noise) |
 | `icons list` | List registered icon/container types |
 | `preview` | Preview as a lightweight PNG, no PowerPoint needed |

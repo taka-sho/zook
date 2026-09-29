@@ -263,7 +263,16 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
         }
         for c in result.link_changes
     ]
-    changed = bool(result.moves or result.link_changes or result.pinned)
+    layout_changes = [
+        {"id": c.id, "order": c.order, **({"direction": c.direction} if c.direction else {})}
+        for c in result.layout_changes
+    ]
+    changed = bool(result.moves or result.link_changes or result.pinned or result.layout_changes)
+
+    def _arranged(c: dict) -> str:
+        where = "the top level" if c["id"] == "canvas" else c["id"]
+        how = f" ({c['direction']})" if "direction" in c else ""
+        return f"arranged {where} along its links{how} - layout.order: flow"
 
     def _routing(c: dict) -> str:
         parts = [f"{k}={c[k]}" for k in ("fromSide", "toSide") if c[k] is not None]
@@ -277,6 +286,7 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
             "status": result.status,
             "moves": moves,
             "pinned": pinned,
+            "layoutChanges": layout_changes,
             "linkChanges": link_changes,
             "resolvedOverlaps": result.resolved_overlaps,
             "remaining": [str(m) for m in result.remaining],
@@ -288,6 +298,8 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
         return
 
     if fmt == "github":
+        for c in layout_changes:
+            print(f"::notice::{_arranged(c)}")
         for m in moves:
             print(f"::notice::moved {m['id']} to x={m['x']:g}, y={m['y']:g}")
         if pinned:
@@ -304,6 +316,9 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
     if not changed and result.status == "ok":
         print("No overlaps or link-routing collisions to resolve.")
     else:
+        for c in layout_changes:
+            text = _arranged(c)
+            print(text[0].upper() + text[1:])
         for m in moves:
             print(f"Moved {m['id']} -> x={m['x']:g}, y={m['y']:g}")
         if pinned:
@@ -361,7 +376,7 @@ def doctor_cmd(input_path: str, output_path: str | None, fix_in_place: bool,
     registry = load_registries(user_registry_path=user_registry_path)
     result = diagnose_and_fix(raw, registry)
 
-    changed = bool(result.moves or result.link_changes or result.pinned)
+    changed = bool(result.moves or result.link_changes or result.pinned or result.layout_changes)
     if output_path is not None:
         dest = output_path
     elif fix_in_place and changed:

@@ -13,8 +13,10 @@ from click.testing import CliRunner
 from zook.doctor import diagnose_and_fix
 from zook.layout import (
     build_layout,
+    iter_boxes,
     link_aliasing_warnings,
     link_crossing_warnings,
+    link_render_plan,
     overlap_warnings,
 )
 from zook.model import parse_diagram
@@ -128,8 +130,10 @@ def test_non_overlap_warnings_are_reported_not_fixed():
 # --- link routing (stage 2) ---
 
 
-def test_link_crossing_is_routed_around_the_obstacle():
-    # A -> B straight through C; only a connection-side change can re-route it.
+def test_a_link_blocked_by_an_element_goes_round_it_without_doctor():
+    # A -> B straight would run through C. The automatic connection sides
+    # take a clean U route over (or under) C instead, so there's nothing left
+    # for doctor to do.
     raw = _base(
         [
             {"kind": "node", "id": "A", "type": "EC2", "x": 100, "y": 200},
@@ -138,13 +142,12 @@ def test_link_crossing_is_routed_around_the_obstacle():
         ],
         links=[{"from": "A", "to": "B"}],
     )
-    assert _link_warnings(raw)
-
-    result = diagnose_and_fix(raw, REGISTRY)
-
-    assert result.status == "fixed"
     assert _link_warnings(raw) == []
-    assert [(c.from_id, c.to_id) for c in result.link_changes] == [("A", "B")]
+    diagram = parse_diagram(raw)
+    boxes = {b.element.id: b for b in iter_boxes(build_layout(diagram, REGISTRY))}
+    start, end, _style, _path = link_render_plan(boxes["A"], boxes["B"], diagram.links[0])
+    assert start == end  # a same-side U route
+    assert diagnose_and_fix(raw, REGISTRY).status == "ok"
 
 
 def test_false_edge_aliasing_is_resolved():
@@ -171,25 +174,20 @@ def _bare(eid, x, y):
     return {"kind": "node", "id": eid, "type": "EC2", "x": x, "y": y, "style": {"labelPosition": "none"}}
 
 
-def test_author_pinned_obstacle_is_routed_around_by_a_same_side_link():
-    # B sits directly between A and X on the same vertical line, placed there by
-    # the author. Stage 2 re-sides the link to a same-side (U) route that goes
-    # around B - no element moved, no waypoints needed.
+def test_a_forced_crossing_is_left_to_its_author():
+    # B sits directly between A and X; the author forced the straight route
+    # through it. doctor doesn't re-route a link whose sides the author set.
     raw = _base(
         [
             {"kind": "node", "id": "A", "type": "EC2", "x": 300, "y": 60},
             {"kind": "node", "id": "B", "type": "EC2", "x": 300, "y": 200},
             {"kind": "node", "id": "X", "type": "EC2", "x": 300, "y": 420},
         ],
-        links=[{"from": "A", "to": "X"}],
+        links=[{"from": "A", "to": "X", "fromSide": "bottom", "toSide": "top"}],
     )
+    assert _link_warnings(raw)
     result = diagnose_and_fix(raw, REGISTRY)
-
-    assert result.status == "fixed"
-    assert _link_warnings(raw) == []
-    assert result.moves == []
-    change = result.link_changes[0]
-    assert change.from_side == change.to_side and change.waypoints is None
+    assert result.link_changes == [] and result.status == "partial"
 
 
 # Pinned blockers just outside both same-side (U) routes of a vertical A -> X

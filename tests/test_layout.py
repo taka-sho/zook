@@ -231,7 +231,8 @@ def test_straight_link_crossing_an_unrelated_box_is_flagged():
     a = Element(kind="node", id="a", type="EC2", provider="aws", x=0, y=100)
     b = Element(kind="node", id="b", type="EC2", provider="aws", x=150, y=100)  # sits between a and c
     c = Element(kind="node", id="c", type="EC2", provider="aws", x=300, y=100)
-    diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c")])
+    # sides forced: automatic routing would go round b
+    diagram = _diagram([a, b, c], links=[Link(from_id="a", to_id="c", from_side="right", to_side="left")])
     root = build_layout(diagram, REGISTRY)
     warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert len(warnings) == 1
@@ -276,9 +277,9 @@ def test_link_crossing_another_links_label_is_flagged():
     d = Element(kind="node", id="d", type="EC2", provider="aws", x=300, y=105)
     diagram = _diagram(
         [a, b, c, d],
-        links=[
-            Link(from_id="c", to_id="d", label="labeled"),
-            Link(from_id="a", to_id="b"),
+        links=[  # sides forced: automatic routing would go round the neighbouring node
+            Link(from_id="c", to_id="d", label="labeled", from_side="right", to_side="left"),
+            Link(from_id="a", to_id="b", from_side="right", to_side="left"),
         ],
     )
     root = build_layout(diagram, REGISTRY)
@@ -549,7 +550,8 @@ def test_link_label_overlapping_unrelated_element_is_flagged():
     obstacle = Element(
         kind="node", id="obstacle", type="RDS", provider="aws", x=140, y=90, style={"labelPosition": "none"}
     )
-    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b", label="lbl")])
+    # sides forced: automatic routing would go round the obstacle, label and all
+    diagram = _diagram([a, b, obstacle], links=[Link(from_id="a", to_id="b", label="lbl", from_side="right", to_side="left")])
     root = build_layout(diagram, REGISTRY)
     warnings = link_crossing_warnings(root, diagram.links, REGISTRY)
     assert any("the label of link 'a' -> 'b' overlaps element 'obstacle'" in w for w in warnings)

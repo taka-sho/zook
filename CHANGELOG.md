@@ -29,6 +29,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   matches). The text fields are unchanged. A container drawn off the slide
   (`fit: none`) is one Warning, not one per element inside it; `diff`'s
   JSON has a `status` like every other command's.
+- Link-aware layout: `layout.order: flow` (also `canvas.layout.order`)
+  arranges a container's children along the links between them - one
+  column (row) per step for a horizontal (vertical) container, each step's
+  members side by side, ordered to keep links short and uncrossed; with a
+  grid, the fill order. On generated diagrams written in an arbitrary order
+  it cut the links running through elements from 434 to 24. `doctor` gains
+  a first stage that sets it where it lowers the Warnings (reported as
+  `layoutChanges`): the 30-link crossing-heavy diagram now ends with 4
+  Warnings instead of 19, in 2 s instead of 7.
+- Automatic connection sides take a same-side U route round an element
+  when both straight routes would run through one and the U route gets
+  past clean (106 generated/sample diagrams: objective 2542 -> 760, none
+  worse).
 - Link line styles: `color` (#RRGGBB), `line` (`solid`/`dashed`/`dotted`)
   and `width` (pt, arrowheads scale with it), in the .pptx, the preview and
   the .drawio. Mermaid import keeps a dotted link dashed and a thick one

@@ -174,6 +174,8 @@ elements:
 links:
   - from: a
     to: c
+    fromSide: right  # forced straight through b (automatic routing would go round it)
+    toSide: left
 """
     , encoding="utf-8")
     runner = CliRunner()

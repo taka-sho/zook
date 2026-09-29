@@ -119,7 +119,9 @@ Applies to children with no `x`/`y`.
 | `columns` | integer ≥ 1 | auto | number of grid columns |
 | `gap` | number ≥ 0 | 24 | spacing between children |
 | `padding` | number ≥ 0 | 32 | inner padding of the container |
+| `order` | enum(`source`,`flow`) | `source` | `source`: children in the order written. `flow`: arranged along the links between them (below) |
 
+- `order: flow` ranks the children by the links between them (a link to something nested in a child counts for that child): each child sits one step after the furthest child linking to it, links that close a cycle set aside. With `horizontal` (`vertical`) every rank is a column (row), left to right (top to bottom), `2 × gap` apart; a rank's members are stacked across it, ordered by the positions of the children they link with (barycenter sweeps) to keep links short and uncrossed, and ranks of nodes are centred on each other so a chain runs straight (with a container among them, ranks start at the leading edge). With `grid` it only sets the order the grid is filled in. Explicitly positioned children stay where they are. `canvas.layout.order` does the same for the top level. `zook doctor` sets `order: flow` on a container where that lowers its Warnings.
 - `grid`: if `columns` is omitted, it's derived automatically from the number of children (for the top level: the count that best fits the slide). Each column is as wide as its widest member and each row as tall as its tallest.
 - `horizontal` / `vertical`: arranged in a single row/column.
 - Cross-axis alignment: in a row/column of nodes only, icons are centred on one line (so links between neighbours run straight); a row/column holding a container aligns its members to the start edge.
@@ -151,7 +153,7 @@ Applies to children with no `x`/`y`.
 - `fromSide`/`toSide`: use these to force a specific connection side.
   - **Both set**: used as-is. However, mixing `top`/`bottom` (vertical) with `left`/`right` (horizontal) — an axis mismatch — is Fatal (§9).
   - **Only one set**: the side given fixes the axis (horizontal/vertical); the other side is auto-chosen within the same axis based on the relative position of the two endpoints.
-  - **Both omitted (default)**: the horizontal and vertical routes are compared by how many other elements they run through, and the clearer one wins. On a tie, generally uses whichever of `|dx|`/`|dy|` is larger (the dominant axis), but switches to the other axis if its actual routed path (including label-avoidance offsets) is more than 20% shorter (see `detailed-design-pptx.md` §8.15 for details).
+  - **Both omitted (default)**: the horizontal and vertical routes are compared by how many other elements they run through, and the clearer one wins. When both run through something (a link past a whole row, e.g. to a node several steps along a flow), a same-side U route over, under or beside both ends is taken instead if it gets past clean. On a tie, generally uses whichever of `|dx|`/`|dy|` is larger (the dominant axis), but switches to the other axis if its actual routed path (including label-avoidance offsets) is more than 20% shorter (see `detailed-design-pptx.md` §8.15 for details).
   - **Both on the same side** (`top`/`top`, `left`/`left`, ...): a U route that leaves both ends outward, passes beyond the outermost endpoint, and comes back.
 - **A link from an element to itself** (a retry loop) is drawn out of one side and back into the adjacent one around their shared corner, 16 units clear of the element: right to top by default; `fromSide`/`toSide` can name another pair of adjacent sides.
 - **A link between a container and an element inside it** runs straight from that element's side nearest the frame to the frame (unless `fromSide`/`toSide` are set).
