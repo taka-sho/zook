@@ -6,35 +6,64 @@ defaults:
   size: 64
   ext: png
 
-# ---- Nodes: Tier-1 starter vocabulary (mirrors registry.aws.yaml's categories) ----
+# ---- Nodes: Tier-1 core vocabulary, then the Tier-2 additions (mirrors registry.aws.yaml's categories) ----
 icons:
   # Compute
-  ComputeEngine: { file: "Compute/ComputeEngine.png", category: Compute, aliases: [computeengine, gce] }
-  CloudFunctions: { file: "Compute/CloudFunctions.png", category: Compute, aliases: [cloudfunctions, cloudfunction, cf] }
-  GKE: { file: "Compute/GKE.png", category: Compute, aliases: [gke, kubernetesengine] }
-  CloudRun: { file: "Compute/CloudRun.png", category: Compute, aliases: [cloudrun] }
+  ComputeEngine: { file: "Compute/ComputeEngine.png", category: Compute, aliases: [gce] }
+  CloudFunctions: { file: "Compute/CloudFunctions.png", category: Compute, aliases: [cloudfunction, cf] }
+  GKE: { file: "Compute/GKE.png", category: Compute, aliases: [kubernetesengine] }
+  CloudRun: { file: "Compute/CloudRun.png", category: Compute }
   # Storage
-  CloudStorage: { file: "Storage/CloudStorage.png", category: Storage, aliases: [cloudstorage, gcs] }
-  PersistentDisk: { file: "Storage/PersistentDisk.png", category: Storage, aliases: [persistentdisk, pd] }
+  CloudStorage: { file: "Storage/CloudStorage.png", category: Storage, aliases: [gcs] }
+  PersistentDisk: { file: "Storage/PersistentDisk.png", category: Storage, aliases: [pd] }
   # Database
-  CloudSQL: { file: "Database/CloudSQL.png", category: Database, aliases: [cloudsql] }
-  Firestore: { file: "Database/Firestore.png", category: Database, aliases: [firestore] }
-  BigQuery: { file: "Database/BigQuery.png", category: Database, aliases: [bigquery, bq] }
-  Memorystore: { file: "Database/Memorystore.png", category: Database, aliases: [memorystore, redis] }
+  CloudSQL: { file: "Database/CloudSQL.png", category: Database }
+  Firestore: { file: "Database/Firestore.png", category: Database }
+  BigQuery: { file: "Database/BigQuery.png", category: Database, aliases: [bq] }
+  Memorystore: { file: "Database/Memorystore.png", category: Database, aliases: [redis] }
   # Networking
-  CloudLoadBalancing: { file: "Networking/CloudLoadBalancing.png", category: Networking, aliases: [cloudloadbalancing, clb, loadbalancer] }
-  CloudCDN: { file: "Networking/CloudCDN.png", category: Networking, aliases: [cloudcdn, cdn] }
-  CloudDNS: { file: "Networking/CloudDNS.png", category: Networking, aliases: [clouddns, dns] }
-  APIGateway: { file: "Networking/APIGateway.png", category: Networking, aliases: [apigateway, apigw] }
-  CloudNAT: { file: "Networking/CloudNAT.png", category: Networking, aliases: [cloudnat, nat] }
+  CloudLoadBalancing: { file: "Networking/CloudLoadBalancing.png", category: Networking, aliases: [clb, loadbalancer] }
+  CloudCDN: { file: "Networking/CloudCDN.png", category: Networking, aliases: [cdn] }
+  CloudDNS: { file: "Networking/CloudDNS.png", category: Networking, aliases: [dns] }
+  APIGateway: { file: "Networking/APIGateway.png", category: Networking, aliases: [apigw] }
+  CloudNAT: { file: "Networking/CloudNAT.png", category: Networking, aliases: [nat] }
   # Application Integration
-  PubSub: { file: "Integration/PubSub.png", category: Integration, aliases: [pubsub] }
-  Eventarc: { file: "Integration/Eventarc.png", category: Integration, aliases: [eventarc] }
+  PubSub: { file: "Integration/PubSub.png", category: Integration }
+  Eventarc: { file: "Integration/Eventarc.png", category: Integration }
   # Security
-  CloudIAM: { file: "Security/CloudIAM.png", category: Security, aliases: [cloudiam, iam] }
-  IdentityPlatform: { file: "Security/IdentityPlatform.png", category: Security, aliases: [identityplatform] }
+  CloudIAM: { file: "Security/CloudIAM.png", category: Security, aliases: [iam] }
+  IdentityPlatform: { file: "Security/IdentityPlatform.png", category: Security }
 
 # ---- Containers: frame styles ----
+  # Compute (Tier 2)
+  AppEngine: { file: "Compute/AppEngine.png", category: Compute, aliases: [GAE] }
+  # Database (Tier 2)
+  Spanner: { file: "Database/Spanner.png", category: Database, aliases: [CloudSpanner] }
+  Bigtable: { file: "Database/Bigtable.png", category: Database, aliases: [CloudBigtable] }
+  AlloyDB: { file: "Database/AlloyDB.png", category: Database }
+  # Analytics (Tier 2)
+  Dataflow: { file: "Analytics/Dataflow.png", category: Analytics }
+  Dataproc: { file: "Analytics/Dataproc.png", category: Analytics }
+  Composer: { file: "Analytics/Composer.png", category: Analytics, aliases: [CloudComposer, Airflow] }
+  # MachineLearning (Tier 2)
+  VertexAI: { file: "MachineLearning/VertexAI.png", category: MachineLearning, aliases: [Vertex, AIPlatform] }
+  # Networking (Tier 2)
+  CloudVPN: { file: "Networking/CloudVPN.png", category: Networking, aliases: [VPN] }
+  CloudInterconnect: { file: "Networking/CloudInterconnect.png", category: Networking, aliases: [Interconnect] }
+  CloudArmor: { file: "Networking/CloudArmor.png", category: Networking, aliases: [Armor, WAF] }
+  # Integration (Tier 2)
+  CloudTasks: { file: "Integration/CloudTasks.png", category: Integration }
+  CloudScheduler: { file: "Integration/CloudScheduler.png", category: Integration, aliases: [Scheduler] }
+  Workflows: { file: "Integration/Workflows.png", category: Integration }
+  # Security (Tier 2)
+  SecretManager: { file: "Security/SecretManager.png", category: Security, aliases: [SecretsManager] }
+  CloudKMS: { file: "Security/CloudKMS.png", category: Security, aliases: [KMS] }
+  # Management (Tier 2)
+  CloudLogging: { file: "Management/CloudLogging.png", category: Management, aliases: [Logging] }
+  CloudMonitoring: { file: "Management/CloudMonitoring.png", category: Management, aliases: [Monitoring] }
+  CloudBuild: { file: "Management/CloudBuild.png", category: Management }
+  ArtifactRegistry: { file: "Management/ArtifactRegistry.png", category: Management, aliases: [GAR, ContainerRegistry] }
+
 groups:
   cloud: { label: "Google Cloud", borderColor: "#4285F4", dashed: false, labelPosition: top-left, icon: "General/gcp-cloud-badge.png" }
   vpc: { label: "VPC Network", borderColor: "#4285F4", dashed: false, labelPosition: top-left }

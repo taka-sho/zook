@@ -5,25 +5,33 @@ on:
     branches:
       - main
   pull_request:
+  workflow_call: # release.yml runs the whole suite before it publishes anything
 
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # only used by the "update badges" step below, on push to main
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported Python (pyproject: requires-python >=3.10) and
+        # the newest release.
+        python-version: ["3.10", "3.x"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.x"
+          python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
 
       # Coverage is a real quality gate here, not just a number for the badge:
-      # the build fails if branch coverage on src/zook drops below 85%
-      # (current baseline is ~88%; see pyproject.toml [tool.coverage.*]).
+      # the build fails if branch coverage on src/zook drops below 85% (see
+      # pyproject.toml [tool.coverage.*]). -X warn_default_encoding plus the
+      # EncodingWarning filter fails any read/write in zook itself that relies
+      # on the locale's encoding (cp932 on Japanese Windows) - on any OS.
       - name: Run tests with coverage
         run: >
-          pytest tests/ -v
+          python -X warn_default_encoding -m pytest tests/ -v
+          -W "error::EncodingWarning:zook"
           --cov=zook --cov-report=term-missing --cov-report=json
           --cov-fail-under=85
           --junitxml=junit.xml
@@ -31,32 +39,86 @@ jobs:
       - name: Job summary
         if: always()
         run: |
-          echo "## Coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Coverage (line + branch), Python ${{ matrix.python-version }}" >> "$GITHUB_STEP_SUMMARY"
           python -c "
           import json
           d = json.load(open('coverage.json'))['totals']
-          print(f\"- Line coverage: {d['percent_covered']:.1f}% ({d['covered_lines']}/{d['num_statements']} statements)\")
+          print(f\"- {d['percent_covered']:.1f}% ({d['covered_lines']}/{d['num_statements']} statements, {d['covered_branches']}/{d['num_branches']} branches)\")
           " >> "$GITHUB_STEP_SUMMARY"
 
-      # README.md's coverage/tests badges read .github/badges/*.json (shields.io
-      # "endpoint badge" format) via raw.githubusercontent.com, so they always
-      # show the real result of the latest run on main - not a number that can
-      # go stale or depend on a third-party dashboard. Only pushes to main can
-      # write back (PRs from forks can't and shouldn't); a no-op when the
-      # numbers haven't moved, so this never creates commit noise or loops.
-      - name: Update README badges
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: python scripts/update_badges.py --coverage-json coverage.json --junit-xml junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.python-version == '3.x'
+        with:
+          name: test-results
+          path: |
+            coverage.json
+            junit.xml
 
-      - name: Commit updated badges
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  package:
+    # What a user gets from `pipx install`: build the wheel, install it into a
+    # clean environment and use it from outside the repository - catches data
+    # files the package forgot to ship, which an editable install can't.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - name: Smoke-test the wheel outside the repository
         run: |
-          if ! git diff --quiet -- .github/badges/; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .github/badges/
-            git commit -m "chore: update coverage/tests badges [skip ci]"
-            git push
-          else
+          python -m venv /tmp/zook-wheel
+          /tmp/zook-wheel/bin/pip install dist/*.whl
+          cd "$RUNNER_TEMP"
+          /tmp/zook-wheel/bin/zook --version
+          /tmp/zook-wheel/bin/zook guide > /dev/null
+          /tmp/zook-wheel/bin/zook init d.yaml --pattern container-platform
+          /tmp/zook-wheel/bin/zook validate d.yaml --strict
+          /tmp/zook-wheel/bin/zook build d.yaml -o d.pptx
+          /tmp/zook-wheel/bin/zook export-drawio d.yaml -o d.drawio
+      - name: Run the tests from the sdist
+        run: |
+          mkdir /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          cd /tmp/sdist && python -m venv .venv && .venv/bin/pip install ".[dev]" && .venv/bin/pytest tests/ -q
+
+  badges:
+    # README.md's coverage/tests badges read .github/badges/*.json (shields.io
+    # "endpoint badge" format) via raw.githubusercontent.com, so they always
+    # show the real result of the latest run on main - failures included (this
+    # job runs whatever the tests did). Only pushes to main write back; a no-op
+    # when the numbers haven't moved, so this never creates commit noise.
+    needs: pytest
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: badges
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-results
+      - run: python scripts/update_badges.py --coverage-json coverage.json --junit-xml junit.xml
+      - name: Commit updated badges
+        run: |
+          if git diff --quiet -- .github/badges/; then
             echo "Badges unchanged, nothing to commit."
+            exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/
+          git commit -m "chore: update coverage/tests badges [skip ci]"
+          # another push may have landed meanwhile: rebase onto it and retry
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep 5
+          done
+          exit 1

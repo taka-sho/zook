@@ -33,9 +33,15 @@ python -m venv .venv
 - **Keep the schema copies in sync.** If you edit `docs/zook.schema.json` or
   `docs/icon-registry.schema.json`, copy the same content to the matching file
   under `src/zook/schemas/` — the two are required to be byte-identical. Same
-  for `docs/registry.<provider>.yaml` → `src/zook/data/icons/<provider>/`.
+  for `docs/registry.<provider>.yaml` → `src/zook/data/icons/<provider>/`
+  (`python scripts/generate_placeholder_icons.py --missing-only` draws the
+  placeholder PNG of a new icon entry).
+- **Keep the bundled guide copies in sync.** `zook guide` prints copies of
+  `AGENTS.md`, `docs/yaml-spec.md` and some `docs-site/` pages kept in
+  `src/zook/data/guide/`; after editing one, run
+  `python scripts/sync_bundled_docs.py`.
 - **Keep the reference diagrams warning-free.** `docs/example.yaml`,
-  `docs/example-cloud-actors.yaml` and `docs/patterns/*.yaml` are regression
+  `docs/example-cloud-actors.yaml` and `src/zook/data/patterns/*.yaml` are regression
   fixtures expected to validate with zero warnings; check with `zook validate`.
 - **Update the docs** (`docs-site/` and the spec under `docs/`) when you
   change the input format or CLI.

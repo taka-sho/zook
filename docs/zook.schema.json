@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/zook/v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/taka-sho/zook/main/docs/zook.schema.json",
   "title": "Architecture Diagram Definition",
   "description": "YAML/JSON definition for generating a single architecture diagram slide.",
   "type": "object",
@@ -64,14 +64,40 @@
           "minimum": 0,
           "default": 0,
           "description": "Extra buffer (logical units) added around every element before checking for overlaps or link-path crossings. 0 only flags literal overlap; raise it to also flag elements/links that merely sit close together."
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How the top-level elements are arranged (the canvas's own `padding` is the outer margin). Defaults to a grid whose column count is chosen to fit the slide, with a 64-unit gap.",
+          "properties": {
+            "direction": { "enum": ["horizontal", "vertical", "grid"], "default": "grid" },
+            "columns": { "type": "integer", "minimum": 1, "description": "Column count for grid. If omitted, the count that best fits the slide is chosen." },
+            "gap": { "type": "number", "minimum": 0, "default": 64, "description": "Spacing between top-level elements (logical units)." }
+          }
+        },
+        "fit": {
+          "enum": ["shrink", "none"],
+          "default": "shrink",
+          "description": "What happens when the laid-out diagram doesn't fit the slide. shrink: it is scaled down uniformly (text included) and centred within the canvas padding; a diagram that fits is never changed. none: it is drawn as laid out and whatever falls outside is reported as a Warning."
         }
       }
     },
     "element": {
-      "description": "Either a container (grouping box) or a node (leaf icon).",
-      "oneOf": [
-        { "$ref": "#/$defs/container" },
-        { "$ref": "#/$defs/node" }
+      "description": "Either a container (grouping box) or a node (leaf icon), selected by `kind`. Written as if/then on `kind` rather than oneOf so a violation is reported against the branch `kind` names, at the exact nested path - not as 'not valid under any of the given schemas'.",
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["container", "node"] }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "kind": { "const": "container" } }, "required": ["kind"] },
+          "then": { "$ref": "#/$defs/container" }
+        },
+        {
+          "if": { "type": "object", "properties": { "kind": { "const": "node" } }, "required": ["kind"] },
+          "then": { "$ref": "#/$defs/node" }
+        }
       ]
     },
     "container": {
@@ -93,8 +119,8 @@
           "description": "Provider namespace for container styling/icon resolution."
         },
         "label": { "type": "string", "description": "Display label drawn on the container." },
-        "x": { "$ref": "#/$defs/coord", "description": "Absolute x. If omitted, auto-placed by parent." },
-        "y": { "$ref": "#/$defs/coord", "description": "Absolute y. If omitted, auto-placed by parent." },
+        "x": { "$ref": "#/$defs/coord", "description": "x relative to the parent container's top-left corner (the canvas's, at the top level); set together with y. If omitted, auto-placed by the parent." },
+        "y": { "$ref": "#/$defs/coord", "description": "y relative to the parent container's top-left corner (the canvas's, at the top level); set together with x. If omitted, auto-placed by the parent." },
         "width": { "$ref": "#/$defs/dimension", "description": "Explicit width. If omitted, auto-sized to fit children." },
         "height": { "$ref": "#/$defs/dimension", "description": "Explicit height. If omitted, auto-sized to fit children." },
         "layout": { "$ref": "#/$defs/layout" },
@@ -122,11 +148,11 @@
         "provider": {
           "enum": ["aws", "gcp", "azure", "custom"],
           "default": "aws",
-          "description": "Provider namespace used to resolve the icon file (e.g. icons/<provider>/<type>.png)."
+          "description": "Which provider's icon registry resolves `type` (`zook icons list` shows each vocabulary; actors and generic icons work under any provider)."
         },
         "label": { "type": "string", "description": "Display label under/near the icon." },
-        "x": { "$ref": "#/$defs/coord", "description": "Absolute x. If omitted, auto-placed by parent." },
-        "y": { "$ref": "#/$defs/coord", "description": "Absolute y. If omitted, auto-placed by parent." },
+        "x": { "$ref": "#/$defs/coord", "description": "x relative to the parent container's top-left corner (the canvas's, at the top level); set together with y. If omitted, auto-placed by the parent." },
+        "y": { "$ref": "#/$defs/coord", "description": "y relative to the parent container's top-left corner (the canvas's, at the top level); set together with x. If omitted, auto-placed by the parent." },
         "width": { "$ref": "#/$defs/dimension", "description": "Icon width. If omitted, falls back to `size`, then the default icon size." },
         "height": { "$ref": "#/$defs/dimension", "description": "Icon height. If omitted, falls back to `size`, then the default icon size." },
         "size": { "$ref": "#/$defs/dimension", "description": "Shorthand that sets both width and height at once. Ignored on an axis where width/height is given explicitly." },

@@ -6,8 +6,8 @@ zookで生成した構成図を[draw.io](https://www.diagrams.net/)で手直し�
 
 ## できること・できないこと
 
-- **できる**:draw.io上で要素の位置・サイズを変更したものを、YAMLの`x`/`y`/`width`/`height`として反映する
-- **できない**:ノード・コンテナの追加/削除、色やスタイルの変更を反映する。これらは引き続きYAML側で行ってください
+- **できる**:draw.io上で要素の位置・サイズを変更したものを、YAMLの`x`/`y`/`width`/`height`として反映する。リンクに追加(または削除)した折れ点を、そのリンクの`waypoints`として反映する
+- **できない**:ノード・コンテナ・リンクの追加/削除、別のコンテナへの要素の移動、色やスタイル・ラベルの変更を反映する。これらは引き続きYAML側で行ってください。sync はこうした編集を黙って無視せず、それぞれ Warning として報告します
 
 追加・削除・色変更を反映しないのは制約ではなく設計判断です。YAMLを唯一の真実源として保ち続けるための境界線として、位置・サイズの同期だけに機能を絞っています。
 
@@ -23,7 +23,9 @@ zook export-drawio diagram.yaml -o diagram.drawio
 zook sync diagram.yaml diagram.drawio -o diagram.yaml
 ```
 
-`sync`は元のYAMLを一度自動レイアウトにかけ、「本来ならどこに配置されるはずだったか」を計算した上で、実際にdraw.io上に置かれた位置・サイズと比較します。**差分がある要素だけ**明示座標(`x`/`y`/`width`/`height`)を書き込むため、触っていない要素は自動配置のまま維持されます。
+`export-drawio` は、各要素をどこに配置したかを .drawio ファイルの非表示のセルに記録します。`sync` はこの記録と draw.io のファイルを比べるので、**draw.io で実際に編集したものだけ**を明示座標(`x`/`y`/`width`/`height`)として書き戻し、触っていない要素は自動配置のまま維持されます。比較の基準がエクスポート時点なので、YAML を変更する*前*にエクスポートした .drawio を sync しても、すべての要素が古い位置に固定されることはありません。sync は「エクスポート後に YAML が変わった」と警告したうえで、draw.io での編集だけを書き戻します(記録のない、古い zook でエクスポートした .drawio では、YAML の現在のレイアウトを基準にします)。
+
+自動配置の要素を1つ動かすと、その要素はコンテナの自動配置から外れるため、兄弟要素が詰め直されてしまいます。そこで sync は、編集を書き込んだあとに YAML をもう一度レイアウトし、.drawio で見えていた位置からずれた要素も固定して、両者が一致するまで繰り返します。何も動かしていなければ YAML は書き換えません。書き換える場合も、ファイルのコメント・キー順序・インデントの書き方は保持します。
 
 ```bash
 $ zook sync diagram.yaml diagram.drawio -o diagram.yaml
@@ -32,7 +34,10 @@ Wrote diagram.yaml
 ```
 
 - 既知の要素がdraw.io側で見つからない(削除された可能性がある)→ Warning。YAMLは変更されません
-- draw.io側にYAMLにない図形が追加されている → Warning。無視されます
+- draw.io側にYAMLにない図形やリンクが追加されている → Warning。無視されます
+- 要素を別のコンテナへドラッグした、要素やリンクのラベルを書き換えた、リンクのつなぎ先を変えた → Warning。反映しません
+- draw.io が `<object>`/`<UserObject>` で包んだ図形(リンクやツールチップを付けると包まれます)も、ほかの図形と同じように sync します
+- 複数ページの .drawio では、zook が書き出したページ(`id="zook"`)を sync します。見つからない場合は先頭ページを使い、Warning を出します
 
 いずれもFatalではなく継続可能なWarningです(zookの[エラーハンドリング](usage.md#error-handling)方針と同じ)。
 
@@ -61,6 +66,14 @@ sequenceDiagram
 - 対応関係は**同名ファイル規約**(`diagram.yaml` ⇔ `diagram.drawio`、同ディレクトリ)です
 - `sync`実行結果に差分が無ければ(例:色だけ変更した等、同期対象外の変更のみだった場合)PRは作成されません
 - 直接コミットではなくPRを作成する方式なので、保護ブランチのポリシーとも衝突せず、マージ前にレビューを挟めます
+- push で追加・変更されたすべての `.drawio` を sync します(複数コミットの push も含みます。空白や日本語を含むファイル名も扱えます)。削除された `.drawio` は対象外です。sync に失敗したファイルはアノテーションで報告し、ほかのファイルの PR を作ったあとで実行を失敗扱いにします
+
+### 自分のリポジトリでワークフローを使う
+
+1. [`.github/workflows/drawio-sync.yml`](https://github.com/taka-sho/zook/blob/main/.github/workflows/drawio-sync.yml) を、自分のリポジトリの `.github/workflows/` にコピーします。
+2. その中の `pip install -e .`(zook のリポジトリ自身から zook を入れる手順)を `pip install zook` に置き換えます。PyPI に公開されるまでは `pip install git+https://github.com/taka-sho/zook` を使ってください。
+3. リポジトリの **Settings → Actions → General → Workflow permissions** で **Read and write permissions** を選び、**Allow GitHub Actions to create and approve pull requests** にチェックを入れます。これがないと PR の作成に失敗します。
+4. 各図の `.yaml` は、同じ名前の `.drawio` と同じ場所に置きます。
 
 ## なぜdraw.ioなのか
 

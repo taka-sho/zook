@@ -19,27 +19,33 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .model import Diagram, Element, Layout, Link
-from .registry import MultiRegistry
+from .model import TOP_LEVEL_GAP_DEFAULT, Diagram, Element, Layout, Link
+from .registry import MultiRegistry, icon_png
+from .text import line_height, longest_word_width, natural_width, text_block_height, wrap_lines
 
 LABEL_GAP_DEFAULT = 4  # default spacing between an icon and its label; overridable per-node via style.labelGap
 NODE_LABEL_FONT_SIZE_DEFAULT = 9  # points; overridable per-node via style.labelFontSize
 CONTAINER_LABEL_FONT_SIZE_DEFAULT = 10  # points; overridable per-container via style.labelFontSize
 LINK_LABEL_FONT_SIZE_DEFAULT = 8  # points; overridable per-link via labelFontSize
 LABEL_MIN_WIDTH = 90  # footprint width floor so labels have room to sit under an icon
-CONTAINER_LABEL_RESERVE = 28  # extra top space inside a container that has its own label, at the default font size
+LABEL_MAX_WIDTH = 150  # a below/above/right label widens its node's footprint up to this, then wraps
+LABEL_TEXT_SLACK = 4  # spare width kept beside a measured label, for estimate error
+CONTAINER_LABEL_RESERVE = 28  # band a container reserves for a one-line label, at the default font size
+CONTAINER_LABEL_MAX_WIDTH = 260  # an auto-sized container widens for its label up to this, then it wraps
+CONTAINER_LABEL_INSET = 4 * 4 / 3  # render.py's 4pt text-frame margin, in logical units
+CORNER_BADGE_ROOM = 26  # render.py's corner badge (20) + its padding (6), beside a left-aligned label
+# Top-level elements are usually an actor and the boundary it talks to (a
+# cloud, a VPC), with an arrow and its label between them - they need more
+# room than siblings packed inside a container (model.TOP_LEVEL_GAP_DEFAULT).
+SHAPE_TEXT_INSET = 9.6  # PowerPoint's default 0.1in text-frame side inset inside a `shape` node
+SHAPE_TEXT_INSET_Y = 4.8  # ... and its 0.05in top/bottom inset
 
 
-def label_box_height(font_size: float) -> float:
-    """Height of a label textbox sized for `font_size` (points).
-
-    1 point = 4/3 logical units (render.py's LOGICAL_TO_PT = 0.75, i.e. 1
-    logical unit = 1px @ 96dpi = 0.75pt), and a label box needs roughly
-    1.5x the font's point size as line-height-plus-padding, so
-    height = font_size * (4/3) * 1.5 = font_size * 2. At the default 9pt
-    this returns 18, matching the fixed constant this formula replaced.
-    """
-    return font_size * 2
+def label_box_height(font_size: float, line_count: int = 1) -> float:
+    """Height of a label textbox holding `line_count` lines at `font_size`
+    points: 1.2x line spacing per line plus a little padding. One line at the
+    default 9pt is 18 logical units."""
+    return text_block_height(line_count, font_size)
 
 
 LABEL_BOX_HEIGHT = label_box_height(NODE_LABEL_FONT_SIZE_DEFAULT)  # 18, for callers that want the default
@@ -57,6 +63,20 @@ class Box:
     abs_x: float = 0.0
     abs_y: float = 0.0
     children: list["Box"] = field(default_factory=list)
+    # The element's own label, as measured: the text, the lines it wraps to,
+    # and the box it's drawn in. For a node, label_reserve is the space the
+    # label takes above/below the icon (gap included); for a container, the
+    # height of the band its label occupies at the top or bottom edge.
+    label_text: str = ""
+    label_lines: list[str] = field(default_factory=list)
+    label_w: float = 0.0
+    label_h: float = 0.0
+    label_reserve: float = 0.0
+    # The laid-out tree this box belongs to (set by build_layout), so link
+    # routing can look at the other elements without every caller having to
+    # pass the tree along - render and every check then route identically.
+    root: Optional["Box"] = field(default=None, repr=False, compare=False)
+    _routing_index: Optional[dict] = field(default=None, repr=False, compare=False)
 
 
 def label_gap(element: Element) -> float:
@@ -74,15 +94,30 @@ def container_label_font_size(element: Element) -> float:
     return element.style.get("labelFontSize", CONTAINER_LABEL_FONT_SIZE_DEFAULT)
 
 
-def container_label_reserve(font_size: float) -> float:
-    """Top/bottom space a labeled container reserves for its own label,
-    scaled proportionally from CONTAINER_LABEL_RESERVE (defined at
-    CONTAINER_LABEL_FONT_SIZE_DEFAULT) so a bigger labelFontSize gets
-    proportionally more room."""
-    return CONTAINER_LABEL_RESERVE * (font_size / CONTAINER_LABEL_FONT_SIZE_DEFAULT)
+def container_label_reserve(font_size: float, line_count: int = 1) -> float:
+    """Band a labeled container reserves for its own label: CONTAINER_LABEL_
+    RESERVE for one line (scaled with `font_size` from the default 10pt, so a
+    bigger labelFontSize gets proportionally more room), plus a line height
+    per extra line."""
+    one_line = CONTAINER_LABEL_RESERVE * (font_size / CONTAINER_LABEL_FONT_SIZE_DEFAULT)
+    return one_line + max(0, line_count - 1) * line_height(font_size)
+
+
+def node_label_text(element: Element, registry: MultiRegistry) -> str:
+    """The text drawn as a node's label: its own `label`, else the registry
+    entry's default label, else the `type` itself - render/preview/drawio all
+    draw exactly this, so layout measures exactly this."""
+    if element.label is not None:
+        return element.label
+    if is_shape_node(element):
+        return element.type
+    icon_entry = registry.resolve_icon(element.type, element.provider)
+    return icon_entry.label if (icon_entry and icon_entry.label) else element.type
 
 
 def _label_reserve(element: Element) -> float:
+    """Space a one-line label takes (gap + box). Only for callers without a
+    measured Box; Box.label_reserve is the real, text-aware value."""
     return label_gap(element) + label_box_height(node_label_font_size(element))
 
 
@@ -96,6 +131,15 @@ SHAPE_DEFAULT_SIZE = {
     "diamond": (120, 90),
     "circle": (120, 90),
 }
+# Share of a shape's bounding box (per axis) that its OOXML preset gives the
+# text: a diamond's text rectangle is the middle half (w/4..3w/4, h/4..3h/4),
+# an ellipse's the inscribed square (cos 45 deg). The 0.1in/0.05in insets
+# apply inside that.
+_SHAPE_TEXT_AREA = {"rect": 1.0, "rounded": 1.0, "diamond": 0.5, "circle": 0.7071}
+# A roundRect's text rectangle is inset on every side by 0.29289 x its corner
+# radius, which defaults to 1/6 of the shorter side.
+_ROUNDED_TEXT_INSET = 0.29289 / 6
+SHAPE_MAX_AUTO_WIDTH_FACTOR = 2  # an auto-sized shape widens for its longest word up to this x its default width
 
 
 def is_shape_node(element: Element) -> bool:
@@ -110,35 +154,164 @@ def content_offset(box: Box) -> tuple[float, float]:
     if box.element.kind != "node" or is_shape_node(box.element):
         return (0.0, 0.0)
     label_position = box.element.style.get("labelPosition", "below")
+    if label_position == "right":
+        return (0.0, (box.footprint_h - box.height) / 2)
     dx = (box.footprint_w - box.width) / 2
-    dy = _label_reserve(box.element) if label_position == "above" else 0.0
+    dy = box.label_reserve if label_position == "above" else 0.0
     return (dx, dy)
+
+
+def _measure_shape_node(element: Element) -> Box:
+    shape = element.style["shape"]
+    default_w, default_h = SHAPE_DEFAULT_SIZE[shape]
+    width = element.width or element.size or default_w
+    height = element.height or element.size or default_h
+    text = element.label if element.label is not None else element.type
+    font = node_label_font_size(element)
+    area = _SHAPE_TEXT_AREA[shape]
+    if element.width is None and element.size is None:
+        # Widen for the longest word, so "Gateway" in a diamond isn't broken
+        # into "Gatew" / "ay" (PowerPoint breaks a word wider than the line).
+        corner = 2 * _ROUNDED_TEXT_INSET * min(width, height) if shape == "rounded" else 0.0
+        needed_w = (longest_word_width(text, font) + LABEL_TEXT_SLACK + 2 * SHAPE_TEXT_INSET + corner) / area
+        width = max(width, min(needed_w, default_w * SHAPE_MAX_AUTO_WIDTH_FACTOR))
+    auto_height = element.height is None and element.size is None
+    for _ in range(3):  # a rounded corner's inset follows the (possibly grown) height
+        corner = 2 * _ROUNDED_TEXT_INSET * min(width, height) if shape == "rounded" else 0.0
+        lines = wrap_lines(text, font, max(1.0, width * area - corner - 2 * SHAPE_TEXT_INSET))
+        needed_h = (label_box_height(font, len(lines)) + 2 * SHAPE_TEXT_INSET_Y + corner) / area
+        if not auto_height or needed_h <= height + 0.01:
+            break
+        height = needed_h  # grow to fit the text, never shrink the default
+    box = Box(element, width, height, width, height)
+    box.label_text, box.label_lines = text, lines
+    box.label_w, box.label_h = width, label_box_height(font, len(lines))
+    return box
 
 
 def _measure_node(element: Element, registry: MultiRegistry) -> Box:
     if is_shape_node(element):
-        default_w, default_h = SHAPE_DEFAULT_SIZE[element.style["shape"]]
-        width = element.width or element.size or default_w
-        height = element.height or element.size or default_h
-        return Box(element, width, height, width, height)
+        return _measure_shape_node(element)
 
     icon_entry = registry.resolve_icon(element.type, element.provider)
     default_size = icon_entry.size if (icon_entry and icon_entry.size) else registry.default_size(element.provider)
     width = element.width or element.size or default_size
     height = element.height or element.size or default_size
     label_position = element.style.get("labelPosition", "below")
-    footprint_w = width if label_position == "none" else max(width, LABEL_MIN_WIDTH)
-    footprint_h = height + (_label_reserve(element) if label_position in ("below", "above") else 0)
-    return Box(element, width, height, footprint_w, footprint_h)
+    if label_position == "none":
+        return Box(element, width, height, width, height)
+
+    text = node_label_text(element, registry)
+    font = node_label_font_size(element)
+    gap = label_gap(element)
+    wanted = natural_width(text, font) + LABEL_TEXT_SLACK
+    if label_position == "right":
+        label_w = min(max(wanted, 1.0), LABEL_MAX_WIDTH)
+        lines = wrap_lines(text, font, label_w - LABEL_TEXT_SLACK)
+        label_h = label_box_height(font, len(lines))
+        box = Box(element, width, height, width + gap + label_w, max(height, label_h))
+    else:  # below / above
+        footprint_w = max(width, LABEL_MIN_WIDTH, min(wanted, LABEL_MAX_WIDTH))
+        label_w = footprint_w
+        lines = wrap_lines(text, font, footprint_w - LABEL_TEXT_SLACK)
+        label_h = label_box_height(font, len(lines))
+        box = Box(element, width, height, footprint_w, height + gap + label_h)
+        box.label_reserve = gap + label_h
+    box.label_text, box.label_lines, box.label_w, box.label_h = text, lines, label_w, label_h
+    return box
 
 
-def _arrange_children(children: list[Box], layout: Layout, content_top: float) -> None:
+def node_label_rect(box: Box) -> tuple[float, float, float, float] | None:
+    """Where a node's label textbox is drawn (absolute), or None if it has none.
+    render.py and preview.py draw it here; it lies inside the footprint."""
+    element = box.element
+    if element.kind != "node" or is_shape_node(element):
+        return None
+    position = element.style.get("labelPosition", "below")
+    if position == "none" or not box.label_lines:
+        return None
+    dx, dy = content_offset(box)
+    footprint_x, footprint_y = box.abs_x - dx, box.abs_y - dy
+    if position == "below":
+        return (footprint_x, box.abs_y + box.height + label_gap(element), box.footprint_w, box.label_h)
+    if position == "above":
+        return (footprint_x, footprint_y, box.footprint_w, box.label_h)
+    # right: vertically centered on the icon
+    return (box.abs_x + box.width + label_gap(element), box.abs_y + (box.height - box.label_h) / 2, box.label_w, box.label_h)
+
+
+def _cross_align(boxes: list[Box], axis: int) -> tuple[float, list[float]]:
+    """Align boxes across a row (axis=1, vertical placement) or a column
+    (axis=0, horizontal placement). Returns the band length and each box's
+    offset within it.
+
+    A band of nodes only is aligned on the icons' centres, so icons of
+    different sizes (or labels of different line counts) line up and the
+    link between neighbours is straight instead of a staircase. A band that
+    holds a container keeps every member at the band's start edge: a node
+    next to a tall container belongs beside its top (where the entry point
+    usually is), not halfway down it."""
+    lengths = [b.footprint_w if axis == 0 else b.footprint_h for b in boxes]
+    if axis == 1 and any(b.element.kind != "node" for b in boxes):
+        return max(lengths), [0.0] * len(boxes)
+    centres = [_center_offsets(b)[axis] for b in boxes]
+    before = max(centres)
+    after = max(length - c for c, length in zip(centres, lengths))
+    return before + after, [before - c for c in centres]
+
+
+def _center_offsets(box: Box) -> tuple[float, float]:
+    """(x, y) distance from a box's footprint top-left to its content centre."""
+    dx, dy = content_offset(box)
+    return dx + box.width / 2, dy + box.height / 2
+
+
+def _grid_tracks(auto: list[Box], columns: int, gap: float):
+    """Non-uniform grid: each column is as wide as its widest member and each
+    row as tall as its tallest (a uniform cell sized to the largest element
+    pushed a small actor's neighbour - a whole VPC - off the canvas)."""
+    rows = math.ceil(len(auto) / columns)
+    col_bands = []
+    for c in range(columns):
+        members = auto[c::columns]
+        col_bands.append(_cross_align(members, axis=0))
+    row_bands = []
+    for r in range(rows):
+        members = auto[r * columns : (r + 1) * columns]
+        row_bands.append(_cross_align(members, axis=1))
+    width = sum(w for w, _ in col_bands) + gap * (columns - 1)
+    height = sum(h for h, _ in row_bands) + gap * (rows - 1)
+    return col_bands, row_bands, width, height
+
+
+def _choose_columns(auto: list[Box], gap: float, available: tuple[float, float]) -> int:
+    """Column count for a grid with no explicit `columns`, given the space it
+    has to fit (the canvas, for the top level): the arrangement that
+    overflows the least, then the one whose shape best matches the space."""
+    avail_w, avail_h = available
+    target = avail_w / avail_h if avail_h > 0 else 1.0
+    best, best_key = 1, None
+    for columns in range(1, len(auto) + 1):
+        _, _, width, height = _grid_tracks(auto, columns, gap)
+        overflow = max(0.0, width - avail_w) / avail_w + max(0.0, height - avail_h) / avail_h
+        shape = abs(math.log((width / height if height else 1.0) / target))
+        key = (round(overflow, 6), shape)
+        if best_key is None or key < best_key:
+            best, best_key = columns, key
+    return best
+
+
+def _arrange_children(
+    children: list[Box], layout: Layout, content_top: float, available: tuple[float, float] | None = None
+) -> None:
     """Sets each child's local_x/local_y to its *content* (rendered) top-left.
 
     Placement math (grid/horizontal/vertical spacing) operates on footprint
     boxes so labels don't collide, but the stored local_x/local_y is always
     where the element itself actually renders - callers (bbox math below,
-    render.py) never need to re-derive it.
+    render.py) never need to re-derive it. On the cross axis, children are
+    aligned by their content centre (see _cross_align). `available` is the
+    space a grid should fit, used to pick its column count when none is given.
     """
     explicit = [b for b in children if b.element.has_explicit_position]
     auto = [b for b in children if not b.element.has_explicit_position]
@@ -154,28 +327,42 @@ def _arrange_children(children: list[Box], layout: Layout, content_top: float) -
     gap = layout.gap
 
     if layout.direction == "horizontal":
+        _, offsets = _cross_align(auto, axis=1)
         x_cursor = padding
-        for b in auto:
+        for b, off in zip(auto, offsets):
             dx, dy = content_offset(b)
             b.local_x = x_cursor + dx
-            b.local_y = content_top + dy
+            b.local_y = content_top + off + dy
             x_cursor += b.footprint_w + gap
     elif layout.direction == "vertical":
+        _, offsets = _cross_align(auto, axis=0)
         y_cursor = content_top
-        for b in auto:
+        for b, off in zip(auto, offsets):
             dx, dy = content_offset(b)
-            b.local_x = padding + dx
+            b.local_x = padding + off + dx
             b.local_y = y_cursor + dy
             y_cursor += b.footprint_h + gap
     else:  # grid
-        columns = layout.columns or max(1, math.ceil(math.sqrt(len(auto))))
-        cell_w = max(b.footprint_w for b in auto) + gap
-        cell_h = max(b.footprint_h for b in auto) + gap
+        if layout.columns:
+            columns = min(layout.columns, len(auto))  # more columns than children: the extra ones stay empty
+        elif available is not None:
+            columns = _choose_columns(auto, gap, available)
+        else:
+            columns = max(1, math.ceil(math.sqrt(len(auto))))
+        col_bands, row_bands, _, _ = _grid_tracks(auto, columns, gap)
+        col_x = [padding]
+        for w, _ in col_bands[:-1]:
+            col_x.append(col_x[-1] + w + gap)
+        row_y = [content_top]
+        for h, _ in row_bands[:-1]:
+            row_y.append(row_y[-1] + h + gap)
         for i, b in enumerate(auto):
             col, row = i % columns, i // columns
+            within_col = col_bands[col][1][row]
+            within_row = row_bands[row][1][col]
             dx, dy = content_offset(b)
-            b.local_x = padding + col * cell_w + dx
-            b.local_y = content_top + row * cell_h + dy
+            b.local_x = col_x[col] + within_col + dx
+            b.local_y = row_y[row] + within_row + dy
 
     _avoid_explicit_overlaps(auto, explicit, gap)
 
@@ -191,26 +378,26 @@ def _local_footprint_rect(box: Box) -> tuple[float, float, float, float]:
 def _avoid_explicit_overlaps(auto: list[Box], explicit: list[Box], gap: float) -> None:
     """First-version overlap avoidance: an auto-placed child that ends up
     overlapping an *explicitly* positioned sibling is nudged straight down
-    until clear. Auto-vs-auto pairs are never touched (already collision-
-    free by construction, since they're packed by the grid/horizontal/
-    vertical algorithms above) and explicit positions are never silently
-    moved (the author stated them on purpose) - this only closes the one
-    documented gap (yaml-spec.md sec6): auto layout didn't used to look at
-    explicit siblings at all. overlap_warnings() remains authoritative and
-    still flags anything this simple push doesn't fully resolve.
+    until clear - and a push that lands it on another auto-placed sibling
+    pushes that one on in turn (the packed siblings only start out
+    collision-free). Explicit positions are never silently moved (the
+    author stated them on purpose). This closes the one documented gap
+    (yaml-spec.md sec6): auto layout didn't used to look at explicit
+    siblings at all. overlap_warnings() remains authoritative and still
+    flags anything this simple push doesn't fully resolve.
     """
     if not explicit:
         return
+    placed = list(explicit)  # what a later auto sibling must clear: explicit ones, then the autos settled so far
     for a in auto:
-        for _ in range(len(explicit) + 1):  # bounded: at most one push per explicit sibling
-            hit = next(
-                (e for e in explicit if _rects_overlap(_local_footprint_rect(a), _local_footprint_rect(e))), None
-            )
+        for _ in range(len(placed) + 1):
+            hit = next((o for o in placed if _rects_overlap(_local_footprint_rect(a), _local_footprint_rect(o))), None)
             if hit is None:
                 break
             _, hit_y, _, hit_h = _local_footprint_rect(hit)
             dx, dy = content_offset(a)
             a.local_y = (hit_y + hit_h + gap) + dy
+        placed.append(a)
 
 
 def _bbox(children: list[Box], content_top: float, padding: float) -> tuple[float, float]:
@@ -225,24 +412,63 @@ def _bbox(children: list[Box], content_top: float, padding: float) -> tuple[floa
     return max_x + padding, max_y + padding
 
 
-def measure(element: Element, registry: MultiRegistry) -> Box:
+def container_label_text(element: Element, registry: MultiRegistry) -> str:
+    """The label a container actually shows: its own `label`, else its
+    registry group's default label (e.g. "AWS Cloud")."""
+    if element.label is not None:
+        return element.label
+    group_style = registry.resolve_group(element.type, element.provider)
+    return group_style.label if group_style else ""
+
+
+def _container_label_needs(element: Element, registry: MultiRegistry) -> tuple[str, float, float]:
+    """(text, font size, width the label wants on one line incl. insets/badge)."""
+    text = container_label_text(element, registry)
+    if not text:
+        return "", 0.0, 0.0
+    font = container_label_font_size(element)
+    group_style = registry.resolve_group(element.type, element.provider)
+    position = resolve_container_label_position(element, registry)
+    badge = CORNER_BADGE_ROOM if (group_style and group_style.icon and "left" in position) else 0.0
+    return text, font, natural_width(text, font) + 2 * CONTAINER_LABEL_INSET + badge + LABEL_TEXT_SLACK
+
+
+def measure(element: Element, registry: MultiRegistry, available: tuple[float, float] | None = None) -> Box:
     if element.kind == "node":
         return _measure_node(element, registry)
 
     layout = element.layout or Layout()
     children = [measure(c, registry) for c in element.children]
-    reserve = container_label_reserve(container_label_font_size(element)) if element.label else 0
-    content_top = layout.padding + reserve
-    _arrange_children(children, layout, content_top)
+    text, font, label_wants = _container_label_needs(element, registry)
+    label_at_bottom = bool(text) and "bottom" in resolve_container_label_position(element, registry)
 
-    if element.width is not None and element.height is not None:
-        width, height = element.width, element.height
-    else:
+    # A one-line band first; if the label turns out to need more lines at the
+    # container's final width, lay the children out again with a taller band.
+    lines = 1
+    for _attempt in range(2):
+        band = container_label_reserve(font, lines) if text else 0.0
+        content_top = layout.padding + (0.0 if label_at_bottom else band)
+        _arrange_children(children, layout, content_top, available)
         bbox_w, bbox_h = _bbox(children, content_top, layout.padding)
-        width = element.width if element.width is not None else bbox_w
-        height = element.height if element.height is not None else bbox_h
+        if element.width is not None:
+            width = element.width
+        else:
+            width = max(bbox_w, min(label_wants, max(bbox_w, CONTAINER_LABEL_MAX_WIDTH)))
+        height = element.height if element.height is not None else bbox_h + (band if label_at_bottom else 0.0)
+        wrapped = (
+            wrap_lines(text, font, max(1.0, width - (label_wants - natural_width(text, font) - LABEL_TEXT_SLACK)))
+            if text
+            else []
+        )
+        if len(wrapped) <= lines:
+            break
+        lines = len(wrapped)
 
-    return Box(element, width, height, width, height, children=children)
+    box = Box(element, width, height, width, height, children=children)
+    if text:
+        box.label_text, box.label_lines = text, wrapped
+        box.label_w, box.label_h, box.label_reserve = width, band, band
+    return box
 
 
 def assign_absolute(box: Box, parent_abs_x: float = 0.0, parent_abs_y: float = 0.0) -> None:
@@ -254,19 +480,39 @@ def assign_absolute(box: Box, parent_abs_x: float = 0.0, parent_abs_y: float = 0
 
 def build_layout(diagram: Diagram, registry: MultiRegistry) -> Box:
     canvas_w, canvas_h = diagram.canvas.size
+    padding = diagram.canvas.padding
+    top = diagram.canvas.layout or Layout(direction="grid", gap=TOP_LEVEL_GAP_DEFAULT)
     root_element = Element(
         kind="container",
         id="__root__",
         type="__canvas__",
         provider="generic",
-        layout=Layout(direction="grid", gap=24, padding=diagram.canvas.padding),
+        layout=Layout(direction=top.direction, columns=top.columns, gap=top.gap, padding=padding),
         children=diagram.elements,
     )
-    root_box = measure(root_element, registry)
+    available = (max(1.0, canvas_w - 2 * padding), max(1.0, canvas_h - 2 * padding))
+    root_box = measure(root_element, registry, available)
     root_box.width = root_box.footprint_w = canvas_w
     root_box.height = root_box.footprint_h = canvas_h
     assign_absolute(root_box)
+    for box in iter_boxes(root_box):
+        box.root = root_box
+    _assign_lanes(diagram.links)
     return root_box
+
+
+def _assign_lanes(links: list[Link]) -> None:
+    """Links joining the same two elements (A->B twice, or A->B and B->A)
+    were drawn on exactly one line, labels stacked: number them so
+    link_render_plan() can set them side by side. Author-routed links
+    (waypoints) keep their own path and don't take a lane."""
+    groups: dict[frozenset, list[Link]] = {}
+    for link in links:
+        if not link.waypoints and link.from_id != link.to_id:
+            groups.setdefault(frozenset((link.from_id, link.to_id)), []).append(link)
+    for group in groups.values():
+        for lane, link in enumerate(group):
+            link.lane, link.lanes = lane, len(group)
 
 
 def iter_boxes(box: Box):
@@ -329,20 +575,62 @@ def resolve_container_style(element: Element, registry: MultiRegistry) -> Resolv
         border_width=style.get("borderWidth", group_style.border_width if group_style else 1),
         dashed=group_style.dashed if group_style else False,
         label_position=resolve_container_label_position(element, registry),
-        label_text=element.label if element.label is not None else (group_style.label if group_style else ""),
+        label_text=container_label_text(element, registry),
         label_font_size=container_label_font_size(element),
         corner_icon=group_style.icon if group_style else None,
     )
 
 
+def _luminance(color: str) -> float:
+    """WCAG relative luminance of a #RRGGBB colour."""
+    channels = [int(color.lstrip("#")[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+    r, g, b = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def readable_on(color: str, backdrop: str) -> str:
+    """`color`, or - when it would be hard to read on `backdrop` (contrast
+    below 3:1, e.g. black labels on a dark canvas.background) - white or
+    near-black, whichever the backdrop needs."""
+    a, b = _luminance(color), _luminance(backdrop)
+    if (max(a, b) + 0.05) / (min(a, b) + 0.05) >= 3:
+        return color
+    return "#FFFFFF" if b < 0.18 else "#1E1E1E"
+
+
+DEFAULT_BACKDROP = "#FFFFFF"
+
+
+def backdrops(root_box: Box, registry: MultiRegistry, canvas_background: str | None) -> dict[str, str]:
+    """The colour behind each element (its nearest enclosing container's
+    fill, else the canvas background, else white), and for a container
+    under the key `(id, "inside")` the colour inside it - what its label
+    and children are drawn on. render.py and preview.py pick text and line
+    colours from this with readable_on()."""
+    colors: dict = {}
+
+    def walk(box: Box, behind: str) -> None:
+        for child in box.children:
+            colors[child.element.id] = behind
+            if child.element.kind == "container":
+                inside = resolve_container_style(child.element, registry).fill_color or behind
+                colors[(child.element.id, "inside")] = inside
+                walk(child, inside)
+
+    walk(root_box, canvas_background or DEFAULT_BACKDROP)
+    return colors
+
+
 def container_label_rect(box: Box, registry: MultiRegistry) -> tuple[float, float, float, float] | None:
-    """Where a container's own label text is drawn: a container_label_reserve()
-    -tall strip spanning the full width, at the top or bottom edge per
-    resolve_container_label_position(). None if the container has no label."""
-    if box.element.kind != "container" or not box.element.label:
+    """Where a container's own label text is drawn: its measured label band
+    spanning the full width, at the top or bottom edge per
+    resolve_container_label_position(). None if the container shows no label
+    - but a label that comes from the registry default (e.g. "AWS Cloud"
+    when `label` is omitted) is drawn, so it counts here too."""
+    if box.element.kind != "container" or not box.label_text:
         return None
     position = resolve_container_label_position(box.element, registry)
-    label_h = min(container_label_reserve(container_label_font_size(box.element)), box.height)
+    label_h = min(box.label_reserve, box.height)
     y = box.abs_y + box.height - label_h if "bottom" in position else box.abs_y
     return (box.abs_x, y, box.width, label_h)
 
@@ -464,15 +752,84 @@ def choose_connection_indices(from_box: Box, to_box: Box, link: Optional[Link] =
 
     style = link.style if link else "straight"
 
-    def path_length(idx_pair: tuple[int, int]) -> float:
+    def path(idx_pair: tuple[int, int]) -> list[tuple[float, float]]:
         p1, p2 = connection_point(from_box, idx_pair[0]), connection_point(to_box, idx_pair[1])
         eff_style = effective_connector_style(style, p1, p2)
-        return _path_length(connector_path(eff_style, p1, p2, idx_pair[0]))
+        return connector_path(eff_style, p1, p2, idx_pair[0], idx_pair[1])
 
     dominant, other = (horizontal_pair, vertical_pair) if abs(dx) >= abs(dy) else (vertical_pair, horizontal_pair)
-    if path_length(other) < path_length(dominant) * (1 - _AXIS_SWITCH_MARGIN):
+    # Prefer the axis whose path doesn't run through other elements: with the
+    # endpoints close together, the dominant-axis Z-route often cuts through a
+    # neighbour (an actor's link into a cloud diving across the first service
+    # to reach the second) while the other axis is clear.
+    obstacles = _routing_obstacles(from_box, to_box) + own_endpoint_rects(from_box, to_box)
+    if obstacles:
+        hits_dominant = _count_hits(path(dominant), obstacles)
+        hits_other = _count_hits(path(other), obstacles)
+        if hits_other != hits_dominant:
+            return other if hits_other < hits_dominant else dominant
+    if _path_length(path(other)) < _path_length(path(dominant)) * (1 - _AXIS_SWITCH_MARGIN):
         return other
     return dominant
+
+
+def _routing_index(root: Box) -> dict:
+    if root._routing_index is None:
+        by_id, parent_of = _build_indices(root)
+        root._routing_index = {"by_id": by_id, "parent_of": parent_of}
+    return root._routing_index
+
+
+def _related_ids(index: dict, element_id: str) -> set[str]:
+    """The element, its ancestors and its descendants - what a link to or
+    from it is expected to touch."""
+    related = {element_id}
+    cur = index["parent_of"].get(element_id)
+    while cur is not None:
+        related.add(cur)
+        cur = index["parent_of"].get(cur)
+    box = index["by_id"].get(element_id)
+    if box is not None:
+        related.update(b.element.id for b in iter_boxes(box))
+    return related
+
+
+def _routing_obstacles(from_box: Box, to_box: Box) -> list[tuple[float, float, float, float]]:
+    """Footprints a path between the two boxes shouldn't cross: every element
+    except the endpoints and their ancestors/descendants (the same exclusion
+    link_crossing_warnings applies)."""
+    root = from_box.root
+    if root is None or to_box.root is not root:
+        return []
+    index = _routing_index(root)
+    related = index.setdefault("related", {})
+    for eid in (from_box.element.id, to_box.element.id):
+        if eid not in related:
+            related[eid] = _related_ids(index, eid)
+    exclude = related[from_box.element.id] | related[to_box.element.id] | {"__root__"}
+    if "rects" not in index:
+        index["rects"] = {eid: _footprint_rect(b) for eid, b in index["by_id"].items()}
+    return [rect for eid, rect in index["rects"].items() if eid not in exclude]
+
+
+def own_endpoint_rects(from_box: Box, to_box: Box) -> list[tuple[float, float, float, float]]:
+    """The icons (and labels) of a link's own endpoint nodes, shrunk by a unit
+    so a path that merely attaches to an edge doesn't touch them: a route
+    that enters one of them runs back through its own endpoint."""
+    rects = []
+    for box in {id(from_box): from_box, id(to_box): to_box}.values():
+        if box.element.kind != "node":
+            continue  # a link to a container legitimately runs inside it
+        rects.append(_inflate_rect((box.abs_x, box.abs_y, box.width, box.height), -1.0))
+        label = node_label_rect(box)
+        if label is not None:
+            rects.append(_inflate_rect(label, -1.0))
+    return rects
+
+
+def _count_hits(path: list[tuple[float, float]], obstacles: list[tuple[float, float, float, float]]) -> int:
+    segments = list(zip(path, path[1:]))
+    return sum(1 for rect in obstacles if any(_segment_intersects_rect(a, b, rect) for a, b in segments))
 
 
 def connection_point(box: Box, idx: int) -> tuple[float, float]:
@@ -487,19 +844,20 @@ def connection_point(box: Box, idx: int) -> tuple[float, float]:
     x, y, cx, cy = box.abs_x, box.abs_y, box.width, box.height
     icon_cx, icon_cy = x + cx / 2, y + cy / 2
 
-    is_labeled_node = box.element.kind == "node" and not is_shape_node(box.element)
+    # Past the node's own label on the side it sits: exactly the middle of
+    # that side of the label box, which is where render.py glues the
+    # connector (to the label textbox), so a viewer that re-snaps glued ends
+    # lands on the same point.
+    label = node_label_rect(box)
+    position = box.element.style.get("labelPosition", "below")
     if idx == 0:
-        top = y
-        if is_labeled_node and box.element.style.get("labelPosition", "below") == "above":
-            top = y - _label_reserve(box.element)
-        return (icon_cx, top)
+        return (icon_cx, label[1] if label and position == "above" else y)
     if idx == 2:
-        bottom = y + cy
-        if is_labeled_node and box.element.style.get("labelPosition", "below") == "below":
-            bottom = y + cy + _label_reserve(box.element)
-        return (icon_cx, bottom)
+        return (icon_cx, label[1] + label[3] if label and position == "below" else y + cy)
     if idx == 1:
         return (x, icon_cy)
+    if label and position == "right":
+        return (label[0] + label[2], icon_cy)  # past a right-hand label, not through it
     return (x + cx, icon_cy)  # idx == 3
 
 
@@ -517,7 +875,12 @@ def effective_connector_style(style: str, p1: tuple[float, float], p2: tuple[flo
     return style
 
 
-def connector_path(style: str, p1: tuple[float, float], p2: tuple[float, float], start_idx: int) -> list[tuple[float, float]]:
+SAME_SIDE_CLEARANCE = 20  # how far a same-side (top/top, ...) route stands off both endpoints
+
+
+def connector_path(
+    style: str, p1: tuple[float, float], p2: tuple[float, float], start_idx: int, end_idx: int | None = None
+) -> list[tuple[float, float]]:
     """Waypoints matching what python-pptx actually renders.
 
     - straight (and curved, approximated): the two endpoints.
@@ -529,7 +892,14 @@ def connector_path(style: str, p1: tuple[float, float], p2: tuple[float, float],
       to the end shape's edge. Since choose_connection_indices() only ever
       pairs same-axis indices (both horizontal: 1/3, or both vertical:
       0/2), start_idx alone tells us which axis the exit/entry use.
+    - both ends on the *same* side (top/top, right/right, ...), whatever the
+      style: a U - out from both endpoints by SAME_SIDE_CLEARANCE beyond the
+      outermost one, then across. (A Z bending halfway between them, as
+      before, ran straight through the endpoints' own icons and wasn't what
+      any viewer drew.) render.py draws it as a polyline, like waypoints.
     """
+    if end_idx is not None and end_idx == start_idx:
+        return _same_side_path(p1, p2, start_idx)
     if style != "elbow":
         return [p1, p2]
     if start_idx in (1, 3):  # horizontal exit/entry
@@ -537,6 +907,25 @@ def connector_path(style: str, p1: tuple[float, float], p2: tuple[float, float],
         return [p1, (mid_x, p1[1]), (mid_x, p2[1]), p2]
     mid_y = (p1[1] + p2[1]) / 2  # vertical exit/entry
     return [p1, (p1[0], mid_y), (p2[0], mid_y), p2]
+
+
+def _same_side_path(p1: tuple[float, float], p2: tuple[float, float], side_idx: int) -> list[tuple[float, float]]:
+    c = SAME_SIDE_CLEARANCE
+    if side_idx == 0:  # top
+        y = min(p1[1], p2[1]) - c
+        return [p1, (p1[0], y), (p2[0], y), p2]
+    if side_idx == 2:  # bottom
+        y = max(p1[1], p2[1]) + c
+        return [p1, (p1[0], y), (p2[0], y), p2]
+    if side_idx == 1:  # left
+        x = min(p1[0], p2[0]) - c
+        return [p1, (x, p1[1]), (x, p2[1]), p2]
+    x = max(p1[0], p2[0]) + c  # right
+    return [p1, (x, p1[1]), (x, p2[1]), p2]
+
+
+def is_same_side(start_idx: int, end_idx: int) -> bool:
+    return start_idx == end_idx
 
 
 def _build_indices(root_box: Box) -> tuple[dict[str, Box], dict[str, str]]:
@@ -567,6 +956,11 @@ def _segment_intersects_rect(
     p1: tuple[float, float], p2: tuple[float, float], rect: tuple[float, float, float, float]
 ) -> bool:
     rx, ry, rw, rh = rect
+    # Quick reject: the segment's bounding box misses the rect entirely.
+    if (p1[0] < rx and p2[0] < rx) or (p1[0] > rx + rw and p2[0] > rx + rw) or (
+        p1[1] < ry and p2[1] < ry
+    ) or (p1[1] > ry + rh and p2[1] > ry + rh):
+        return False
     if rx <= p1[0] <= rx + rw and ry <= p1[1] <= ry + rh:
         return True
     if rx <= p2[0] <= rx + rw and ry <= p2[1] <= ry + rh:
@@ -576,18 +970,123 @@ def _segment_intersects_rect(
     return any(_segments_intersect(p1, p2, a, b) for a, b in edges)
 
 
-LINK_LABEL_SIZE = (60, 18)  # logical units at LINK_LABEL_FONT_SIZE_DEFAULT; matches render.py's midpoint label textbox
+LINK_LABEL_SIZE = (60, 18)  # legacy fixed box at LINK_LABEL_FONT_SIZE_DEFAULT, for a size with no text to measure
+LINK_LABEL_MAX_WIDTH = 120  # a link label wraps beyond this
+LINK_LABEL_PAD = 3  # horizontal breathing room inside the label box
+ARROW_CLEARANCE = 12  # length at each end of a link the label must leave visible (the arrowhead)
+LINK_LABEL_OFFSET = 3  # gap between the line and a label moved beside it
+LINK_LABEL_MAX_SHIFT = 60  # a moved label further than this from its line would read as another link's
 
 
-def link_label_size(font_size: float) -> tuple[float, float]:
-    """(width, height) of a link's midpoint label box for `font_size`
-    (points), scaled proportionally from LINK_LABEL_SIZE (defined at
-    LINK_LABEL_FONT_SIZE_DEFAULT). Width isn't measured from the actual
-    text (no font metrics available here) - it's a proportional estimate,
-    same as the fixed value it replaces."""
-    base_w, base_h = LINK_LABEL_SIZE
-    ratio = font_size / LINK_LABEL_FONT_SIZE_DEFAULT
-    return base_w * ratio, base_h * ratio
+def link_label_size(font_size: float, text: str | None = None) -> tuple[float, float]:
+    """(width, height) of a link's label box: measured from `text` (wrapped
+    past LINK_LABEL_MAX_WIDTH), or - with no text - the legacy fixed estimate
+    scaled from LINK_LABEL_SIZE."""
+    if text is None:
+        base_w, base_h = LINK_LABEL_SIZE
+        ratio = font_size / LINK_LABEL_FONT_SIZE_DEFAULT
+        return base_w * ratio, base_h * ratio
+    return link_label_box(text, font_size)[:2]
+
+
+def link_label_box(text: str, font_size: float) -> tuple[float, float, list[str]]:
+    width = min(natural_width(text, font_size) + 2 * LINK_LABEL_PAD, LINK_LABEL_MAX_WIDTH)
+    lines = wrap_lines(text, font_size, width - 2 * LINK_LABEL_PAD)
+    return width, label_box_height(font_size, len(lines)), lines
+
+
+def _point_along(path: list[tuple[float, float]], distance: float) -> tuple[float, float]:
+    covered = 0.0
+    for a, b in zip(path, path[1:]):
+        length = math.dist(a, b)
+        if length and covered + length >= distance:
+            t = (distance - covered) / length
+            return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        covered += length
+    return path[-1]
+
+
+def _anchor_segment(path: list[tuple[float, float]]) -> tuple[tuple[float, float], tuple[float, float]]:
+    """The path segment the arc-length midpoint falls on."""
+    lengths = [math.dist(a, b) for a, b in zip(path, path[1:])]
+    half = sum(lengths) / 2
+    covered = 0.0
+    for (a, b), length in zip(zip(path, path[1:]), lengths):
+        if covered + length >= half:
+            return a, b
+        covered += length
+    return path[-2], path[-1]
+
+
+def _contains(rect: tuple[float, float, float, float], point: tuple[float, float]) -> bool:
+    x, y, w, h = rect
+    return x <= point[0] <= x + w and y <= point[1] <= y + h
+
+
+def link_label_rect(
+    path: list[tuple[float, float]],
+    text: str,
+    font_size: float,
+    avoid: list[tuple[float, float, float, float]] = (),
+) -> tuple[float, float, float, float]:
+    """Where a link's label box is drawn: centred on the path's arc-length
+    midpoint - unless that would cover an end of the link (its arrowhead), as
+    it did on the short link between two neighbouring icons, where the white
+    label box hid the whole line and its direction, or one of the `avoid`
+    rects (the link's own endpoint icons and labels, own_endpoint_rects()).
+    Then it moves to the nearest free spot beside the line: just above/below
+    a horizontal stretch (right/left of a vertical one), else just past the
+    endpoint icons it would cover - but never further than
+    LINK_LABEL_MAX_SHIFT, where it would read as another link's label.
+    Shared by render.py, preview.py and the overlap checks
+    (link_label_rect_for() supplies `avoid`)."""
+    width, height, _ = link_label_box(text, font_size)
+    ax, ay = link_label_anchor(path)
+    centred = (ax - width / 2, ay - height / 2, width, height)
+    total = sum(math.dist(a, b) for a, b in zip(path, path[1:]))
+    ends = [path[0], path[-1], _point_along(path, min(ARROW_CLEARANCE, total)), _point_along(path, max(0.0, total - ARROW_CLEARANCE))]
+
+    def covers_end(rect: tuple[float, float, float, float]) -> bool:
+        return any(_contains(rect, p) for p in ends)
+
+    def clear(rect: tuple[float, float, float, float]) -> bool:
+        return not covers_end(rect) and not any(_rects_overlap(rect, a) for a in avoid)
+
+    if clear(centred):
+        return centred
+    left, top = ax - width / 2, ay - height / 2
+    above, below = (left, ay - height - LINK_LABEL_OFFSET, width, height), (left, ay + LINK_LABEL_OFFSET, width, height)
+    right, left_of = (ax + LINK_LABEL_OFFSET, top, width, height), (ax - LINK_LABEL_OFFSET - width, top, width, height)
+    (sx, sy), (ex, ey) = _anchor_segment(path)
+    horizontal = abs(ey - sy) <= abs(ex - sx)
+    candidates = [above, below] if horizontal else [right, left_of]  # beside the line, not on it
+    # ... or past whichever endpoint icons/labels are in the way, on either axis
+    columns = [a for a in avoid if a[0] < left + width and left < a[0] + a[2]]
+    if columns:
+        candidates.append((left, min(a[1] for a in columns) - height - LINK_LABEL_OFFSET, width, height))
+        candidates.append((left, max(a[1] + a[3] for a in columns) + LINK_LABEL_OFFSET, width, height))
+    rows = [a for a in avoid if a[1] < top + height and top < a[1] + a[3]]
+    if rows:
+        candidates.append((max(a[0] + a[2] for a in rows) + LINK_LABEL_OFFSET, top, width, height))
+        candidates.append((min(a[0] for a in rows) - LINK_LABEL_OFFSET - width, top, width, height))
+    free = [(round(_distance_to_rect((ax, ay), r), 1), i, r) for i, r in enumerate(candidates) if clear(r)]
+    free = [f for f in free if f[0] <= LINK_LABEL_MAX_SHIFT]
+    if free:
+        return min(free)[2]
+    return centred if not covers_end(centred) else candidates[0]
+
+
+def _distance_to_rect(point: tuple[float, float], rect: tuple[float, float, float, float]) -> float:
+    x, y, w, h = rect
+    dx = max(x - point[0], 0.0, point[0] - (x + w))
+    dy = max(y - point[1], 0.0, point[1] - (y + h))
+    return math.hypot(dx, dy)
+
+
+def link_label_rect_for(from_box: Box, to_box: Box, path: list[tuple[float, float]], link: Link) -> tuple[float, float, float, float]:
+    """link_label_rect() for `link` drawn along `path`, kept off its own
+    endpoint icons and their labels."""
+    return link_label_rect(path, link.label, link.label_font_size, own_endpoint_rects(from_box, to_box))
 
 
 def link_label_anchor(path: list[tuple[float, float]]) -> tuple[float, float]:
@@ -618,152 +1117,318 @@ def link_render_plan(from_box: Box, to_box: Box, link: Link) -> tuple[int, int, 
     to elbow when diagonal), and the resulting waypoints. render.py and
     link_crossing_warnings() both call this so the check can never drift
     from what's actually rendered."""
+    root = from_box.root
+    cache = None
+    if root is not None and to_box.root is root:
+        # Every check, the fit transform and the renderer ask for the same
+        # links' plans against the same laid-out tree - compute each once.
+        cache = _routing_index(root).setdefault("plans", {})
+        key = (link.from_id, link.to_id, link.from_side, link.to_side, link.style, tuple(link.waypoints), link.lane, link.lanes)
+        if key in cache:
+            return cache[key]
+        cache[key] = plan = _link_render_plan(from_box, to_box, link)
+        return plan
+    return _link_render_plan(from_box, to_box, link)
+
+
+LOOP_CLEARANCE = 16  # how far a self-loop stands off its node
+LANE_GAP = 18  # spacing between parallel links joining the same two elements: clears a one-line label
+
+
+def _self_loop_path(box: Box, link: Link) -> tuple[int, int, list[tuple[float, float]]]:
+    """A link from an element to itself (a Mermaid `B -->|retry| B`): out of
+    one side and back into the adjacent one around their shared corner -
+    right to top unless fromSide/toSide name two adjacent sides."""
+    s_idx = _SIDE_TO_IDX.get(link.from_side or "right", 3)
+    e_idx = _SIDE_TO_IDX.get(link.to_side or "top", 0)
+    if _IDX_AXIS[s_idx] == _IDX_AXIS[e_idx]:  # same or opposite sides: no corner to go round
+        s_idx, e_idx = 3, 0
+    p1, p2 = connection_point(box, s_idx), connection_point(box, e_idx)
+
+    def out(point, idx):
+        dx, dy = {0: (0, -1), 1: (-1, 0), 2: (0, 1), 3: (1, 0)}[idx]
+        return (point[0] + dx * LOOP_CLEARANCE, point[1] + dy * LOOP_CLEARANCE)
+
+    o1, o2 = out(p1, s_idx), out(p2, e_idx)
+    corner = (o1[0], o2[1]) if _IDX_AXIS[s_idx] == "horizontal" else (o2[0], o1[1])
+    return s_idx, e_idx, [p1, o1, corner, o2, p2]
+
+
+def _containment_path(inner: Box, outer: Box) -> tuple[int, list[tuple[float, float]]]:
+    """A link between a container and something inside it: straight from the
+    inner element's side nearest the container's frame to that frame, rather
+    than a route to the container's far side through everything in it."""
+    best = None
+    for idx in range(4):
+        cx, cy = connection_point(inner, idx)
+        edge = {
+            0: (cx, outer.abs_y),
+            1: (outer.abs_x, cy),
+            2: (cx, outer.abs_y + outer.height),
+            3: (outer.abs_x + outer.width, cy),
+        }[idx]
+        distance = math.dist((cx, cy), edge)
+        if best is None or distance < best[0]:
+            best = (distance, idx, [(cx, cy), edge])
+    return best[1], best[2]
+
+
+def _is_inside(inner: Box, outer: Box) -> bool:
+    root = inner.root
+    if root is None or outer.root is not root or outer.element.kind != "container":
+        return False
+    parent_of = _routing_index(root)["parent_of"]
+    cur = parent_of.get(inner.element.id)
+    while cur is not None:
+        if cur == outer.element.id:
+            return True
+        cur = parent_of.get(cur)
+    return False
+
+
+def _shift_lane(link: Link, s_idx: int, e_idx: int, p1, p2, from_box: Box, to_box: Box):
+    """Move both ends of a parallel link sideways by its lane's offset (the
+    same absolute direction whichever way the link runs), within each end's
+    own icon."""
+    offset = (link.lane - (link.lanes - 1) / 2) * LANE_GAP
+
+    def shift(point, idx, box):
+        if _IDX_AXIS[idx] == "vertical":  # leaves through top/bottom: slide along x
+            limit = max(0.0, box.width / 2 - 4)
+            return (point[0] + max(-limit, min(limit, offset)), point[1])
+        limit = max(0.0, box.height / 2 - 4)
+        return (point[0], point[1] + max(-limit, min(limit, offset)))
+
+    return shift(p1, s_idx, from_box), shift(p2, e_idx, to_box)
+
+
+def _link_render_plan(from_box: Box, to_box: Box, link: Link) -> tuple[int, int, str, list[tuple[float, float]]]:
+    if not link.waypoints:
+        if from_box is to_box:
+            s_idx, e_idx, path = _self_loop_path(from_box, link)
+            return s_idx, e_idx, "polyline", path
+        if not (link.from_side or link.to_side):
+            if _is_inside(from_box, to_box):
+                idx, path = _containment_path(from_box, to_box)
+                return idx, idx, "straight", path
+            if _is_inside(to_box, from_box):
+                idx, path = _containment_path(to_box, from_box)
+                return idx, idx, "straight", path[::-1]
     s_idx, e_idx = choose_connection_indices(from_box, to_box, link)
     p1, p2 = connection_point(from_box, s_idx), connection_point(to_box, e_idx)
+    if link.lanes > 1 and not link.waypoints:
+        p1, p2 = _shift_lane(link, s_idx, e_idx, p1, p2, from_box, to_box)
     if link.waypoints:
         # Explicit polyline: straight segments through each via. Detection walks
         # path segments the same way it does for elbow, so no checker changes.
         path = [p1, *[(float(x), float(y)) for x, y in link.waypoints], p2]
-        return s_idx, e_idx, "straight", path
+        return s_idx, e_idx, "polyline", path
+    if is_same_side(s_idx, e_idx):
+        return s_idx, e_idx, "polyline", _same_side_path(p1, p2, s_idx)
     eff_style = effective_connector_style(link.style, p1, p2)
-    path = connector_path(eff_style, p1, p2, s_idx)
+    path = connector_path(eff_style, p1, p2, s_idx, e_idx)
     return s_idx, e_idx, eff_style, path
 
 
-def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegistry, margin: float = 0) -> list[str]:
-    """Mechanically detect a link's rendered path - and its own label box -
-    running through an unrelated element, a container's label text, or
-    another link's label, using the exact same connection-point/routing
-    geometry python-pptx will render (link_render_plan() above, covering
-    both straight and elbow routing).
+class LinkCheckContext:
+    """Everything the link checks need, computed once per laid-out tree:
+    obstacles, container labels, and each link's rendered path and label
+    box. Individual links can be re-planned in place (set_link), which is
+    how doctor scores a candidate re-routing of one link without re-running
+    every check over every link.
 
     Element obstacles: ancestors/descendants of either endpoint are
     excluded, since a link legitimately touches its own endpoint's
-    containers on the way in.
-
-    Container *label* obstacles use a lighter exclusion - only the exact
-    endpoint ids, not their ancestors - because a link is expected to pass
-    through the body of its own ancestor container, but crossing straight
-    through that ancestor's visible label text still looks wrong regardless
-    of nesting.
+    containers on the way in. Container *label* obstacles use a lighter
+    exclusion - only the exact endpoint ids - because crossing straight
+    through an ancestor's visible label text still looks wrong.
 
     `margin` (canvas.overlapMargin, logical units) inflates every obstacle/
     label rect before testing, so a path or label that runs merely close to
     something - not literally through/over it - is flagged too.
+    """
+
+    def __init__(self, root_box: Box, links: list[Link], registry: MultiRegistry, margin: float = 0):
+        self.links = list(links)
+        self.margin = margin
+        self.by_id, self.parent_of = _build_indices(root_box)
+        self.obstacles = [
+            (eid, _inflate_rect(_footprint_rect(b), margin)) for eid, b in self.by_id.items() if eid != "__root__"
+        ]
+        self.container_labels = [
+            (eid, _inflate_rect(rect, margin))
+            for eid, b in self.by_id.items()
+            if eid != "__root__" and (rect := container_label_rect(b, registry)) is not None
+        ]
+        self._related: dict[str, set[str]] = {}
+        self.paths: dict[int, list[tuple[float, float]] | None] = {}
+        self.bboxes: dict[int, tuple[float, float, float, float]] = {}
+        self.axis_ranges: dict[int, list] = {}
+        self.label_rects: dict[int, tuple[float, float, float, float]] = {}
+        self.own_rects: dict[int, list[tuple[float, float, float, float]]] = {}
+        for i, link in enumerate(self.links):
+            self.set_link(i, link)
+
+    def _related_to(self, element_id: str) -> set[str]:
+        if element_id not in self._related:
+            self._related[element_id] = _related_ids({"by_id": self.by_id, "parent_of": self.parent_of}, element_id)
+        return self._related[element_id]
+
+    def exclude(self, i: int) -> set[str]:
+        link = self.links[i]
+        return self._related_to(link.from_id) | self._related_to(link.to_id)
+
+    def set_link(self, i: int, link: Link) -> None:
+        """(Re)plan link `i` as `link` - its path, label box and the rects of
+        its own endpoint nodes the path must not pass back through."""
+        self.links[i] = link
+        from_box, to_box = self.by_id.get(link.from_id), self.by_id.get(link.to_id)
+        self.label_rects.pop(i, None)
+        if from_box is None or to_box is None:
+            self.paths[i] = None  # dangling refs are Fatal elsewhere; defensive only
+            self.own_rects[i] = []
+            return
+        _, _, _, path = link_render_plan(from_box, to_box, link)
+        self.paths[i] = path
+        xs, ys = [p[0] for p in path], [p[1] for p in path]
+        self.bboxes[i] = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+        self.axis_ranges[i] = [_segment_axis_range(a, b) for a, b in zip(path, path[1:])]
+        self.own_rects[i] = own_endpoint_rects(from_box, to_box)
+        if link.label:
+            self.label_rects[i] = _inflate_rect(
+                link_label_rect(path, link.label, link.label_font_size, self.own_rects[i]), self.margin
+            )
+
+    def crosses(self, i: int, rect: tuple[float, float, float, float]) -> bool:
+        path = self.paths[i]
+        if path is None:
+            return False
+        bx, by, bw, bh = self.bboxes[i]
+        rx, ry, rw, rh = rect
+        if bx > rx + rw or rx > bx + bw or by > ry + rh or ry > by + bh:
+            return False
+        return any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in zip(path, path[1:]))
+
+    def subject_messages(self, i: int) -> list[str]:
+        """Every crossing warning about link `i` itself: its path through an
+        element, a container label, another link's label or back through its
+        own endpoint; its own label over an element or a container label."""
+        path = self.paths[i]
+        if path is None:
+            return []
+        link = self.links[i]
+        name = f"link {link.from_id!r} -> {link.to_id!r}"
+        exclude = self.exclude(i)
+        endpoints_only = {link.from_id, link.to_id}
+        messages = []
+        for eid, rect in self.obstacles:
+            if eid not in exclude and self.crosses(i, rect):
+                messages.append(f"{name} passes through element {eid!r}")
+        for cid, rect in self.container_labels:
+            if cid not in endpoints_only and self.crosses(i, rect):
+                messages.append(f"{name} passes through the label of container {cid!r}")
+        for j, rect in self.label_rects.items():
+            if j != i and self.crosses(i, rect):
+                other = self.links[j]
+                messages.append(f"{name} passes through the label of link {other.from_id!r} -> {other.to_id!r}")
+        if any(self.crosses(i, rect) for rect in self.own_rects.get(i, [])):
+            messages.append(f"{name} runs back through one of its own endpoints")
+        own_label = self.label_rects.get(i)
+        if own_label is not None and any(_rects_overlap(own_label, rect) for rect in self.own_rects.get(i, [])):
+            # link_label_rect() found no spot clear of them (e.g. endpoints too close)
+            messages.append(f"the label of {name} covers one of its own endpoints")
+        if own_label is not None:
+            for eid, rect in self.obstacles:
+                if eid not in exclude and _rects_overlap(own_label, rect):
+                    messages.append(f"the label of {name} overlaps element {eid!r}")
+            for cid, rect in self.container_labels:
+                if cid not in endpoints_only and _rects_overlap(own_label, rect):
+                    messages.append(f"the label of {name} overlaps the label of container {cid!r}")
+        return messages
+
+    def label_pair_message(self, i: int, j: int) -> str | None:
+        ri, rj = self.label_rects.get(i), self.label_rects.get(j)
+        if ri is None or rj is None or not _rects_overlap(ri, rj):
+            return None
+        a, b = self.links[i], self.links[j]
+        return (
+            f"the label of link {a.from_id!r} -> {a.to_id!r} overlaps the label of link "
+            f"{b.from_id!r} -> {b.to_id!r}"
+        )
+
+    def crosses_label_of(self, i: int, j: int) -> bool:
+        """Whether link i's path runs through link j's label (one of i's
+        subject messages - kept separately for incremental rescoring)."""
+        rect = self.label_rects.get(j)
+        return i != j and rect is not None and self.crosses(i, rect)
+
+    def aliasing_message(self, i: int, j: int) -> str | None:
+        path_i, path_j = self.paths[i], self.paths[j]
+        if path_i is None or path_j is None:
+            return None
+        a, b = self.links[i], self.links[j]
+
+        def same_point(p: tuple[float, float], q: tuple[float, float]) -> bool:
+            return abs(p[0] - q[0]) < 0.5 and abs(p[1] - q[1]) < 0.5
+
+        # Two links leaving the same node from the same point (fan-out), or
+        # arriving at the same point (fan-in), naturally share a trunk there -
+        # that reads as a branch/merge, not as a false direct edge. Only a
+        # trunk shared by one arriving and one departing link (or by
+        # unrelated links) misleads.
+        if (a.from_id == b.from_id and same_point(path_i[0], path_j[0])) or (
+            a.to_id == b.to_id and same_point(path_i[-1], path_j[-1])
+        ):
+            return None
+        (ax_, ay_, aw_, ah_), (bx_, by_, bw_, bh_) = self.bboxes[i], self.bboxes[j]
+        if ax_ > bx_ + bw_ + 0.5 or bx_ > ax_ + aw_ + 0.5 or ay_ > by_ + bh_ + 0.5 or by_ > ay_ + ah_ + 0.5:
+            return None
+        overlap = next(
+            (o for ra in self.axis_ranges[i] for rb in self.axis_ranges[j] if (o := _range_overlap(ra, rb))),
+            None,
+        )
+        if overlap is None:
+            return None
+        (x0, y0), (x1, y1) = overlap
+        return (
+            f"link {a.from_id!r} -> {a.to_id!r} and link {b.from_id!r} -> {b.to_id!r} share a collinear "
+            f"segment near ({x0:.0f}, {y0:.0f})-({x1:.0f}, {y1:.0f}), which may appear as a direct connection"
+        )
+
+
+def _range_overlap(a, b, epsilon: float = 0.5):
+    """_collinear_overlap() on precomputed _segment_axis_range() values."""
+    if a is None or b is None or a[0] != b[0]:
+        return None
+    axis, coord_a, (lo_a, hi_a) = a
+    _, coord_b, (lo_b, hi_b) = b
+    if abs(coord_a - coord_b) > epsilon:
+        return None
+    lo, hi = max(lo_a, lo_b), min(hi_a, hi_b)
+    if lo > hi + epsilon:
+        return None
+    return ((lo, coord_a), (hi, coord_a)) if axis == "h" else ((coord_a, lo), (coord_a, hi))
+
+
+def link_crossing_warnings(root_box: Box, links: list[Link], registry: MultiRegistry, margin: float = 0) -> list[str]:
+    """Mechanically detect a link's rendered path - and its own label box -
+    running through an unrelated element, a container's label text, another
+    link's label, or back through one of its own endpoints, using the exact
+    same connection-point/routing geometry python-pptx will render
+    (link_render_plan() above). See LinkCheckContext for the exclusions.
 
     Path-crossing is exact for `style: straight` and `elbow`. `curved` is
     approximated as a straight chord between the endpoints, since its real
     bezier bow isn't modeled - documented in docs-site/limitations.md.
     """
-    by_id, parent_of = _build_indices(root_box)
-
-    def ancestors(element_id: str) -> set[str]:
-        result: set[str] = set()
-        cur = parent_of.get(element_id)
-        while cur is not None:
-            result.add(cur)
-            cur = parent_of.get(cur)
-        return result
-
-    def descendants(element_id: str) -> set[str]:
-        box = by_id.get(element_id)
-        return {b.element.id for b in iter_boxes(box)} if box else set()
-
-    obstacles = [(eid, _inflate_rect(_footprint_rect(b), margin)) for eid, b in by_id.items() if eid != "__root__"]
-    container_labels = [
-        (eid, _inflate_rect(rect, margin))
-        for eid, b in by_id.items()
-        if eid != "__root__" and (rect := container_label_rect(b, registry)) is not None
-    ]
-
-    paths: dict[int, list[tuple[float, float]] | None] = {}
-    for i, link in enumerate(links):
-        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
-        if from_box is None or to_box is None:
-            paths[i] = None  # dangling refs are Fatal elsewhere; defensive only
-            continue
-        _, _, _, path = link_render_plan(from_box, to_box, link)
-        paths[i] = path
-
-    label_rects: dict[int, tuple[float, float, float, float]] = {}
-    for i, link in enumerate(links):
-        path = paths[i]
-        if not link.label or path is None:
-            continue
-        mx, my = link_label_anchor(path)
-        lw, lh = link_label_size(link.label_font_size)
-        label_rects[i] = _inflate_rect((mx - lw / 2, my - lh / 2, lw, lh), margin)
-
+    ctx = LinkCheckContext(root_box, links, registry, margin)
     messages: list[str] = []
-    for i, link in enumerate(links):
-        path = paths[i]
-        if path is None:
-            continue
-        segments = list(zip(path, path[1:]))
-        endpoints_only = {link.from_id, link.to_id}
-        exclude = (
-            endpoints_only
-            | ancestors(link.from_id)
-            | ancestors(link.to_id)
-            | descendants(link.from_id)
-            | descendants(link.to_id)
-        )
-
-        def crosses(rect: tuple[float, float, float, float]) -> bool:
-            return any(_segment_intersects_rect(p1, p2, rect) for p1, p2 in segments)
-
-        for eid, rect in obstacles:
-            if eid in exclude:
-                continue
-            if crosses(rect):
-                messages.append(f"link {link.from_id!r} -> {link.to_id!r} passes through element {eid!r}")
-
-        for cid, rect in container_labels:
-            if cid in endpoints_only:
-                continue
-            if crosses(rect):
-                messages.append(f"link {link.from_id!r} -> {link.to_id!r} passes through the label of container {cid!r}")
-
-        for j, rect in label_rects.items():
-            if j == i:
-                continue
-            if crosses(rect):
-                other = links[j]
-                messages.append(
-                    f"link {link.from_id!r} -> {link.to_id!r} passes through the label of link "
-                    f"{other.from_id!r} -> {other.to_id!r}"
-                )
-
-        own_label_rect = label_rects.get(i)
-        if own_label_rect is not None:
-            for eid, rect in obstacles:
-                if eid in exclude:
-                    continue
-                if _rects_overlap(own_label_rect, rect):
-                    messages.append(
-                        f"the label of link {link.from_id!r} -> {link.to_id!r} overlaps element {eid!r}"
-                    )
-            for cid, rect in container_labels:
-                if cid in endpoints_only:
-                    continue
-                if _rects_overlap(own_label_rect, rect):
-                    messages.append(
-                        f"the label of link {link.from_id!r} -> {link.to_id!r} overlaps the label of "
-                        f"container {cid!r}"
-                    )
-
+    for i in range(len(links)):
+        messages.extend(ctx.subject_messages(i))
     for i in range(len(links)):
         for j in range(i + 1, len(links)):
-            ri, rj = label_rects.get(i), label_rects.get(j)
-            if ri is None or rj is None:
-                continue
-            if _rects_overlap(ri, rj):
-                a, b = links[i], links[j]
-                messages.append(
-                    f"the label of link {a.from_id!r} -> {a.to_id!r} overlaps the label of link "
-                    f"{b.from_id!r} -> {b.to_id!r}"
-                )
-
+            if (message := ctx.label_pair_message(i, j)) is not None:
+                messages.append(message)
     return messages
 
 
@@ -814,41 +1479,12 @@ def link_aliasing_warnings(root_box: Box, links: list[Link]) -> list[str]:
     collinear, touching-or-overlapping run - not a crossing (perpendicular
     hit), but the same-line continuation that makes two separate arrows
     look like a single direct edge. Warning only; routing is unchanged."""
-    by_id, _ = _build_indices(root_box)
-
-    paths: list[list[tuple[float, float]] | None] = []
-    for link in links:
-        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
-        if from_box is None or to_box is None:
-            paths.append(None)  # dangling refs are Fatal elsewhere; defensive only
-            continue
-        _, _, _, path = link_render_plan(from_box, to_box, link)
-        paths.append(path)
-
+    ctx = LinkCheckContext(root_box, links, MultiRegistry(), 0)
     messages: list[str] = []
     for i in range(len(links)):
-        path_i = paths[i]
-        if path_i is None:
-            continue
-        segments_i = list(zip(path_i, path_i[1:]))
         for j in range(i + 1, len(links)):
-            path_j = paths[j]
-            if path_j is None:
-                continue
-            segments_j = list(zip(path_j, path_j[1:]))
-            overlap = next(
-                (o for seg_a in segments_i for seg_b in segments_j if (o := _collinear_overlap(seg_a, seg_b))),
-                None,
-            )
-            if overlap is None:
-                continue
-            (x0, y0), (x1, y1) = overlap
-            a, b = links[i], links[j]
-            messages.append(
-                f"link {a.from_id!r} -> {a.to_id!r} and link {b.from_id!r} -> {b.to_id!r} share a collinear "
-                f"segment near ({x0:.0f}, {y0:.0f})-({x1:.0f}, {y1:.0f}), which may appear as a direct connection"
-            )
-
+            if (message := ctx.aliasing_message(i, j)) is not None:
+                messages.append(message)
     return messages
 
 
@@ -861,17 +1497,146 @@ def icon_resolution_warnings(root_box: Box, registry: MultiRegistry) -> list[str
     messages: list[str] = []
     for box in iter_boxes(root_box):
         element = box.element
-        if element.kind != "node" or is_shape_node(element):
+        if element.id == "__root__" or is_shape_node(element):
+            continue
+        if element.kind == "container":
+            if registry.resolve_group(element.type, element.provider) is None:
+                messages.append(
+                    f"unknown container type {element.type!r} for container {element.id!r}; drawn as a plain frame"
+                    + registry.suggest_type(element.type, element.provider, kind="container")
+                )
             continue
         icon_entry = registry.resolve_icon(element.type, element.provider)
         if icon_entry is None:
             messages.append(
                 f"unknown type {element.type!r} for node {element.id!r} (provider {element.provider!r}); "
-                "using placeholder icon"
+                "using placeholder icon" + registry.suggest_type(element.type, element.provider)
             )
         elif not icon_entry.file.exists():
             messages.append(f"icon file missing for type {element.type!r} ({icon_entry.file}); using placeholder icon")
+        elif (problem := icon_png(icon_entry.file)[1]) is not None:
+            messages.append(f"icon file for type {element.type!r} ({icon_entry.file}) {problem}; using placeholder icon")
     return messages
+
+
+FIT_WARNING_SCALE = 0.7  # below this, a shrink-to-fit is reported: text gets hard to read
+
+
+@dataclass
+class FitTransform:
+    """Uniform scale + offset from layout (logical) coordinates to the slide.
+    Identity unless canvas.fit shrinks a diagram that doesn't fit. Applied by
+    the renderers only - layout, the checks, doctor and the YAML all stay in
+    the author's logical coordinates."""
+
+    scale: float = 1.0
+    dx: float = 0.0
+    dy: float = 0.0
+
+    @property
+    def is_identity(self) -> bool:
+        return self.scale == 1.0 and self.dx == 0.0 and self.dy == 0.0
+
+    def x(self, value: float) -> float:
+        return value * self.scale + self.dx
+
+    def y(self, value: float) -> float:
+        return value * self.scale + self.dy
+
+    def length(self, value: float) -> float:
+        return value * self.scale
+
+
+def _drawn_rects(root_box: Box, links: list[Link]):
+    """(what, rect) for everything that gets drawn: element boxes (a node with
+    its label), link paths (as their bounding boxes) and link labels."""
+    by_id = {}
+    for box in iter_boxes(root_box):
+        if box.element.id == "__root__":
+            continue
+        by_id[box.element.id] = box
+        rect = _footprint_rect(box) if box.element.kind == "node" else (box.abs_x, box.abs_y, box.width, box.height)
+        yield f"element {box.element.id!r}", rect
+    for link in links:
+        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
+        if from_box is None or to_box is None:
+            continue
+        _, _, _, path = link_render_plan(from_box, to_box, link)
+        xs, ys = [p[0] for p in path], [p[1] for p in path]
+        yield f"link {link.from_id!r} -> {link.to_id!r}", (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+        if link.label:
+            yield f"the label of link {link.from_id!r} -> {link.to_id!r}", link_label_rect_for(from_box, to_box, path, link)
+
+
+def fit_transform(diagram: Diagram, root_box: Box) -> FitTransform:
+    """canvas.fit: "shrink" (default) scales a diagram that spills off the
+    slide down uniformly - text included - and centres it within the canvas
+    padding; one that already fits is left exactly as laid out. A standard
+    two-AZ, three-tier layout is taller than 720 at the default spacing, and
+    the only alternative used to be hand-tuning every padding/gap."""
+    if diagram.canvas.fit == "none":
+        return FitTransform()
+    canvas_w, canvas_h = diagram.canvas.size
+    rects = [r for _, r in _drawn_rects(root_box, diagram.links)]
+    if not rects:
+        return FitTransform()
+    min_x = min(r[0] for r in rects)
+    min_y = min(r[1] for r in rects)
+    max_x = max(r[0] + r[2] for r in rects)
+    max_y = max(r[1] + r[3] for r in rects)
+    eps = 0.5
+    if min_x >= -eps and min_y >= -eps and max_x <= canvas_w + eps and max_y <= canvas_h + eps:
+        return FitTransform()
+    padding = diagram.canvas.padding
+    avail_w, avail_h = max(1.0, canvas_w - 2 * padding), max(1.0, canvas_h - 2 * padding)
+    width, height = max(1.0, max_x - min_x), max(1.0, max_y - min_y)
+    scale = min(1.0, avail_w / width, avail_h / height)
+    dx = padding + (avail_w - width * scale) / 2 - min_x * scale
+    dy = padding + (avail_h - height * scale) / 2 - min_y * scale
+    return FitTransform(scale, dx, dy)
+
+
+def canvas_warnings(diagram: Diagram, root_box: Box) -> list[str]:
+    """What doesn't fit the slide: with canvas.fit "none", everything drawn
+    outside it (an element, a node's label, a link's path or label); with the
+    default "shrink", nothing is outside, but a shrink below
+    FIT_WARNING_SCALE is reported, since the text shrinks with it."""
+    transform = fit_transform(diagram, root_box)
+    canvas_w, canvas_h = diagram.canvas.size
+    if not transform.is_identity:
+        if transform.scale < FIT_WARNING_SCALE:
+            # One mistyped coordinate (x: 12000 for 1200) shrinks everything
+            # else to a speck - name it rather than blame the element count.
+            stray = [
+                f"{box.element.id!r} (x={box.abs_x:.0f}, y={box.abs_y:.0f})"
+                for box in iter_boxes(root_box)
+                if box.element.id != "__root__"
+                and box.element.has_explicit_position
+                and not _within(_footprint_rect(box), canvas_w, canvas_h)
+            ]
+            if stray:
+                hint = (
+                    f"explicitly positioned outside the canvas: {', '.join(stray)} - check "
+                    f"{'that coordinate' if len(stray) == 1 else 'those coordinates'}"
+                )
+            else:
+                wider = ", or aspectRatio 16:9" if diagram.canvas.aspect_ratio != "16:9" else ""
+                hint = f"consider fewer elements per slide or a smaller layout gap/padding{wider}"
+            return [
+                f"the diagram was scaled to {transform.scale:.0%} to fit the slide, so its text is that much "
+                f"smaller - {hint}"
+            ]
+        return []
+    messages = []
+    for what, (x, y, w, h) in _drawn_rects(root_box, diagram.links):
+        if not _within((x, y, w, h), canvas_w, canvas_h):
+            messages.append(f"{what} is positioned outside the canvas bounds (x={x:.0f}, y={y:.0f}, w={w:.0f}, h={h:.0f})")
+    return messages
+
+
+def _within(rect: tuple[float, float, float, float], canvas_w: float, canvas_h: float) -> bool:
+    x, y, w, h = rect
+    return x >= -0.5 and y >= -0.5 and x + w <= canvas_w + 0.5 and y + h <= canvas_h + 0.5
 
 
 def out_of_canvas_warnings(root_box: Box, canvas_w: float, canvas_h: float) -> list[str]:
@@ -886,3 +1651,36 @@ def out_of_canvas_warnings(root_box: Box, canvas_w: float, canvas_h: float) -> l
                 f"(x={box.abs_x:.0f}, y={box.abs_y:.0f}, w={box.width:.0f}, h={box.height:.0f})"
             )
     return messages
+
+
+def containment_warnings(root_box: Box) -> list[str]:
+    """A child drawn (partly) outside its own container: an explicit x/y
+    beyond the container's explicit width/height, or a negative x/y. The
+    overlap check compares siblings only, so this is the one place a child
+    spilling across its parent's frame - and possibly over the next
+    container - is caught."""
+    messages: list[str] = []
+    for box in iter_boxes(root_box):
+        if box.element.kind != "container" or box.element.id == "__root__":
+            continue
+        left, top = box.abs_x - 0.5, box.abs_y - 0.5
+        right, bottom = box.abs_x + box.width + 0.5, box.abs_y + box.height + 0.5
+        for child in box.children:
+            x, y, w, h = _footprint_rect(child)
+            if x < left or y < top or x + w > right or y + h > bottom:
+                messages.append(f"element {child.element.id!r} extends outside its container {box.element.id!r}")
+    return messages
+
+
+def diagram_warnings(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> list[str]:
+    """Every Warning-class check `validate`/`build` run (yaml-spec sec9), in
+    the order they're reported."""
+    margin = diagram.canvas.overlap_margin
+    return (
+        icon_resolution_warnings(root_box, registry)
+        + canvas_warnings(diagram, root_box)
+        + overlap_warnings(root_box, registry, margin)
+        + containment_warnings(root_box)
+        + link_crossing_warnings(root_box, diagram.links, registry, margin)
+        + link_aliasing_warnings(root_box, diagram.links)
+    )

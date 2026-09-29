@@ -1,0 +1,9 @@
+# The sdist carries what its tests need: the tests themselves, the docs they
+# compare the bundled copies against, and the scripts that regenerate them.
+include AGENTS.md AGENTS.ja.md CHANGELOG.md CONTRIBUTING.md README.md README.ja.md LICENSE
+graft tests
+graft docs
+graft docs-site
+graft docs-site-ja
+graft scripts
+global-exclude *.py[cod] __pycache__

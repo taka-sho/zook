@@ -3,16 +3,16 @@
 [![Tests](https://github.com/taka-sho/zook/actions/workflows/tests.yml/badge.svg)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
 [![Test results](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/taka-sho/zook/main/.github/badges/tests.json)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/taka-sho/zook/main/.github/badges/coverage.json)](https://github.com/taka-sho/zook/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/taka-sho/zook/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://github.com/taka-sho/zook/blob/main/pyproject.toml)
 
-**[日本語版はこちら / Japanese version](README.ja.md)**
+**[日本語版はこちら / Japanese version](https://github.com/taka-sho/zook/blob/main/README.ja.md)**
 
 zook is a CLI tool that generates PowerPoint (.pptx) architecture diagrams from an infrastructure configuration written in YAML. It's built around growing a diagram over time — tune the look in draw.io, and write those changes back into the YAML.
 
 Documentation site covering usage and features: **https://taka-sho.github.io/zook/** (source in `docs-site/`, built with [Zensical](https://zensical.org/) and published to GitHub Pages; a fully separate Japanese version lives at `/ja/`). The full requirements/design source material is in `docs/README-index.md`.
 
-If a generative AI is going to use this tool to build a diagram, [`AGENTS.md`](./AGENTS.md) lays out the golden path (pick a pattern → confirm the icon vocabulary → validate → generate). If you already have a diagram written in Mermaid `flowchart` notation, convert it to YAML first with `zook from-mermaid`, then follow the same flow ([Mermaid Flowchart Import](https://taka-sho.github.io/zook/mermaid-import/)).
+If a generative AI is going to use this tool to build a diagram, [`AGENTS.md`](https://github.com/taka-sho/zook/blob/main/AGENTS.md) lays out the golden path (pick a pattern → confirm the icon vocabulary → validate → generate). If you already have a diagram written in Mermaid `flowchart` notation, convert it to YAML first with `zook from-mermaid`, then follow the same flow ([Mermaid Flowchart Import](https://taka-sho.github.io/zook/mermaid-import/)).
 
 ## The Basic Flow: Build a Base, Tune It in draw.io, Sync Back to YAML
 
@@ -46,6 +46,17 @@ This loop can also be automated in CI. Saving a `.drawio` file in draw.io can tr
 
 ## Setup
 
+To use zook as a command (it isn't on PyPI yet, so install it from GitHub):
+
+```bash
+pipx install git+https://github.com/taka-sho/zook.git     # or: uv tool install git+https://github.com/taka-sho/zook.git
+zook init diagram.yaml && zook build diagram.yaml -o diagram.pptx
+```
+
+Everything an AI agent needs travels with the package: `zook guide`, `zook patterns list`, `zook schema`.
+
+To work on zook itself:
+
 ```bash
 git clone https://github.com/taka-sho/zook.git
 cd zook
@@ -73,6 +84,10 @@ Confirm you can generate from the bundled sample. Success looks like `Wrote exam
 | `export-drawio` | Export to a format editable in draw.io |
 | `sync` | Reflect position/size changes made in draw.io back into the YAML |
 | `from-mermaid` | Convert Mermaid `flowchart`/`graph` notation to YAML |
+| `guide` | Print the bundled workflow, YAML spec and other docs (`zook guide yaml`, ...) |
+| `schema` | Print the JSON Schema of a diagram (or of an icon registry) |
+| `patterns list` / `show` | List / print the bundled reference architectures |
+| `init` | Write a starter diagram YAML, or a pattern, to edit |
 
 The `--registry` option (shared by every subcommand) lets you layer your own icons and frame styles on top of the built-in AWS/GCP/Azure icon registries.
 
@@ -94,7 +109,7 @@ The bundled PNGs aren't each vendor's official icons — they're self-made place
 
 ## Testing & Quality Assurance
 
-CI runs the tests and measures branch coverage on every push to `main`. **Coverage is a quality gate that fails CI below 85%** (the current measured value is shown in the badges above) — the badges at the top of this README aren't from a third-party service; they're generated from that run's own results ([`.github/badges/`](.github/badges/)) and rendered via shields.io. The numbers shown always reflect the latest run on `main`.
+CI runs the tests and measures branch coverage on every push to `main`. **Coverage is a quality gate that fails CI below 85%** (the current measured value is shown in the badges above) — the badges at the top of this README aren't from a third-party service; they're generated from that run's own results ([`.github/badges/`](https://github.com/taka-sho/zook/tree/main/.github/badges/)) and rendered via shields.io. The numbers shown always reflect the latest run on `main`.
 
 ```bash
 .venv/bin/pip install -e ".[dev]"
@@ -102,13 +117,13 @@ CI runs the tests and measures branch coverage on every push to `main`. **Covera
 .venv/bin/pytest tests/ --cov=zook --cov-report=term-missing            # with a coverage breakdown
 ```
 
-See [`.github/workflows/tests.yml`](.github/workflows/tests.yml) for the CI configuration, and `pyproject.toml`'s `[tool.coverage.*]` for what's measured/excluded.
+See [`.github/workflows/tests.yml`](https://github.com/taka-sho/zook/blob/main/.github/workflows/tests.yml) for the CI configuration, and `pyproject.toml`'s `[tool.coverage.*]` for what's measured/excluded.
 
 ## Known Limitations (v1)
 
-- Overlap avoidance in auto-layout is limited to an auto-placed element overlapping an explicitly-positioned sibling (a simple "push straight down"). Every other overlap is only detected as a Warning, with no auto-fix, on the assumption you'll hand-edit it after generation.
-- The built-in icon registries only cover a Tier-1 vocabulary (26 AWS / 19 GCP / 18 Azure services) — anything beyond that is meant to be added via a user registry with `--registry`.
-- A link's connection sides (`fromSide`/`toSide`) only support a horizontal pair or a vertical pair — a cross-axis combination is a Fatal error.
+- Auto-layout itself only steers clear of explicitly positioned siblings; other overlaps and link collisions are reported as Warnings, which `zook doctor` resolves automatically (each change verified, never making the diagram worse). Whatever it can't resolve is left for a hand edit or draw.io.
+- The built-in icon registries cover the commonly used services (77 AWS / 39 GCP / 40 Azure types, plus provider-neutral actors and generic icons) — anything beyond that is drawn as a plain shape or added via a user registry with `--registry`.
+- A link's connection sides (`fromSide`/`toSide`) only support a horizontal pair or a vertical pair — a cross-axis combination is a Fatal error unless the link has `waypoints`.
 
 See the [known limitations page](https://taka-sho.github.io/zook/limitations/) on the docs site for the full list.
 

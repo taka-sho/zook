@@ -1,4 +1,4 @@
-"""Regression tests for docs/patterns/*.yaml - the reference architecture
+"""Regression tests for the bundled src/zook/data/patterns/*.yaml - the reference architecture
 patterns meant for an AI (or human) to pick from and adapt (AGENTS.md).
 Each one must stay warning-free and render successfully, the same
 invariant already enforced for docs/example.yaml/example-cloud-actors.yaml
@@ -11,20 +11,13 @@ import pytest
 import yaml
 
 from zook.errors import Warnings
-from zook.layout import (
-    build_layout,
-    icon_resolution_warnings,
-    link_aliasing_warnings,
-    link_crossing_warnings,
-    out_of_canvas_warnings,
-    overlap_warnings,
-)
+from zook.layout import build_layout, diagram_warnings
 from zook.model import parse_diagram
 from zook.registry import load_registries
 from zook.render import render
 from zook.validate import validate
 
-PATTERNS_DIR = Path(__file__).parent.parent / "docs" / "patterns"
+PATTERNS_DIR = Path(__file__).parent.parent / "src" / "zook" / "data" / "patterns"
 PATTERN_FILES = sorted(PATTERNS_DIR.glob("*.yaml"))
 
 
@@ -41,16 +34,7 @@ def test_pattern_renders_without_warnings(path: Path):
     root_box = build_layout(diagram, registry)
 
     warnings = Warnings()
-    margin = diagram.canvas.overlap_margin
-    for message in icon_resolution_warnings(root_box, registry):
-        warnings.add(message)
-    for message in out_of_canvas_warnings(root_box, *diagram.canvas.size):
-        warnings.add(message)
-    for message in overlap_warnings(root_box, registry, margin):
-        warnings.add(message)
-    for message in link_crossing_warnings(root_box, diagram.links, registry, margin):
-        warnings.add(message)
-    for message in link_aliasing_warnings(root_box, diagram.links):
+    for message in diagram_warnings(diagram, root_box, registry):
         warnings.add(message)
 
     assert warnings.messages == [], f"{path.name} produced warnings: {warnings.messages}"

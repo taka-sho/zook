@@ -13,23 +13,25 @@ ASPECT_RATIOS = {
 
 
 @dataclass
-class Canvas:
-    aspect_ratio: str
-    padding: float = 40
-    background: Optional[str] = None
-    overlap_margin: float = 0
-
-    @property
-    def size(self) -> tuple[float, float]:
-        return ASPECT_RATIOS[self.aspect_ratio]
-
-
-@dataclass
 class Layout:
     direction: str = "grid"
     columns: Optional[int] = None
     gap: float = 24
     padding: float = 32
+
+
+@dataclass
+class Canvas:
+    aspect_ratio: str
+    padding: float = 40
+    background: Optional[str] = None
+    overlap_margin: float = 0
+    layout: Optional[Layout] = None  # arrangement of the top-level elements (padding comes from `padding`)
+    fit: str = "shrink"  # "shrink": scale a diagram that doesn't fit down onto the slide; "none": never
+
+    @property
+    def size(self) -> tuple[float, float]:
+        return ASPECT_RATIOS[self.aspect_ratio]
 
 
 @dataclass
@@ -69,6 +71,10 @@ class Link:
     from_side: Optional[str] = None  # "top"|"bottom"|"left"|"right"; None -> auto
     to_side: Optional[str] = None
     waypoints: list[tuple[float, float]] = field(default_factory=list)  # explicit polyline vias (absolute coords)
+    # Set by layout.build_layout: this link's place among the links joining
+    # the same two elements (either direction), so they're drawn side by side.
+    lane: int = 0
+    lanes: int = 1
 
 
 @dataclass
@@ -78,13 +84,16 @@ class Diagram:
     links: list[Link] = field(default_factory=list)
 
 
-def _parse_layout(raw: Optional[dict]) -> Optional[Layout]:
+TOP_LEVEL_GAP_DEFAULT = 64  # canvas.layout.gap: room for an actor -> boundary arrow and its label
+
+
+def _parse_layout(raw: Optional[dict], default_gap: float = 24) -> Optional[Layout]:
     if raw is None:
         return None
     return Layout(
         direction=raw.get("direction", "grid"),
         columns=raw.get("columns"),
-        gap=raw.get("gap", 24),
+        gap=raw.get("gap", default_gap),
         padding=raw.get("padding", 32),
     )
 
@@ -134,6 +143,8 @@ def parse_diagram(raw: dict) -> Diagram:
         padding=canvas_raw.get("padding", 40),
         background=canvas_raw.get("background"),
         overlap_margin=canvas_raw.get("overlapMargin", 0),
+        layout=_parse_layout(canvas_raw.get("layout"), default_gap=TOP_LEVEL_GAP_DEFAULT),
+        fit=canvas_raw.get("fit", "shrink"),
     )
     elements = [_parse_element(e) for e in raw["elements"]]
     links = [_parse_link(link) for link in raw.get("links", [])]

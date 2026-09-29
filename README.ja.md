@@ -46,6 +46,17 @@ zook でのアーキテクチャ図づくりは、次の4ステップを繰り�
 
 ## セットアップ
 
+コマンドとして使う場合(PyPI には未公開のため、GitHub からインストールします):
+
+```bash
+pipx install git+https://github.com/taka-sho/zook.git     # または: uv tool install git+https://github.com/taka-sho/zook.git
+zook init diagram.yaml && zook build diagram.yaml -o diagram.pptx
+```
+
+AI エージェントが必要とする情報はパッケージに同梱されています。`zook guide`、`zook patterns list`、`zook schema` で参照できます。
+
+zook 自体を開発する場合:
+
 ```bash
 git clone https://github.com/taka-sho/zook.git
 cd zook
@@ -73,6 +84,10 @@ python3 -m venv .venv
 | `export-drawio` | draw.io で編集できる形式に書き出す |
 | `sync` | draw.io での位置・サイズの変更を YAML に反映する |
 | `from-mermaid` | Mermaid の `flowchart`/`graph` 記法を YAML に変換する |
+| `guide` | 同梱の手順・YAML 仕様などの文書を表示する(`zook guide yaml` など) |
+| `schema` | 図(またはアイコンレジストリ)の JSON Schema を表示する |
+| `patterns list` / `show` | 同梱の参考アーキテクチャを一覧・表示する |
+| `init` | 編集の起点になる YAML(雛形またはパターン)を書き出す |
 
 `--registry` オプション(全サブコマンド共通)を使うと、組み込みの AWS/GCP/Azure アイコンレジストリの上に、独自のアイコンや枠スタイルを重ねられます。
 
@@ -106,9 +121,9 @@ CI の設定は [`.github/workflows/tests.yml`](.github/workflows/tests.yml)、�
 
 ## 既知の制約(v1)
 
-- 自動レイアウトが解消する重なりは、自動配置の要素が明示座標の兄弟要素と重なるケースに限られます(単純な「真下に押し出す」処理)。それ以外の重なりは Warning として検出されるのみで自動修正はされず、生成後の手編集を前提としています。
-- 組み込みのアイコンレジストリは Tier-1 語彙(AWS26・GCP19・Azure18 サービス)のみで、それ以外は `--registry` によるユーザー拡張を想定しています。
-- リンクの接続辺(`fromSide`/`toSide`)は水平ペア・垂直ペアの組み合わせのみ対応しており、軸をまたぐ指定は Fatal エラーになります。
+- 自動レイアウト自体が避けるのは、明示座標の兄弟要素との重なりだけです。それ以外の重なりやリンクの衝突は Warning として報告し、`zook doctor` が自動で解消します(変更ごとに検証し、図を悪化させません)。解消できなかったものは、手編集か draw.io で直してください。
+- 組み込みのアイコンレジストリが収録するのは、よく使うサービス(AWS 77・GCP 39・Azure 40 の type と、provider を問わないアクター・汎用アイコン)です。それ以外は、プレーン図形で描くか、`--registry` によるユーザー拡張で追加します。
+- リンクの接続辺(`fromSide`/`toSide`)は水平ペア・垂直ペアの組み合わせのみ対応しており、軸をまたぐ指定は、`waypoints` のないリンクでは Fatal エラーになります。
 
 詳しい制約一覧は[ドキュメントサイトの既知の制約ページ](https://taka-sho.github.io/zook/ja/limitations/)にまとめています。
 

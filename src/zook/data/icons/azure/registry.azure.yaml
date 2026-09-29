@@ -6,34 +6,66 @@ defaults:
   size: 64
   ext: png
 
-# ---- Nodes: Tier-1 starter vocabulary (mirrors registry.aws.yaml's categories) ----
+# ---- Nodes: Tier-1 core vocabulary, then the Tier-2 additions (mirrors registry.aws.yaml's categories) ----
 icons:
   # Compute
-  VirtualMachine: { file: "Compute/VirtualMachine.png", category: Compute, aliases: [virtualmachine, vm] }
+  VirtualMachine: { file: "Compute/VirtualMachine.png", category: Compute, aliases: [vm] }
   Functions: { file: "Compute/Functions.png", category: Compute, aliases: [azurefunctions, func] }
-  AKS: { file: "Compute/AKS.png", category: Compute, aliases: [aks, kubernetesservice] }
-  ContainerApps: { file: "Compute/ContainerApps.png", category: Compute, aliases: [containerapps] }
+  AKS: { file: "Compute/AKS.png", category: Compute, aliases: [kubernetesservice] }
+  ContainerApps: { file: "Compute/ContainerApps.png", category: Compute }
   # Storage
-  BlobStorage: { file: "Storage/BlobStorage.png", category: Storage, aliases: [blobstorage, blob, storage] }
-  ManagedDisk: { file: "Storage/ManagedDisk.png", category: Storage, aliases: [manageddisk, disk] }
+  BlobStorage: { file: "Storage/BlobStorage.png", category: Storage, aliases: [blob, storage] }
+  ManagedDisk: { file: "Storage/ManagedDisk.png", category: Storage, aliases: [disk] }
   # Database
-  SQLDatabase: { file: "Database/SQLDatabase.png", category: Database, aliases: [sqldatabase, sql] }
-  CosmosDB: { file: "Database/CosmosDB.png", category: Database, aliases: [cosmosdb] }
-  CacheForRedis: { file: "Database/CacheForRedis.png", category: Database, aliases: [cacheforredis, rediscache, redis] }
+  SQLDatabase: { file: "Database/SQLDatabase.png", category: Database, aliases: [sql] }
+  CosmosDB: { file: "Database/CosmosDB.png", category: Database }
+  CacheForRedis: { file: "Database/CacheForRedis.png", category: Database, aliases: [rediscache, redis] }
   # Networking
-  LoadBalancer: { file: "Networking/LoadBalancer.png", category: Networking, aliases: [loadbalancer, lb] }
-  FrontDoor: { file: "Networking/FrontDoor.png", category: Networking, aliases: [frontdoor, cdn] }
-  DNS: { file: "Networking/DNS.png", category: Networking, aliases: [dns] }
-  APIManagement: { file: "Networking/APIManagement.png", category: Networking, aliases: [apimanagement, apim, apigateway] }
-  NATGateway: { file: "Networking/NATGateway.png", category: Networking, aliases: [natgateway, nat] }
+  LoadBalancer: { file: "Networking/LoadBalancer.png", category: Networking, aliases: [lb] }
+  FrontDoor: { file: "Networking/FrontDoor.png", category: Networking, aliases: [cdn] }
+  DNS: { file: "Networking/DNS.png", category: Networking }
+  APIManagement: { file: "Networking/APIManagement.png", category: Networking, aliases: [apim, apigateway] }
+  NATGateway: { file: "Networking/NATGateway.png", category: Networking, aliases: [nat] }
   # Integration
-  ServiceBus: { file: "Integration/ServiceBus.png", category: Integration, aliases: [servicebus] }
-  EventGrid: { file: "Integration/EventGrid.png", category: Integration, aliases: [eventgrid] }
+  ServiceBus: { file: "Integration/ServiceBus.png", category: Integration }
+  EventGrid: { file: "Integration/EventGrid.png", category: Integration }
   # Security
-  EntraID: { file: "Security/EntraID.png", category: Security, aliases: [entraid, azuread, aad, iam] }
-  KeyVault: { file: "Security/KeyVault.png", category: Security, aliases: [keyvault] }
+  EntraID: { file: "Security/EntraID.png", category: Security, aliases: [azuread, aad, iam] }
+  KeyVault: { file: "Security/KeyVault.png", category: Security }
 
 # ---- Containers: frame styles ----
+  # Compute (Tier 2)
+  AppService: { file: "Compute/AppService.png", category: Compute, aliases: [WebApp, WebApps] }
+  ContainerRegistry: { file: "Compute/ContainerRegistry.png", category: Compute, aliases: [ACR] }
+  Bastion: { file: "Compute/Bastion.png", category: Compute }
+  # Storage (Tier 2)
+  StorageAccount: { file: "Storage/StorageAccount.png", category: Storage, aliases: [StorageAccounts] }
+  # Database (Tier 2)
+  PostgreSQL: { file: "Database/PostgreSQL.png", category: Database, aliases: [Postgres, AzureDatabaseForPostgreSQL] }
+  MySQL: { file: "Database/MySQL.png", category: Database, aliases: [AzureDatabaseForMySQL] }
+  # Networking (Tier 2)
+  ApplicationGateway: { file: "Networking/ApplicationGateway.png", category: Networking, aliases: [AppGateway, AppGW] }
+  Firewall: { file: "Networking/Firewall.png", category: Networking, aliases: [AzureFirewall] }
+  VPNGateway: { file: "Networking/VPNGateway.png", category: Networking, aliases: [VPN] }
+  ExpressRoute: { file: "Networking/ExpressRoute.png", category: Networking }
+  TrafficManager: { file: "Networking/TrafficManager.png", category: Networking }
+  DDoSProtection: { file: "Networking/DDoSProtection.png", category: Networking, aliases: [DDoS] }
+  # Integration (Tier 2)
+  EventHubs: { file: "Integration/EventHubs.png", category: Integration, aliases: [EventHub] }
+  LogicApps: { file: "Integration/LogicApps.png", category: Integration, aliases: [LogicApp] }
+  # Security (Tier 2)
+  Sentinel: { file: "Security/Sentinel.png", category: Security, aliases: [MicrosoftSentinel] }
+  # Management (Tier 2)
+  Monitor: { file: "Management/Monitor.png", category: Management, aliases: [AzureMonitor] }
+  ApplicationInsights: { file: "Management/ApplicationInsights.png", category: Management, aliases: [AppInsights] }
+  # Analytics (Tier 2)
+  DataFactory: { file: "Analytics/DataFactory.png", category: Analytics, aliases: [ADF] }
+  Synapse: { file: "Analytics/Synapse.png", category: Analytics, aliases: [SynapseAnalytics] }
+  Databricks: { file: "Analytics/Databricks.png", category: Analytics }
+  # MachineLearning (Tier 2)
+  OpenAI: { file: "MachineLearning/OpenAI.png", category: MachineLearning, aliases: [AzureOpenAI] }
+  MachineLearning: { file: "MachineLearning/MachineLearning.png", category: MachineLearning, aliases: [AzureML] }
+
 groups:
   cloud: { label: "Microsoft Azure", borderColor: "#0078D4", dashed: false, labelPosition: top-left, icon: "General/azure-cloud-badge.png" }
   vpc: { label: "Virtual Network", borderColor: "#0078D4", dashed: false, labelPosition: top-left }

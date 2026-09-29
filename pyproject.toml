@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # PEP 639: license = "MIT" as a string
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "zook"
-version = "0.1.0"
+dynamic = ["version"]  # single source: zook.__version__
 description = "Generate PowerPoint architecture diagrams from a YAML definition."
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ dependencies = [
     "jsonschema>=4.20",
     "python-pptx>=1.0.0",
     "cairosvg>=2.7",
-    "click>=8.1",
+    "click>=8.2",
     "pillow>=10.0",
     "ruamel.yaml>=0.18",
 ]
@@ -56,6 +56,9 @@ dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.dynamic]
+version = { attr = "zook.__version__" }
+
 [tool.coverage.run]
 source = ["zook"]
 branch = true
@@ -67,12 +70,11 @@ exclude_lines = [
 ]
 
 [tool.setuptools.package-data]
+# Every data file under the package, whatever provider or category folder it
+# is in (tests/test_bundled_data.py and CI's wheel smoke test check they ship).
 zook = [
     "schemas/*.json",
-    "data/icons/aws/**/*.png",
-    "data/icons/aws/*.yaml",
-    "data/icons/gcp/**/*.png",
-    "data/icons/gcp/*.yaml",
-    "data/icons/azure/**/*.png",
-    "data/icons/azure/*.yaml",
+    "data/**/*.png",
+    "data/**/*.yaml",
+    "data/**/*.md",
 ]

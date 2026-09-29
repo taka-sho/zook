@@ -17,13 +17,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  tests:
+    # the full suite - both Pythons, the wheel smoke test and the sdist tests
+    uses: ./.github/workflows/tests.yml
+
   build:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
+      - name: Check the release tag matches the package version
+        if: github.event_name == 'release'
+        run: |
+          version=$(python -c "import re, pathlib; print(re.search(r'__version__ = \"(.+?)\"', pathlib.Path('src/zook/__init__.py').read_text()).group(1))")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::release tag $GITHUB_REF_NAME does not match the package version $version (src/zook/__init__.py)"
+            exit 1
+          fi
       - run: pip install build twine
       - run: python -m build
       - run: twine check dist/*
