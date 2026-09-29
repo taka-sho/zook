@@ -336,10 +336,18 @@ def _is_non_rect_shape_node(box: Box) -> bool:
     return is_shape_node(box.element) and box.element.style.get("shape") in _NON_RECT_SHAPES
 
 
-def _style_connector(conn, s: "_Slide") -> None:
-    # Lines cross every fill on the slide; they're kept readable on the canvas itself.
-    conn.line.color.rgb = RGBColor.from_string(readable_on(LINE_COLOR, s.canvas_background).lstrip("#"))
-    conn.line.width = Pt(1.25)
+_DASH = {"dashed": "dash", "dotted": "sysDot"}  # link.line -> a:prstDash
+
+
+def _style_connector(conn, s: "_Slide", link: Link) -> None:
+    # The default colour crosses every fill on the slide, so it's kept
+    # readable on the canvas itself; a colour the author chose is used as is.
+    color = link.color or readable_on(LINE_COLOR, s.canvas_background)
+    conn.line.color.rgb = RGBColor.from_string(color.lstrip("#"))
+    conn.line.width = Pt(link.width)  # "med" arrowheads are sized from the width
+    if link.line in _DASH:
+        ln = conn.line._get_or_add_ln()
+        ln.append(ln.makeelement(qn("a:prstDash"), {"val": _DASH[link.line]}))
     _no_shadow(conn)
 
 
@@ -440,7 +448,7 @@ def _render_polyline_link(shapes, link: Link, path, from_glue, to_glue, start_id
         conn = shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x0, y0, x1, y1)
         conn.begin_x, conn.begin_y = x0, y0
         conn.end_x, conn.end_y = x1, y1
-        _style_connector(conn, s)
+        _style_connector(conn, s, link)
         segments.append(conn)
 
     # Glue the two ends (_glue_target; interior joints stay at the explicit
@@ -483,7 +491,7 @@ def _render_link(shapes, link: Link, shape_index: dict, s: _Slide) -> None:
         conn.end_x, conn.end_y = p2
         if eff_style in ("elbow", "curved") and start_idx in (0, 2) and p1[0] != p2[0]:
             _orient_vertical_connector(conn, p1, p2)
-        _style_connector(conn, s)
+        _style_connector(conn, s, link)
         # a:ln wants headEnd before tailEnd (CT_LineProperties sequence)
         if link.arrow == "both":
             _add_arrowhead(conn, "a:headEnd")

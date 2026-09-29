@@ -121,6 +121,9 @@ links:
     to: db
     label: "3306"       # optional
     labelFontSize: 8      # label font size (pt, default 8). no effect without label
+    color: "#E7157B"      # optional. line/arrowhead colour (default grey)
+    line: dashed          # solid (default) / dashed / dotted
+    width: 2              # line width (pt, default 1.25); arrowheads scale with it
     arrow: end            # end (default) / both / none
     style: straight        # straight (default) / elbow / curved
     fromSide: bottom       # optional. force the connection side (top/bottom/left/right)

@@ -215,3 +215,11 @@ def test_cli_fatal_on_invalid_input(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["status"] == "error"
     assert "new diagram" in payload["error"] and "bad.yaml" in payload["error"]
+
+
+def test_a_link_line_style_change_is_reported():
+    new = _clone(links=[{"from": "web", "to": "db", "label": "3306", "line": "dashed", "color": "#e7157b"}])
+    (mod,) = diff_diagrams(_clone(), new).modified_links
+    assert {c.field for c in mod.changes} == {"line", "color"}
+    same = _clone(links=[{"from": "web", "to": "db", "label": "3306", "color": "#545b64", "width": 1.25}])
+    assert diff_diagrams(_clone(), same).identical  # the defaults, written out

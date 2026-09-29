@@ -475,3 +475,26 @@ def test_export_carries_styles_sides_and_background():
     edge = next(c for c in model.findall(".//mxCell") if c.get("edge") == "1")
     assert "exitX=0.5;exitY=1" in edge.get("style") and "entryX=0.5;entryY=0" in edge.get("style")
     assert cells["zook-meta"].get("visible") == "0"
+
+
+def test_link_line_styles_are_exported(tmp_path):
+    import yaml as _yaml
+
+    from zook.drawio import export_drawio
+    from zook.layout import build_layout
+    from zook.model import parse_diagram
+    from zook.registry import load_registries
+
+    doc = _yaml.safe_load("""
+version: "1.0"
+canvas: {aspectRatio: "16:9"}
+elements:
+  - {kind: node, id: a, type: EC2, x: 100, y: 100}
+  - {kind: node, id: b, type: EC2, x: 400, y: 100}
+links:
+  - {from: a, to: b, color: "#E7157B", line: dotted, width: 3}
+""")
+    diagram = parse_diagram(doc)
+    registry = load_registries()
+    xml = export_drawio(diagram, build_layout(diagram, registry), registry)
+    assert "strokeColor=#E7157B;strokeWidth=4;dashed=1;dashPattern=1 2;" in xml

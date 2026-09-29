@@ -77,17 +77,23 @@ def read_text(path: str) -> str:
             return f.read()
     except UnicodeDecodeError as exc:
         raise DiagramError(
-            f"{path} is not valid UTF-8 (byte {exc.start}): save the file as UTF-8"
+            f"{path} is not valid UTF-8 (byte {exc.start}): save the file as UTF-8",
+            "not-utf8", [{"file": path, "byte": exc.start}],
         ) from exc
     except OSError as exc:
-        raise DiagramError(f"cannot read {path}: {exc.strerror or exc}") from exc
+        raise DiagramError(f"cannot read {path}: {exc.strerror or exc}", "io-error", [{"file": path}]) from exc
 
 
 def parse_yaml(text: str, path: str) -> Any:
     try:
         return yaml.load(text, Loader=_StrictSafeLoader)  # noqa: S506 - a SafeLoader subclass
     except yaml.YAMLError as exc:
-        raise DiagramError(yaml_error_message(exc, path)) from exc
+        mark = getattr(exc, "problem_mark", None)
+        detail = {"file": path}
+        if mark is not None:
+            detail.update(line=mark.line + 1, column=mark.column + 1)
+        code = "duplicate-key" if "duplicate key" in str(getattr(exc, "problem", "") or "") else "yaml-syntax"
+        raise DiagramError(yaml_error_message(exc, path), code, [detail]) from exc
 
 
 def load_yaml(path: str) -> Any:

@@ -212,12 +212,38 @@ Wrote out.pptx
 
 `build`/`validate`/`doctor`/`diff`/`preview`/`export-drawio`/`sync`/`from-mermaid` は `--format json`(標準出力に1行のJSONオブジェクト)、`--format github`(GitHub Actions の `::warning::`/`::error::` アノテーション。複数行のメッセージも1つのアノテーションに収めます)にも対応しています。`icons list --format json` は語彙を JSON で出力します(`github` ではエラーだけがアノテーションになります)。
 
+`--format json` では、`warnings`(doctor では `remaining`)は従来どおりメッセージ文字列の配列です。`details`(`remainingDetails`)は同じ内容を1件ずつ構造化したもので、安定した **`code`**、関係する要素の id(**`elements`**)、関係するリンク(**`links`**。`{"from", "to", "id"}`)を持ちます。ツールや AI は、メッセージを解析しなくても Warning に対処できます。エラーも同様に `errorCode` と `errorDetails` を持ちます(スキーマ違反ごとの `path` と `pointer`、YAML エラーの `line`/`column`、存在しないリンク先の `didYouMean` など)。
+
 ```bash
 $ zook validate diagram.yaml --format json
-{"status": "warning", "warnings": ["unknown type 'Lamda' for node 'fn' (provider 'aws'); using placeholder icon - did you mean 'Lambda'?"]}
+{"status": "warning", "warnings": ["unknown type 'Lamda' for node 'fn' ..."], "details": [{"code": "unknown-type", "message": "unknown type 'Lamda' for node 'fn' ...", "elements": ["fn"], "links": []}]}
 $ zook validate broken.yaml --format json
-{"status": "error", "warnings": [], "error": "YAML error in broken.yaml at line 7, column 10: mapping values are not allowed here"}
+{"status": "error", "warnings": [], "details": [], "error": "YAML error in broken.yaml at line 7, column 10: ...", "errorCode": "yaml-syntax", "errorDetails": [{"file": "broken.yaml", "line": 7, "column": 10}]}
 ```
+
+| Warning の `code` | 意味(`elements` / `links` に入るもの) |
+|---|---|
+| `unknown-type` / `unknown-container-type` | `type` がレジストリにない。メッセージに近い候補を示す(その要素) |
+| `icon-file-missing` / `icon-file-unreadable` | レジストリのアイコンファイルがない、または画像として読めない(その要素) |
+| `element-overlap` | 兄弟要素どうしが重なっている(両方) |
+| `container-label-overlap` | 要素がコンテナのラベルに重なっている(要素、コンテナ) |
+| `outside-container` | 子要素がコンテナの外にはみ出している(子、コンテナ) |
+| `link-crosses-element` / `link-crosses-container-label` / `link-crosses-link-label` | リンクの経路が要素・コンテナのラベル・他のリンクのラベルを貫いている(その要素やコンテナ。そのリンクと、相手のリンク) |
+| `link-through-own-endpoint` | リンクが自分の端点を貫いて折り返している |
+| `link-label-overlaps-element` / `link-label-overlaps-container-label` / `link-labels-overlap` / `link-label-covers-endpoint` | リンクのラベルが何かを覆っている |
+| `link-aliasing` | 2本のリンクが同じ直線上で重なり、1本の接続に見える(両方のリンク) |
+| `canvas-shrunk` / `off-canvas` | スライドに収めるため 70% 未満に縮小した(キャンバス外に明示座標で置かれた要素)/ `fit: none` でスライドの外に描かれる |
+| `registry-alias-ignored` | `--registry` の別名が、別の type の名前と同じ |
+| `preview-font-ignored` / `preview-no-cjk-font` | preview のみ。フォントの設定 |
+| `sync-…` | `sync` のみ。draw.io で編集されたが同期しない内容(`sync-reparent-ignored`、`sync-label-changed`、`sync-link-added` など) |
+
+| `errorCode` | 意味 |
+|---|---|
+| `schema` | スキーマ違反(`errorDetails` にそれぞれの `path`・`pointer`・`message`) |
+| `yaml-syntax` / `duplicate-key` / `not-utf8` / `not-a-diagram` | ファイルを図として読めない |
+| `duplicate-id` / `duplicate-link-id` / `unknown-link-endpoint` / `link-side-axis-mismatch` / `invalid-number` | id・リンク・数値の整合が取れていない |
+| `invalid-registry` | `--registry` のファイルがスキーマに合っていない |
+| `io-error` / `internal-error` / `fatal` | パスを読み書きできない / zook の不具合 / その他 |
 
 Fatal、読めないファイル、書き込めない出力先など、失敗はすべてこの形で報告され、Python のトレースバックにはなりません。想定外の内部エラーも `internal error: ...` というメッセージで同じ形に報告されます(`ZOOK_DEBUG=1` を設定すると標準エラー出力にトレースバックも出ます。報告にご協力ください)。
 

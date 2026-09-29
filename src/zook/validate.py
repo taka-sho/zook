@@ -6,6 +6,7 @@ is Fatal: raises DiagramError so the CLI can stop with a non-zero exit code.
 
 from __future__ import annotations
 
+import difflib
 import importlib.resources as resources
 import json
 import math
@@ -64,16 +65,23 @@ def _message(err) -> str:
     return message + _yaml_type_hint(err)
 
 
+def schema_violations(raw: Any, schema_name: str = "zook.schema.json") -> list[dict]:
+    """Every violation of `schema_name` in `raw`, ordered by path:
+    {"path": "$['elements'][0]['style']", "pointer": ["elements", 0, "style"],
+    "message": ...} - the path as text and as a list of keys/indexes."""
+    validator = jsonschema.Draft202012Validator(_load_schema(schema_name))
+    errors = sorted(validator.iter_errors(raw), key=lambda e: [(0, p) if isinstance(p, int) else (1, p) for p in e.absolute_path])
+    violations = []
+    for err in errors:
+        path = "$" + "".join(f"[{p!r}]" if isinstance(p, str) else f"[{p}]" for p in err.absolute_path)
+        violations.append({"path": path, "pointer": list(err.absolute_path), "message": _message(err)})
+    return violations
+
+
 def schema_errors(raw: Any, schema_name: str = "zook.schema.json") -> list[str]:
     """Every violation of `schema_name` in `raw`, one `$path: message` line
     each, ordered by path."""
-    validator = jsonschema.Draft202012Validator(_load_schema(schema_name))
-    errors = sorted(validator.iter_errors(raw), key=lambda e: [(0, p) if isinstance(p, int) else (1, p) for p in e.absolute_path])
-    lines = []
-    for err in errors:
-        path = "$" + "".join(f"[{p!r}]" if isinstance(p, str) else f"[{p}]" for p in err.absolute_path)
-        lines.append(f"  {path}: {_message(err)}")
-    return lines
+    return [f"  {v['path']}: {v['message']}" for v in schema_violations(raw, schema_name)]
 
 
 def validate_schema(raw: dict) -> None:
@@ -99,10 +107,16 @@ def validate_schema(raw: dict) -> None:
                 " - it looks like XML (a .drawio file?); commands take the diagram YAML "
                 "(for sync: `zook sync DIAGRAM.yaml DIAGRAM.drawio`)"
             )
-        raise DiagramError(f"not a zook diagram: the document is {what}, not a mapping with version/canvas/elements{hint}")
-    lines = schema_errors(raw)
-    if lines:
-        raise DiagramError("Schema validation failed:\n" + "\n".join(lines))
+        raise DiagramError(
+            f"not a zook diagram: the document is {what}, not a mapping with version/canvas/elements{hint}",
+            "not-a-diagram",
+        )
+    violations = schema_violations(raw)
+    if violations:
+        raise DiagramError(
+            "Schema validation failed:\n" + "\n".join(f"  {v['path']}: {v['message']}" for v in violations),
+            "schema", violations,
+        )
 
 
 # Every number in a diagram is a coordinate, size, spacing or font size; none
@@ -146,7 +160,8 @@ def validate_semantics(raw: dict) -> None:
     if non_finite:
         raise DiagramError(
             f"numbers must be finite and within ±{_MAX_ABS_NUMBER:,} (NaN/Infinity and huge values are not valid): "
-            + ", ".join(non_finite)
+            + ", ".join(non_finite),
+            "invalid-number", [{"path": path} for path in non_finite],
         )
 
     ids: dict[str, int] = {}
@@ -154,34 +169,42 @@ def validate_semantics(raw: dict) -> None:
         ids[el["id"]] = ids.get(el["id"], 0) + 1
     duplicates = sorted(k for k, v in ids.items() if v > 1)
     if duplicates:
-        raise DiagramError(f"Duplicate element id(s): {', '.join(duplicates)}")
+        raise DiagramError(
+            f"Duplicate element id(s): {', '.join(duplicates)}", "duplicate-id", [{"id": d} for d in duplicates]
+        )
 
     known_ids = set(ids)
     link_ids: dict[str, int] = {}
     for link in raw.get("links", []):
         if "id" in link:
             link_ids[link["id"]] = link_ids.get(link["id"], 0) + 1
-    problems = []
+    problems, details = [], []
     if duplicated := sorted(k for k, v in link_ids.items() if v > 1):
         problems.append(f"duplicate link id(s): {', '.join(duplicated)}")
+        details += [{"id": i, "problem": "duplicate link id"} for i in duplicated]
     if clashing := sorted(set(link_ids) & known_ids):
         problems.append(f"link id(s) also used by an element: {', '.join(clashing)}")
+        details += [{"id": i, "problem": "link id used by an element"} for i in clashing]
     if problems:
         # export-drawio writes ids as mxCell ids, where a repeat makes draw.io
         # decode one cell over another (a node turning into an edge).
-        raise DiagramError("ids must be unique across elements and links: " + "; ".join(problems))
+        raise DiagramError("ids must be unique across elements and links: " + "; ".join(problems), "duplicate-link-id", details)
 
     missing: list[str] = []
-    for link in raw.get("links", []):
-        if link["from"] not in known_ids:
-            missing.append(f"link.from={link['from']!r}")
-        if link["to"] not in known_ids:
-            missing.append(f"link.to={link['to']!r}")
+    missing_details: list[dict] = []
+    for index, link in enumerate(raw.get("links", [])):
+        for end in ("from", "to"):
+            if link[end] not in known_ids:
+                close = difflib.get_close_matches(link[end], sorted(known_ids), n=3, cutoff=0.6)
+                hint = f" (did you mean {' or '.join(repr(c) for c in close)}?)" if close else ""
+                missing.append(f"link.{end}={link[end]!r}{hint}")
+                missing_details.append({"path": f"$['links'][{index}][{end!r}]", "id": link[end], "didYouMean": close})
     if missing:
-        raise DiagramError("Link references unknown element id(s): " + ", ".join(missing))
+        raise DiagramError("Link references unknown element id(s): " + ", ".join(missing), "unknown-link-endpoint", missing_details)
 
     mismatched: list[str] = []
-    for link in raw.get("links", []):
+    mismatched_details: list[dict] = []
+    for index, link in enumerate(raw.get("links", [])):
         from_side, to_side = link.get("fromSide"), link.get("toSide")
         # The axis-match rule exists because a plain elbow (bentConnector3) must
         # enter/exit on one axis; a waypoint link is an explicit polyline, so any
@@ -190,10 +213,12 @@ def validate_semantics(raw: dict) -> None:
             continue
         if from_side and to_side and _SIDE_AXIS[from_side] != _SIDE_AXIS[to_side]:
             mismatched.append(f"{link['from']!r} -> {link['to']!r} (fromSide={from_side!r}, toSide={to_side!r})")
+            mismatched_details.append({"path": f"$['links'][{index}]", "fromSide": from_side, "toSide": to_side})
     if mismatched:
         raise DiagramError(
             "link fromSide/toSide must be on the same axis (both top/bottom, or both left/right): "
-            + ", ".join(mismatched)
+            + ", ".join(mismatched),
+            "link-side-axis-mismatch", mismatched_details,
         )
 
 

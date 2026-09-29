@@ -213,12 +213,38 @@ Wrote out.pptx
 
 `build`/`validate`/`doctor`/`diff`/`preview`/`export-drawio`/`sync`/`from-mermaid` also support `--format json` (a single-line JSON object on stdout) and `--format github` (GitHub Actions `::warning::`/`::error::` annotations; a multi-line message is kept on one annotation). `icons list --format json` prints the vocabulary as JSON (under `github` only an error becomes an annotation).
 
+Under `--format json`, `warnings` (and doctor's `remaining`) stays a list of message strings; `details` (`remainingDetails`) repeats each one with a stable **`code`**, the ids of the **`elements`** it concerns and the **`links`** (`{"from", "to", "id"}`) — so a tool or an AI can act on a Warning without parsing its text. An error comes with `errorCode` and `errorDetails` the same way (each schema violation's `path` and `pointer`, a YAML error's `line`/`column`, an unknown link endpoint's `didYouMean`).
+
 ```bash
 $ zook validate diagram.yaml --format json
-{"status": "warning", "warnings": ["unknown type 'Lamda' for node 'fn' (provider 'aws'); using placeholder icon - did you mean 'Lambda'?"]}
+{"status": "warning", "warnings": ["unknown type 'Lamda' for node 'fn' ..."], "details": [{"code": "unknown-type", "message": "unknown type 'Lamda' for node 'fn' ...", "elements": ["fn"], "links": []}]}
 $ zook validate broken.yaml --format json
-{"status": "error", "warnings": [], "error": "YAML error in broken.yaml at line 7, column 10: mapping values are not allowed here"}
+{"status": "error", "warnings": [], "details": [], "error": "YAML error in broken.yaml at line 7, column 10: ...", "errorCode": "yaml-syntax", "errorDetails": [{"file": "broken.yaml", "line": 7, "column": 10}]}
 ```
+
+| Warning `code` | Meaning (`elements` / `links`) |
+|---|---|
+| `unknown-type` / `unknown-container-type` | a `type` isn't in the registry; the message names the closest ones (the element) |
+| `icon-file-missing` / `icon-file-unreadable` | the registry's icon file is missing or not an image (the element) |
+| `element-overlap` | two sibling elements overlap (both) |
+| `container-label-overlap` | an element overlaps its container's label (element, container) |
+| `outside-container` | a child extends outside its container (child, container) |
+| `link-crosses-element` / `link-crosses-container-label` / `link-crosses-link-label` | a link's path runs through an element / a container's label / another link's label (that element or container; the link, and the other link) |
+| `link-through-own-endpoint` | a link doubles back through one of its own endpoints |
+| `link-label-overlaps-element` / `link-label-overlaps-container-label` / `link-labels-overlap` / `link-label-covers-endpoint` | a link's label covers something |
+| `link-aliasing` | two links share a collinear segment and read as one connection (both links) |
+| `canvas-shrunk` / `off-canvas` | shrunk below 70% to fit the slide (any stray explicitly positioned elements) / drawn outside the slide with `fit: none` |
+| `registry-alias-ignored` | a `--registry` alias names another type |
+| `preview-font-ignored` / `preview-no-cjk-font` | preview only: the font setting |
+| `sync-…` | `sync` only: something edited in draw.io that isn't synced (`sync-reparent-ignored`, `sync-label-changed`, `sync-link-added`, ...) |
+
+| `errorCode` | Meaning |
+|---|---|
+| `schema` | schema violations (`errorDetails`: `path`, `pointer`, `message` each) |
+| `yaml-syntax` / `duplicate-key` / `not-utf8` / `not-a-diagram` | the file can't be read as a diagram |
+| `duplicate-id` / `duplicate-link-id` / `unknown-link-endpoint` / `link-side-axis-mismatch` / `invalid-number` | the diagram's ids, links or numbers don't hold together |
+| `invalid-registry` | a `--registry` file doesn't match its schema |
+| `io-error` / `internal-error` / `fatal` | a path can't be read or written / a zook bug / anything else |
 
 Every failure — a Fatal, an unreadable file, an unwritable output path — is reported this way, never as a Python traceback. An unexpected internal error is reported the same way with an `internal error: ...` message (set `ZOOK_DEBUG=1` to also print the traceback to stderr, and please report it).
 

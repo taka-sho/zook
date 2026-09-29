@@ -28,8 +28,11 @@ Supported syntax:
   - Edges: normal/thick/dotted/invisible links with `>`/`x`/`o` heads and
     any length (_LINK_TOKEN), `|label|` or `-- label -->`-style labels,
     `A & B --> C & D`, chained edges, Mermaid 11 edge ids (`A e1@--> B`,
-    whose `e1@{ animate: true }` property statements are ignored).
-    Dotted/thick styling isn't reproduced.
+    whose `e1@{ animate: true }` property statements are ignored). A dotted
+    link becomes `line: dashed`, a thick one `width: 2.5`; an invisible
+    `~~~` link draws nothing but still ranks the layout, as in Mermaid.
+  - `linkStyle <n,...|default> stroke:...,stroke-width:...,
+    stroke-dasharray:...` sets those links' color, width and dash.
   - `subgraph <id>[<Title>]` ... `end`, nestable. Without `[<Title>]` the
     subgraph's own text is its title (`subgraph Backend`, `subgraph "AWS
     Cloud"`), as Mermaid draws it. `end` is lowercase-only, so `End`/`END`
@@ -37,7 +40,7 @@ Supported syntax:
     subgraph that mentions a node owns it.
   - A branching scope (fan-out/fan-in) is arranged by rank: same-rank
     members side by side in a borderless row/column (see by_rank).
-  - `classDef`/`class`/`style`/`linkStyle`/`click`/`acc*` statements and a
+  - `classDef`/`class`/`style`/`click`/`acc*` statements and a
     top-level `direction` are ignored, as are a surrounding ```mermaid code
     fence, `---` front matter and `%%{ }%%` directives. Anything else the
     parser can't read is a DiagramError naming the line, never silently
@@ -65,7 +68,13 @@ _COMMENT_RE = re.compile(r"^\s*%%")
 _CODE_FENCE_RE = re.compile(r"^\s*```")
 # Styling/interaction/accessibility statements zook has nothing to map to;
 # ignored (documented), unlike an edge it can't read, which is an error.
-_IGNORED_STATEMENT_RE = re.compile(r"^(?:classDef|class|style|linkStyle|click|accTitle|accDescr)\b")
+_IGNORED_STATEMENT_RE = re.compile(r"^(?:classDef|class|style|click|accTitle|accDescr)\b")
+_LINK_STYLE_RE = re.compile(r"^linkStyle\s+(?P<which>default|[\d\s,]+?)\s+(?P<props>\S.*?);?\s*$")
+_NAMED_COLORS = {
+    "black": "#000000", "white": "#FFFFFF", "red": "#FF0000", "green": "#008000", "blue": "#0000FF",
+    "orange": "#FFA500", "purple": "#800080", "gray": "#808080", "grey": "#808080", "yellow": "#FFFF00",
+}
+THICK_WIDTH = 2.5  # pt: a thick (`==>`) link, twice zook's default line
 _EDGE_LIKE_RE = re.compile(r"--|==|-\.|~~~")
 
 # One edge token, as Mermaid's lexer reads them (flow.jison LINK/THICK_LINK/
@@ -412,23 +421,71 @@ def _bad_reference(line_no: int, statement: str) -> str:
     return f"Mermaid parse error at line {line_no}: could not parse node reference in '{statement}'"
 
 
-def _parse_link(text: str, pos: int) -> Optional[tuple[str, Optional[str], bool, int]]:
-    """(arrow, label, visible, new_pos) for the edge starting at `pos`, or None."""
+class _Edge:
+    __slots__ = ("src", "dst", "arrow", "label", "kind", "visible", "index")
+
+    def __init__(self, src, dst, arrow, label, kind, visible):
+        self.src, self.dst, self.arrow, self.label = src, dst, arrow, label
+        self.kind, self.visible = kind, visible  # kind: "normal" | "thick" | "dotted"
+        self.index = -1  # Mermaid's link number (what `linkStyle` refers to), set by parse_flowchart
+
+
+def _link_kind(token: str) -> str:
+    return "thick" if token.startswith("=") else "dotted" if "." in token else "normal"
+
+
+def _parse_link(text: str, pos: int) -> Optional[tuple[str, Optional[str], bool, str, int]]:
+    """(arrow, label, visible, kind, new_pos) for the edge starting at `pos`, or None."""
     m = _TEXT_LINK_RE.match(text, pos)
     if m:
         left = m.group("l") != ""
         right = m.group("close")[-1] in ">xo"
-        return _arrow(left, right), _clean_label(m.group("text")), True, m.end()
+        return _arrow(left, right), _clean_label(m.group("text")), True, _link_kind(m.group("open")), m.end()
     m = _LINK_RE.match(text, pos)
     if not m:
         return None
     token = m.group("tok")
     if token.startswith("~"):
-        return "none", None, False, m.end()  # ~~~ invisible link: layout hint only
+        return "none", None, False, "normal", m.end()  # ~~~ invisible link: a layout hint only
     left = m.group("l") != ""
     right = token[-1] in (">", "x", "o")
     label = m.group("label")
-    return _arrow(left, right), (_clean_label(label) if label and label.strip() else None), True, m.end()
+    return _arrow(left, right), (_clean_label(label) if label and label.strip() else None), True, _link_kind(token), m.end()
+
+
+def _css_color(value: str) -> Optional[str]:
+    value = value.strip().lower()
+    if re.fullmatch(r"#[0-9a-f]{6}", value):
+        return value.upper()
+    if re.fullmatch(r"#[0-9a-f]{3}", value):
+        return "#" + "".join(ch * 2 for ch in value[1:]).upper()
+    return _NAMED_COLORS.get(value)
+
+
+def _link_style_props(text: str) -> dict:
+    """zook link fields from a `linkStyle` property list (CSS-like; a
+    dasharray may itself contain commas)."""
+    chunks: list[str] = []
+    for chunk in text.split(","):
+        if ":" in chunk or not chunks:
+            chunks.append(chunk)
+        else:
+            chunks[-1] += "," + chunk
+    props = {}
+    for chunk in chunks:
+        key, _, value = chunk.partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if key == "stroke" and (color := _css_color(value)):
+            props["color"] = color
+        elif key == "stroke-width" and (m := re.match(r"([\d.]+)\s*(px|pt)?$", value)):
+            width = float(m.group(1)) * (1.0 if m.group(2) == "pt" else 0.75)  # CSS px -> pt
+            if width > 0:
+                props["width"] = min(round(width, 2), 12)
+        elif key == "stroke-dasharray":
+            first = re.match(r"[\d.]+", value)
+            if first and float(first.group(0)) > 0:
+                props["line"] = "dotted" if float(first.group(0)) <= 2 else "dashed"
+    return props
 
 
 def _arrow(left: bool, right: bool) -> str:
@@ -451,17 +508,15 @@ def _parse_statement(statement: str, line_no: int):
             link = _parse_link(statement, edge_id.end())
         if link is None:
             raise DiagramError(_bad_reference(line_no, statement))
-        arrow, label, visible, pos = link
+        arrow, label, visible, kind, pos = link
         group, pos = _parse_node_group(statement, pos, line_no, statement)
         groups.append(group)
-        links.append((arrow, label, visible))
+        links.append((arrow, label, visible, kind))
     edges = []
-    for k, (arrow, label, visible) in enumerate(links):
-        if not visible:
-            continue
+    for k, (arrow, label, visible, kind) in enumerate(links):
         for src in groups[k]:
             for dst in groups[k + 1]:
-                edges.append((src.raw_id, dst.raw_id, arrow, label))
+                edges.append(_Edge(src.raw_id, dst.raw_id, arrow, label, kind, visible))
     return [n for g in groups for n in g], edges
 
 
@@ -487,7 +542,8 @@ def parse_flowchart(text: str) -> dict:
     node_defs: dict[str, dict] = {}  # raw id -> {"label", "shape"}
     appearance: list[tuple[str, str]] = []  # ("node"|"subgraph", raw id) in first-appearance order, per scope
     subgraphs: dict[str, dict] = {}  # raw id -> {"title", "direction", "parent", "members": [ids], "closed": int}
-    edges: list[tuple[str, str, str, Optional[str]]] = []
+    edges: list[_Edge] = []
+    link_styles: list[tuple[Optional[list[int]], dict]] = []  # (link numbers, or None for default; fields)
     stack: list[Optional[str]] = [None]  # None = top level
     scope_items: dict[Optional[str], list[tuple[str, str]]] = {None: []}
     close_counter = 0
@@ -536,6 +592,13 @@ def parse_flowchart(text: str) -> dict:
             scope_items[stack[-1]].append(("subgraph", raw_id))
             scope_items[raw_id] = []
             stack.append(raw_id)
+            continue
+
+        link_style = _LINK_STYLE_RE.match(line)
+        if link_style:
+            which = link_style.group("which")
+            indexes = None if which == "default" else [int(n) for n in re.findall(r"\d+", which)]
+            link_styles.append((indexes, _link_style_props(link_style.group("props"))))
             continue
 
         if _IGNORED_STATEMENT_RE.match(line):
@@ -605,7 +668,8 @@ def parse_flowchart(text: str) -> dict:
         column, for LR) of its own; a plain chain is left exactly as is."""
         index = {m: k for k, m in enumerate(members)}
         succ: dict[str, list[str]] = {m: [] for m in members}
-        for src, dst, _arrow, _label in edges:
+        for edge in edges:  # invisible links rank the layout too, as in Mermaid
+            src, dst = edge.src, edge.dst
             a, b = unit_in(scope, src), unit_in(scope, dst)
             if a is not None and b is not None and a != b and b not in succ[a]:
                 succ[a].append(b)
@@ -718,13 +782,29 @@ def parse_flowchart(text: str) -> dict:
     root = {"kind": "container", "id": root_id, "type": "group", "layout": {"direction": root_direction},
             "style": {"borderWidth": 0}, "children": build(None, root_direction)}
 
+    for index, edge in enumerate(edges):
+        edge.index = index
+    default_style = {}
+    for indexes, props in link_styles:
+        if indexes is None:
+            default_style.update(props)
     links = []
-    for src, dst, arrow, label in edges:
-        link = {"from": id_map[src], "to": id_map[dst]}
-        if arrow != "end":
-            link["arrow"] = arrow
-        if label:
-            link["label"] = label
+    for edge in edges:
+        if not edge.visible:
+            continue
+        link = {"from": id_map[edge.src], "to": id_map[edge.dst]}
+        if edge.arrow != "end":
+            link["arrow"] = edge.arrow
+        if edge.label:
+            link["label"] = edge.label
+        if edge.kind == "dotted":
+            link["line"] = "dashed"  # Mermaid draws its "dotted" link with short dashes
+        elif edge.kind == "thick":
+            link["width"] = THICK_WIDTH
+        link.update(default_style)
+        for indexes, props in link_styles:
+            if indexes is not None and edge.index in indexes:
+                link.update(props)
         links.append(link)
 
     return {

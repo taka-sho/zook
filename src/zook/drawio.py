@@ -32,7 +32,7 @@ from xml.sax.saxutils import escape
 
 from ruamel.yaml import YAML
 
-from .errors import DiagramError
+from .errors import DiagramError, Finding
 from .layout import (
     Box,
     build_layout,
@@ -260,6 +260,11 @@ def _emit_edges(lines: list[str], diagram: Diagram, root_box: Box, meta: dict) -
             style += "exitPerimeter=0;"
         if not entry_exact:
             style += "entryPerimeter=0;"
+        style += f"strokeColor={link.color or '#545B64'};strokeWidth={_px(link.width)};"
+        if link.line == "dashed":
+            style += "dashed=1;"
+        elif link.line == "dotted":
+            style += "dashed=1;dashPattern=1 2;"
         if link.arrow == "none":
             style += "endArrow=none;"
         if link.arrow == "both":
@@ -410,9 +415,10 @@ def _pick_diagram(mxfile: ET.Element, drawio_path: str, warnings: list[str]) -> 
         )
     chosen = next((d for d in diagrams if d.get("id") == "zook"), diagrams[0])
     if len(diagrams) > 1 and chosen.get("id") != "zook":
-        warnings.append(
-            f"{drawio_path} has {len(diagrams)} pages; syncing the first one ({chosen.get('name', '?')!r})"
-        )
+        warnings.append(Finding(
+            f"{drawio_path} has {len(diagrams)} pages; syncing the first one ({chosen.get('name', '?')!r})",
+            "sync-multiple-pages",
+        ))
     return chosen
 
 
@@ -471,13 +477,17 @@ def sync_from_drawio(yaml_path: str, drawio_path: str, user_registry_path: str |
         try:
             meta = json.loads(by_id[_META_ID].get("value", ""))
         except ValueError:
-            warnings.append(f"the {_META_ID!r} cell in {drawio_path} is unreadable - comparing against the YAML's layout")
+            warnings.append(Finding(
+                f"the {_META_ID!r} cell in {drawio_path} is unreadable - comparing against the YAML's layout",
+                "sync-export-record-unreadable",
+            ))
     exported = {k: tuple(v) for k, v in (meta or {}).get("geometry", {}).items()}
     if meta and any(_differs(exported[k], current[k]) for k in exported.keys() & current.keys()):
-        warnings.append(
+        warnings.append(Finding(
             "the YAML's layout has changed since this .drawio was exported - only what was edited in draw.io "
-            "is written back; re-export to see the current layout"
-        )
+            "is written back; re-export to see the current layout",
+            "sync-stale-export",
+        ))
 
     # 1. what was edited in draw.io
     targets: dict[str, tuple[float, float, float, float]] = {}
@@ -485,19 +495,21 @@ def sync_from_drawio(yaml_path: str, drawio_path: str, user_registry_path: str |
     for eid in boxes:
         cell = by_id.get(eid)
         if cell is None:
-            warnings.append(
+            warnings.append(Finding(
                 f"element {eid!r} not found in {drawio_path!r} - was it deleted in draw.io? "
-                "structural changes aren't synced; edit the YAML directly if intentional"
-            )
+                "structural changes aren't synced; edit the YAML directly if intentional",
+                "sync-element-missing", [eid],
+            ))
             continue
         drawio_parent = cell.get("parent")
         drawio_parent = None if drawio_parent in layers else drawio_parent
         if drawio_parent != parent_of.get(eid):
             where = repr(drawio_parent) if drawio_parent else "the top level"
-            warnings.append(
+            warnings.append(Finding(
                 f"element {eid!r} was moved into {where} in draw.io - moving elements between containers "
-                "isn't synced; its position was left as is (edit the YAML's nesting directly)"
-            )
+                "isn't synced; its position was left as is (edit the YAML's nesting directly)",
+                "sync-reparent-ignored", [eid] + ([drawio_parent] if drawio_parent else []),
+            ))
             continue
         geometry = _parse_geometry(cell)
         if geometry is None:
@@ -512,10 +524,11 @@ def sync_from_drawio(yaml_path: str, drawio_path: str, user_registry_path: str |
     for cid, cell in cells:
         if cid in ("0", _META_ID) or cid in layers or cid in boxes or cell.get("edge") == "1":
             continue
-        warnings.append(
+        warnings.append(Finding(
             f"drawio cell {cid!r} does not match any known element id - ignored "
-            "(node/container additions aren't synced; edit the YAML directly)"
-        )
+            "(node/container additions aren't synced; edit the YAML directly)",
+            "sync-element-added", [cid],
+        ))
 
     for eid, (moved, resized) in edited.items():
         node = _find_element_node(raw["elements"], eid)
@@ -541,7 +554,10 @@ def sync_from_drawio(yaml_path: str, drawio_path: str, user_registry_path: str |
                 if _differs(layout[eid][2:], (w, h)):
                     node["width"], node["height"] = yaml_number(w), yaml_number(h)
         else:
-            warnings.append("could not reproduce the draw.io layout exactly for: " + ", ".join(sorted(drift)))
+            warnings.append(Finding(
+                "could not reproduce the draw.io layout exactly for: " + ", ".join(sorted(drift)),
+                "sync-drift", sorted(drift),
+            ))
 
     # 3. links: bend points and labels
     exported_points = (meta or {}).get("points", {})
@@ -552,12 +568,16 @@ def sync_from_drawio(yaml_path: str, drawio_path: str, user_registry_path: str |
         link_ids.add(edge_id)
         cell = by_id.get(edge_id)
         if cell is None:
-            warnings.append(f"link {link.from_id!r} -> {link.to_id!r} not found in {drawio_path!r} - was it deleted?")
+            warnings.append(Finding(
+                f"link {link.from_id!r} -> {link.to_id!r} not found in {drawio_path!r} - was it deleted?",
+                "sync-link-missing", [], [link],
+            ))
             continue
         if (cell.get("source"), cell.get("target")) != (link.from_id, link.to_id):
-            warnings.append(
-                f"link {link.from_id!r} -> {link.to_id!r} was reconnected in draw.io - connection changes aren't synced"
-            )
+            warnings.append(Finding(
+                f"link {link.from_id!r} -> {link.to_id!r} was reconnected in draw.io - connection changes aren't synced",
+                "sync-link-reconnected", [], [link],
+            ))
         points = _points(cell)
         before = [tuple(p) for p in exported_points.get(edge_id, [])] if meta else list(link.waypoints)
         if _differs([c for p in points for c in p], [c for p in before for c in p]):
@@ -567,14 +587,23 @@ def sync_from_drawio(yaml_path: str, drawio_path: str, user_registry_path: str |
             else:
                 raw_link.pop("waypoints", None)
         if meta and edge_id in exported_labels and cell.get("value", "") != exported_labels[edge_id]:
-            warnings.append(f"the label of link {link.from_id!r} -> {link.to_id!r} was changed in draw.io - labels aren't synced; edit the YAML")
+            warnings.append(Finding(
+                f"the label of link {link.from_id!r} -> {link.to_id!r} was changed in draw.io - labels aren't synced; edit the YAML",
+                "sync-label-changed", [], [link],
+            ))
     for eid in boxes:
         cell = by_id.get(eid)
         if meta and cell is not None and eid in exported_labels and cell.get("value", "") != exported_labels[eid]:
-            warnings.append(f"the label of {eid!r} was changed in draw.io - labels aren't synced; edit the YAML")
+            warnings.append(Finding(
+                f"the label of {eid!r} was changed in draw.io - labels aren't synced; edit the YAML",
+                "sync-label-changed", [eid],
+            ))
     for cid, cell in cells:
         if cell.get("edge") == "1" and cid not in link_ids:
-            warnings.append(f"link {cid!r} added in draw.io isn't synced - add it to the YAML's links")
+            warnings.append(Finding(
+                f"link {cid!r} added in draw.io isn't synced - add it to the YAML's links", "sync-link-added",
+                [], [{"id": cid, "from": cell.get("source"), "to": cell.get("target")}],
+            ))
 
     return raw, warnings
 

@@ -155,7 +155,7 @@ def test_preview_reports_in_the_requested_format(tmp_path):
     out = tmp_path / "x.png"
     result = CliRunner().invoke(main, ["preview", str(FIXTURE), "-o", str(out), "--format", "json"])
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == {"status": "ok", "warnings": [], "output": str(out)}
+    assert json.loads(result.stdout) == {"status": "ok", "warnings": [], "details": [], "output": str(out)}
     assert out.read_bytes().startswith(b"\x89PNG")
 
 
@@ -366,3 +366,90 @@ def test_swapped_sync_arguments_say_what_went_wrong(tmp_path):
     assert result.exit_code == 1
     error = json.loads(result.stdout)["error"]
     assert "looks like XML" in error and "zook sync DIAGRAM.yaml DIAGRAM.drawio" in error
+
+
+def _write_diagram(tmp_path, text):
+    path = tmp_path / "d.yaml"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+def test_warnings_carry_a_code_and_the_ids_they_concern(tmp_path):
+    path = _write_diagram(tmp_path, """version: "1.0"
+canvas: {aspectRatio: "16:9"}
+elements:
+  - {kind: node, id: a, type: Lamda, x: 100, y: 100}
+  - {kind: node, id: b, type: EC2, x: 120, y: 110}
+""")
+    result = CliRunner().invoke(main, ["validate", path, "--format", "json"])
+    payload = json.loads(result.stdout)
+    assert payload["warnings"] == [d["message"] for d in payload["details"]]
+    by_code = {d["code"]: d for d in payload["details"]}
+    assert by_code["unknown-type"]["elements"] == ["a"]
+    assert sorted(by_code["element-overlap"]["elements"]) == ["a", "b"]
+
+
+def test_link_warnings_name_the_link(tmp_path):
+    path = _write_diagram(tmp_path, """version: "1.0"
+canvas: {aspectRatio: "16:9"}
+elements:
+  - {kind: node, id: a, type: EC2, x: 100, y: 100}
+  - {kind: node, id: wall, type: EC2, x: 300, y: 100}
+  - {kind: node, id: b, type: EC2, x: 500, y: 100}
+links:
+  - {id: ab, from: a, to: b}
+""")
+    payload = json.loads(CliRunner().invoke(main, ["validate", path, "--format", "json"]).stdout)
+    (detail,) = [d for d in payload["details"] if d["code"] == "link-crosses-element"]
+    assert detail["elements"] == ["wall"] and detail["links"] == [{"from": "a", "to": "b", "id": "ab"}]
+
+
+def test_schema_errors_are_structured(tmp_path):
+    path = _write_diagram(tmp_path, """version: "1.0"
+canvas: {aspectRatio: "16:9"}
+elements:
+  - {kind: node, id: a, type: EC2, style: {labelPosition: bottom}}
+""")
+    payload = json.loads(CliRunner().invoke(main, ["validate", path, "--format", "json"]).stdout)
+    assert payload["errorCode"] == "schema"
+    (violation,) = payload["errorDetails"]
+    assert violation["pointer"] == ["elements", 0, "style", "labelPosition"]
+
+
+def test_an_unknown_link_endpoint_suggests_the_id_meant(tmp_path):
+    path = _write_diagram(tmp_path, """version: "1.0"
+canvas: {aspectRatio: "16:9"}
+elements:
+  - {kind: node, id: database, type: RDS}
+  - {kind: node, id: web, type: EC2}
+links:
+  - {from: web, to: databse}
+""")
+    payload = json.loads(CliRunner().invoke(main, ["validate", path, "--format", "json"]).stdout)
+    assert payload["errorCode"] == "unknown-link-endpoint"
+    assert "did you mean 'database'?" in payload["error"]
+    assert payload["errorDetails"] == [{"path": "$['links'][0]['to']", "id": "databse", "didYouMean": ["database"]}]
+
+
+def test_a_yaml_syntax_error_gives_line_and_column(tmp_path):
+    path = _write_diagram(tmp_path, 'version: "1.0"\ncanvas: {aspectRatio: "16:9"\nelements: []\n')
+    payload = json.loads(CliRunner().invoke(main, ["validate", path, "--format", "json"]).stdout)
+    assert payload["errorCode"] == "yaml-syntax"
+    assert set(payload["errorDetails"][0]) == {"file", "line", "column"}
+
+
+def test_one_warning_for_a_whole_container_off_the_slide(tmp_path):
+    path = _write_diagram(tmp_path, """version: "1.0"
+canvas: {aspectRatio: "16:9", fit: none}
+elements:
+  - kind: container
+    id: g
+    type: group
+    x: 100
+    y: 1000
+    children:
+      - {kind: node, id: a, type: EC2}
+      - {kind: node, id: b, type: EC2}
+""")
+    payload = json.loads(CliRunner().invoke(main, ["validate", path, "--format", "json"]).stdout)
+    assert [d["elements"] for d in payload["details"] if d["code"] == "off-canvas"] == [["g"]]

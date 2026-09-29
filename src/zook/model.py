@@ -71,6 +71,9 @@ class Link:
     from_side: Optional[str] = None  # "top"|"bottom"|"left"|"right"; None -> auto
     to_side: Optional[str] = None
     waypoints: list[tuple[float, float]] = field(default_factory=list)  # explicit polyline vias (absolute coords)
+    color: Optional[str] = None  # "#RRGGBB"; None -> the default line colour
+    line: str = "solid"  # "solid" | "dashed" | "dotted"
+    width: float = 1.25  # points
     # Set by layout.build_layout: this link's place among the links joining
     # the same two elements (either direction), so they're drawn side by side.
     lane: int = 0
@@ -129,6 +132,9 @@ def _parse_link(raw: dict) -> Link:
         from_side=raw.get("fromSide"),
         to_side=raw.get("toSide"),
         waypoints=[(wp["x"], wp["y"]) for wp in raw.get("waypoints", [])],
+        color=raw.get("color"),
+        line=raw.get("line", "solid"),
+        width=raw.get("width", 1.25),
     )
 
 

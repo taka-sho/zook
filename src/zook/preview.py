@@ -48,6 +48,7 @@ from .layout import (
     readable_on,
     resolve_container_style,
 )
+from .errors import Finding
 from .model import Diagram
 from .registry import MultiRegistry, icon_png
 from .text import PT_TO_LOGICAL
@@ -57,8 +58,6 @@ BACKGROUND = (255, 255, 255, 255)
 TEXT_COLOR = (30, 30, 30, 255)
 LINE_COLOR = (84, 91, 100, 255)
 LABEL_BG = (255, 255, 255, 230)
-LINK_WIDTH_PT = 1.25  # render.py's connector width - not shrunk by the fit, as on the slide
-ARROWHEAD_PT = 3 * LINK_WIDTH_PT  # a "med" OOXML arrowhead is 3x the line width
 SHAPE_BORDER_PT = 0.75  # the default theme line of a shape node
 CORNER_BADGE_SIZE = 20  # logical units; same as render.py
 CORNER_BADGE_PADDING = 6
@@ -153,14 +152,17 @@ def preview_font_warnings(diagram: Diagram, root_box: Box, registry: MultiRegist
     messages = []
     if problem is not None:
         using = f"using {path} instead" if path else "falling back to Pillow's built-in font"
-        messages.append(f"{problem}, so it was ignored - {using} for the preview (the .pptx is unaffected)")
+        messages.append(Finding(
+            f"{problem}, so it was ignored - {using} for the preview (the .pptx is unaffected)", "preview-font-ignored"
+        ))
     if path is None:
         texts = [b.label_text for b in iter_boxes(root_box)] + [link.label or "" for link in diagram.links]
         if any(_has_wide_text(t) for t in texts):
-            messages.append(
+            messages.append(Finding(
                 "no font with Japanese/Chinese/Korean glyphs was found for the preview, so that text shows as "
-                "boxes - set ZOOK_PREVIEW_FONT to a .ttf/.ttc that has them (the .pptx is unaffected)"
-            )
+                "boxes - set ZOOK_PREVIEW_FONT to a .ttf/.ttc that has them (the .pptx is unaffected)",
+                "preview-no-cjk-font",
+            ))
     return messages
 
 
@@ -240,6 +242,29 @@ def _draw_lines(draw: ImageDraw.ImageDraw, lines: list[str], font, box: tuple[fl
             x = x0
         draw.text((x, y), line, font=line_font, fill=fill)
         y += line_h
+
+
+# PowerPoint's dash patterns, in multiples of the line width: "dash" 4 on / 3
+# off, "sysDot" 1 on / 1 off.
+_LINE_PATTERNS = {"dashed": (4, 3), "dotted": (1, 1)}
+
+
+def _draw_patterned_line(draw: ImageDraw.ImageDraw, points, color, width: int, pattern: str) -> None:
+    """A dashed/dotted polyline, the pattern running on across its corners."""
+    on, off = (n * max(1, width) for n in _LINE_PATTERNS[pattern])
+    position = 0.0  # where along the pattern the current segment starts
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        length = math.hypot(bx - ax, by - ay)
+        t = 0.0
+        while t < length:
+            phase = position % (on + off)
+            step = min(length - t, (on - phase) if phase < on else (on + off - phase))
+            if phase < on:
+                t0, t1 = t / length, (t + step) / length
+                draw.line([(ax + (bx - ax) * t0, ay + (by - ay) * t0), (ax + (bx - ax) * t1, ay + (by - ay) * t1)],
+                          fill=color, width=width)
+            t += step
+            position += step
 
 
 def _draw_dashed_rect(draw: ImageDraw.ImageDraw, x0, y0, x1, y1, color, width, dash=6, gap=4) -> None:
@@ -378,10 +403,14 @@ def _draw_arrowhead(draw: ImageDraw.ImageDraw, tip, direction, color, size) -> N
 def _draw_link(draw: ImageDraw.ImageDraw, from_box: Box, to_box: Box, link, c: _Canvas) -> None:
     _, _, _, path = link_render_plan(from_box, to_box, link)
     px_path = [(c.x(x), c.y(y)) for x, y in path]
-    line_color = _hex_to_rgba(readable_on("#545B64", c.canvas_background))
-    draw.line(px_path, fill=line_color, width=c.stroke(LINK_WIDTH_PT))
+    line_color = _hex_to_rgba(link.color or readable_on("#545B64", c.canvas_background))
+    width = c.stroke(link.width)
+    if link.line == "solid":
+        draw.line(px_path, fill=line_color, width=width)
+    else:
+        _draw_patterned_line(draw, px_path, line_color, width, link.line)
 
-    head = c.stroke(ARROWHEAD_PT)
+    head = c.stroke(3 * link.width)  # a "med" arrowhead is 3x the line width
     if link.arrow in ("end", "both"):
         p0, p1 = px_path[-2], px_path[-1]
         _draw_arrowhead(draw, p1, (p1[0] - p0[0], p1[1] - p0[1]), line_color, head)

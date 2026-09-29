@@ -32,7 +32,7 @@ import click
 import yaml
 
 from . import __version__
-from .errors import DiagramError, Warnings
+from .errors import DiagramError, Warnings, finding_detail
 from .layout import Box, build_layout, diagram_warnings
 from .loader import load_yaml, load_yaml_roundtrip, read_text, write_text
 from .model import Diagram, parse_diagram
@@ -49,11 +49,21 @@ def _gh_escape(message: str) -> str:
     return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def _emit(fmt: str, *, status: str, warning_messages: list[str], error: str | None = None, output_path: str | None = None) -> None:
+def _emit(fmt: str, *, status: str, warning_messages: list[str], error: str | None = None,
+          output_path: str | None = None, error_code: str | None = None, error_details: list | None = None) -> None:
     if fmt == "json":
-        payload: dict = {"status": status, "warnings": warning_messages}
+        # `warnings`/`error` stay plain text for people and older scripts;
+        # `details`/`errorCode`/`errorDetails` carry the same, structured
+        # (a code per problem and the ids it concerns) for tools and AIs.
+        payload: dict = {
+            "status": status,
+            "warnings": [str(m) for m in warning_messages],
+            "details": [finding_detail(m) for m in warning_messages],
+        }
         if error is not None:
             payload["error"] = error
+            payload["errorCode"] = error_code or "error"
+            payload["errorDetails"] = error_details or []
         if output_path is not None:
             payload["output"] = output_path
         print(json.dumps(payload))
@@ -109,25 +119,26 @@ def _guard(error_exit: int = 1):
         def wrapper(*args, **kwargs):
             fmt = kwargs.get("fmt", "text")
 
-            def fail(message: str):
-                _emit(fmt, status="error", warning_messages=[], error=message)
+            def fail(message: str, code: str, details: list | None = None):
+                _emit(fmt, status="error", warning_messages=[], error=message, error_code=code, error_details=details)
                 sys.exit(error_exit)
 
             try:
                 return func(*args, **kwargs)
             except DiagramError as exc:
-                fail(str(exc))
+                fail(str(exc), exc.code or "fatal", exc.details)
             except OSError as exc:
                 where = f": {exc.filename}" if exc.filename else ""
-                fail(f"{exc.strerror or exc}{where}")
+                fail(f"{exc.strerror or exc}{where}", "io-error", [{"file": exc.filename}] if exc.filename else [])
             except RecursionError:
-                fail("input is nested too deeply, or a YAML alias refers to itself")
+                fail("input is nested too deeply, or a YAML alias refers to itself", "too-deep")
             except Exception as exc:  # noqa: BLE001 - last line of defence, see docstring
                 if os.environ.get("ZOOK_DEBUG"):
                     traceback.print_exc()
                 fail(
                     f"internal error: {type(exc).__name__}: {exc} "
-                    "(this is a zook bug - please report it; set ZOOK_DEBUG=1 for a traceback)"
+                    "(this is a zook bug - please report it; set ZOOK_DEBUG=1 for a traceback)",
+                    "internal-error",
                 )
 
         return wrapper
@@ -268,7 +279,8 @@ def _emit_doctor(fmt: str, result, *, output_path: str | None) -> None:
             "pinned": pinned,
             "linkChanges": link_changes,
             "resolvedOverlaps": result.resolved_overlaps,
-            "remaining": result.remaining,
+            "remaining": [str(m) for m in result.remaining],
+            "remainingDetails": [finding_detail(m) for m in result.remaining],
         }
         if output_path is not None:
             payload["output"] = output_path
@@ -386,6 +398,7 @@ def _fmt_changes(changes) -> str:
 def _emit_diff(fmt: str, result) -> None:
     if fmt == "json":
         payload = {
+            "status": "ok",
             "identical": result.identical,
             "canvas": [{"field": c.field, "old": c.old, "new": c.new} for c in result.canvas],
             "elements": {
