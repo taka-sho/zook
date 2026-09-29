@@ -31,7 +31,7 @@ jobs:
           # full history: a push can carry several commits, and every
           # .drawio changed since the previous head must be synced
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.x"
       - run: pip install -e .
