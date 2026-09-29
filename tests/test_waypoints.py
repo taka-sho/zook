@@ -56,7 +56,7 @@ def test_model_parses_waypoints():
 
 
 def test_plain_link_crosses_but_waypoints_route_clear():
-    diagram, root = _root(_doc({}))
+    diagram, root = _root(_doc({"fromSide": "bottom", "toSide": "top"}))  # forced straight down through B
     assert any("through element 'B'" in w for w in link_crossing_warnings(root, diagram.links, REGISTRY, 0))
 
     diagram, root = _root(_doc({"waypoints": _DETOUR}))

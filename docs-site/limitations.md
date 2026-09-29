@@ -17,6 +17,10 @@ Much of this can actually be auto-resolved with `zook doctor` (see the doctor se
 
 Setting `canvas.overlapMargin` extends detection beyond literal overlaps to "too close" as well (see the [YAML Input Guide](yaml-guide.md)).
 
+## Link-Aware Layout Is Opt-In and Simple
+
+By default, auto-layout places children in the order they're written; `layout.order: flow` (or `zook doctor`, which sets it where it helps) arranges them along their links instead. The flow layout is a simple layered one — ranks by longest path, a few ordering sweeps, no reserved lanes — so a link that skips several steps can still run through an element in between, and links between two ranks share one bend line, which can read as a direct connection. Automatic connection sides route round an element when a clean U route exists; what remains is reported as a Warning for `doctor` (connection sides, obstacle moves, waypoint detours) or a hand fix.
+
 ## Label Sizes Are Estimated, Not Measured With a Font
 
 zook sizes every label from its text without a font file (the renderer is PowerPoint, not zook): full-width characters (Japanese, Chinese, Korean) count as 1 em, Latin letters as roughly half that, with wider/narrower classes for the letters that differ most. Symbols that Japanese fonts draw full width — arrows, circled numbers (①), dashes, ellipses — count as 1 em too. A word too long for the line starts a new line before it is broken, as PowerPoint does. The estimate errs slightly wide, so a label reserved one line fits on one line in the default fonts. A font much wider than Calibri/Meiryo, or unusual glyphs, can still wrap where zook didn't expect — the preview (`zook preview`) shows zook's own line breaks.

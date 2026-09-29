@@ -18,6 +18,7 @@ class Layout:
     columns: Optional[int] = None
     gap: float = 24
     padding: float = 32
+    order: str = "source"  # "source": as written; "flow": by the links between the children (layout.flow_order)
 
 
 @dataclass
@@ -98,6 +99,7 @@ def _parse_layout(raw: Optional[dict], default_gap: float = 24) -> Optional[Layo
         columns=raw.get("columns"),
         gap=raw.get("gap", default_gap),
         padding=raw.get("padding", 32),
+        order=raw.get("order", "source"),
     )
 
 

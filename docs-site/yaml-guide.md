@@ -54,8 +54,11 @@ Distinguished into two kinds via `kind`.
   layout:                  # auto-placement rule for children (see below)
     direction: horizontal
     gap: 48
+    order: flow              # optional. arrange the children along their links (default: as written)
   children: [...]           # nested (recursive)
 ```
+
+With `order: flow`, the children are laid out along the links between them instead of in the order written: in a `horizontal` container, one column per step left to right (a `vertical` one: one row per step top to bottom), the members of a step side by side, ordered to keep links short and uncrossed — a request path, a pipeline or a fork/merge then reads in one direction with no link running through another element. Use it for any container whose children form a flow; `zook doctor` also sets it where it helps.
 
 The label band is measured from the label text — including the registry's default label (e.g. "VPC", "AWS Cloud") when `label` is omitted: an auto-sized container widens for a long label (up to 260 units), and a label that still doesn't fit wraps, with every line reserved. With `labelPosition: bottom-left` the band is reserved at the bottom instead of the top. Increasing `style.labelFontSize` scales the band with it. Set `borderColor`/`fillColor`/`borderWidth` when you want to change color/line-width for one specific container away from the icon registry's default style (see [Icon Registry](icons.md)).
 
@@ -139,7 +142,7 @@ links:
 - `fromSide`/`toSide` let you specify the connection side.
     - When both are set, a mismatched axis (`top`/`bottom` is vertical, `left`/`right` is horizontal — e.g. `fromSide: bottom` + `toSide: left`) is a Fatal error.
     - When only one is set, that side fixes the axis, and the other is auto-selected.
-    - When both are omitted, it's fully automatic: of the horizontal and vertical routes, the one that runs through fewer other elements wins; when they tie, the actual routed path length is compared (including label-avoidance offsets), switching away from the dominant axis only when its path is clearly (20%+) longer. A near-tie never triggers a switch, avoiding an unstable, unintuitive choice.
+    - When both are omitted, it's fully automatic: of the horizontal and vertical routes, the one that runs through fewer other elements wins; when they tie, the actual routed path length is compared (including label-avoidance offsets), switching away from the dominant axis only when its path is clearly (20%+) longer. A near-tie never triggers a switch, avoiding an unstable, unintuitive choice. When both routes would run through another element, a U route out and around (over, under or beside both ends) is used instead if it gets past clean.
     - Both ends on the **same** side (`top`/`top`, `right`/`right`, ...) is drawn as a U: out from both elements, around the outermost one, and back — useful to route around something between them.
 - `waypoints` lets you make the routing explicit with intermediate points the path passes through. It's drawn as a straight polyline through the given points in order (disabling `style`'s automatic routing), useful for detouring around an obstacle or drawing an arbitrary L-shaped path. Each end auto-attaches to whichever side faces its nearest waypoint (a `fromSide`/`toSide` you set takes priority). Since the intermediate points make the routing explicit, the `fromSide`/`toSide` axis-match rule doesn't apply when `waypoints` is used. Coordinates are absolute canvas coordinates (unlike an element's `x`/`y`, which are local — a link belongs to no container, so it's given in absolute coordinates).
 - If a node has a label via `labelPosition: below`/`above`, a link leaving from that same side (below→downward, above→upward) attaches outside the label, avoiding it. Left/right connections are unaffected by label position.

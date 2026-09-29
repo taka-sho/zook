@@ -303,7 +303,11 @@ def _choose_columns(auto: list[Box], gap: float, available: tuple[float, float])
 
 
 def _arrange_children(
-    children: list[Box], layout: Layout, content_top: float, available: tuple[float, float] | None = None
+    children: list[Box],
+    layout: Layout,
+    content_top: float,
+    available: tuple[float, float] | None = None,
+    flow_edges: list[tuple[int, int]] | None = None,
 ) -> None:
     """Sets each child's local_x/local_y to its *content* (rendered) top-left.
 
@@ -326,6 +330,21 @@ def _arrange_children(
 
     padding = layout.padding
     gap = layout.gap
+
+    if flow_edges is not None:
+        # indexes among all children -> among the auto-placed ones
+        auto_index = {id(b): k for k, b in enumerate(auto)}
+        edges = [
+            (auto_index[id(children[a])], auto_index[id(children[b])])
+            for a, b in flow_edges
+            if id(children[a]) in auto_index and id(children[b]) in auto_index
+        ]
+        if edges and layout.direction in ("horizontal", "vertical"):
+            _arrange_layered(auto, edges, layout, content_top)
+            _avoid_explicit_overlaps(auto, explicit, gap)
+            return
+        if edges:  # grid: the flow decides the order the grid is filled in
+            auto[:] = [auto[k] for level in _flow_levels(len(auto), edges) for k in level]
 
     if layout.direction == "horizontal":
         _, offsets = _cross_align(auto, axis=1)
@@ -366,6 +385,136 @@ def _arrange_children(
             b.local_y = row_y[row] + within_row + dy
 
     _avoid_explicit_overlaps(auto, explicit, gap)
+
+
+def _flow_edges(element: Element, links: list[Link]) -> list[tuple[int, int]]:
+    """The links inside `element` as (from, to) pairs of its direct children
+    - a link to something nested in a child counts for that child."""
+    owner: dict[str, int] = {}
+
+    def claim(e: Element, index: int) -> None:
+        owner[e.id] = index
+        for c in e.children:
+            claim(c, index)
+
+    for index, child in enumerate(element.children):
+        claim(child, index)
+    edges = []
+    for link in links:
+        a, b = owner.get(link.from_id), owner.get(link.to_id)
+        if a is not None and b is not None and a != b:
+            edges.append((a, b))
+    return edges
+
+
+def flow_ranks(n: int, edges: list[tuple[int, int]]) -> tuple[list[int], dict[int, list[int]]]:
+    """Each of n members' rank - how far along the links it sits (longest
+    path from a member nothing points to) - once the links that close a
+    cycle are set aside (found depth-first in source order). Also returns
+    the remaining forward links, member -> successors."""
+    succ: dict[int, list[int]] = {i: [] for i in range(n)}
+    for a, b in edges:
+        if b not in succ[a]:
+            succ[a].append(b)
+    forward: dict[int, list[int]] = {i: [] for i in range(n)}
+    state: dict[int, int] = {}
+    for start in range(n):
+        if start in state:
+            continue
+        stack = [(start, iter(succ[start]))]
+        state[start] = 1
+        while stack:
+            v, it = stack[-1]
+            w = next(it, None)
+            if w is None:
+                state[v] = 2
+                stack.pop()
+            elif state.get(w) == 1:
+                continue  # back edge: part of a cycle
+            else:
+                forward[v].append(w)
+                if w not in state:
+                    state[w] = 1
+                    stack.append((w, iter(succ[w])))
+    rank = [0] * n
+    for _ in range(n):  # longest path; the forward graph is acyclic
+        changed = False
+        for v in range(n):
+            for w in forward[v]:
+                if rank[w] < rank[v] + 1:
+                    rank[w], changed = rank[v] + 1, True
+        if not changed:
+            break
+    return rank, forward
+
+
+FLOW_SWEEPS = 4  # barycenter passes (down and up) ordering each rank
+
+
+def _flow_levels(n: int, edges: list[tuple[int, int]]) -> list[list[int]]:
+    """Members grouped by rank, each rank ordered to keep links short and
+    uncrossed: repeatedly sort a rank by the mean position of its members'
+    neighbours in the rank before (then after) it - the barycenter
+    heuristic. Ties, and members with no neighbour there, keep source
+    order."""
+    rank, forward = flow_ranks(n, edges)
+    preds: dict[int, list[int]] = {i: [] for i in range(n)}
+    for v, ws in forward.items():
+        for w in ws:
+            preds[w].append(v)
+    levels: list[list[int]] = [[] for _ in range(max(rank) + 1)]
+    for i in range(n):
+        levels[rank[i]].append(i)
+
+    def position() -> dict[int, float]:
+        return {m: k - (len(level) - 1) / 2 for level in levels for k, m in enumerate(level)}
+
+    for sweep in range(FLOW_SWEEPS):
+        down = sweep % 2 == 0
+        for r in (range(1, len(levels)) if down else range(len(levels) - 2, -1, -1)):
+            pos = position()
+            neighbours = preds if down else forward
+
+            def key(m: int, pos=pos, neighbours=neighbours):
+                near = [pos[v] for v in neighbours[m] if rank[v] == r + (-1 if down else 1)]
+                return (sum(near) / len(near) if near else pos[m], pos[m])
+
+            levels[r].sort(key=key)
+    return levels
+
+
+def _arrange_layered(auto: list[Box], edges: list[tuple[int, int]], layout: Layout, content_top: float) -> None:
+    """`order: flow` on a horizontal (vertical) container: one column (row)
+    per rank, left to right (top to bottom), the members of a rank stacked
+    across it and every rank centred on the widest one - so a chain is a
+    straight line and a fork's arms sit side by side. Ranks are twice the
+    usual gap apart, room for a link and its label between them."""
+    levels = [[auto[k] for k in level] for level in _flow_levels(len(auto), edges)]
+    gap, rank_gap = layout.gap, 2 * layout.gap
+    horizontal = layout.direction == "horizontal"
+    stack_axis = 1 if horizontal else 0  # members of a rank stack along this axis
+
+    def extent(b: Box, axis: int) -> float:
+        return b.footprint_h if axis == 1 else b.footprint_w
+
+    spans = [sum(extent(b, stack_axis) for b in level) + gap * (len(level) - 1) for level in levels]
+    widest = max(spans)
+    # Ranks of nodes are centred on each other, so a chain runs straight; a
+    # container starts at the leading edge instead, like a row holding one
+    # does (_cross_align) - AZs side by side, not staggered by their heights.
+    centred = all(b.element.kind == "node" for b in auto)
+    along = layout.padding if horizontal else content_top  # position of the current rank
+    for level, span in zip(levels, spans):
+        band, offsets = _cross_align(level, axis=1 - stack_axis)
+        cursor = (content_top if horizontal else layout.padding) + ((widest - span) / 2 if centred else 0.0)
+        for b, off in zip(level, offsets):
+            dx, dy = content_offset(b)
+            if horizontal:
+                b.local_x, b.local_y = along + off + dx, cursor + dy
+            else:
+                b.local_x, b.local_y = cursor + dx, along + off + dy
+            cursor += extent(b, stack_axis) + gap
+        along += band + rank_gap
 
 
 def _local_footprint_rect(box: Box) -> tuple[float, float, float, float]:
@@ -439,15 +588,19 @@ def measure(
     registry: MultiRegistry,
     available: tuple[float, float] | None = None,
     room: dict[str, tuple[float, float]] | None = None,
+    links: list[Link] | None = None,
 ) -> Box:
     """Size an element (a container from its children, recursively).
     `room` gives auto-sized containers extra (width, height) at their right
-    and bottom - see build_layout: a link label that didn't fit inside."""
+    and bottom - see build_layout: a link label that didn't fit inside.
+    `links` are the diagram's links, which a `layout.order: flow` container
+    arranges its children by."""
     if element.kind == "node":
         return _measure_node(element, registry)
 
     layout = element.layout or Layout()
-    children = [measure(c, registry, room=room) for c in element.children]
+    children = [measure(c, registry, room=room, links=links) for c in element.children]
+    flow_edges = _flow_edges(element, links or []) if layout.order == "flow" else None
     extra_w, extra_h = (room or {}).get(element.id, (0.0, 0.0))
     text, font, label_wants = _container_label_needs(element, registry)
     label_at_bottom = bool(text) and "bottom" in resolve_container_label_position(element, registry)
@@ -458,7 +611,7 @@ def measure(
     for _attempt in range(2):
         band = container_label_reserve(font, lines) if text else 0.0
         content_top = layout.padding + (0.0 if label_at_bottom else band)
-        _arrange_children(children, layout, content_top, available)
+        _arrange_children(children, layout, content_top, available, flow_edges)
         bbox_w, bbox_h = _bbox(children, content_top, layout.padding)
         bbox_w, bbox_h = bbox_w + extra_w, bbox_h + extra_h
         if element.width is not None:
@@ -542,11 +695,11 @@ def _layout_pass(diagram: Diagram, registry: MultiRegistry, room: dict[str, tupl
         id="__root__",
         type="__canvas__",
         provider="generic",
-        layout=Layout(direction=top.direction, columns=top.columns, gap=top.gap, padding=padding),
+        layout=Layout(direction=top.direction, columns=top.columns, gap=top.gap, padding=padding, order=top.order),
         children=diagram.elements,
     )
     available = (max(1.0, canvas_w - 2 * padding), max(1.0, canvas_h - 2 * padding))
-    root_box = measure(root_element, registry, available, room)
+    root_box = measure(root_element, registry, available, room, diagram.links)
     root_box.width = root_box.footprint_w = canvas_w
     root_box.height = root_box.footprint_h = canvas_h
     assign_absolute(root_box)
@@ -825,6 +978,19 @@ def choose_connection_indices(from_box: Box, to_box: Box, link: Optional[Link] =
     if obstacles:
         hits_dominant = _count_hits(path(dominant), obstacles)
         hits_other = _count_hits(path(other), obstacles)
+        best_hits = min(hits_dominant, hits_other)
+        if best_hits > 0:
+            # Both straight-ish routes cut through something (a link skipping
+            # past a whole row, e.g. to a node several steps along a flow):
+            # a U route out and around - over, under, or beside both ends -
+            # may get past clean.
+            around = []
+            for idx in (0, 2, 1, 3):
+                u_path = _same_side_path(connection_point(from_box, idx), connection_point(to_box, idx), idx)
+                around.append((_count_hits(u_path, obstacles), _path_length(u_path), (idx, idx)))
+            hits_u, _, pair_u = min(around)
+            if hits_u == 0:  # only a clean way round: a U that still hits something is doctor's call
+                return pair_u
         if hits_other != hits_dominant:
             return other if hits_other < hits_dominant else dominant
     if _path_length(path(other)) < _path_length(path(dominant)) * (1 - _AXIS_SWITCH_MARGIN):

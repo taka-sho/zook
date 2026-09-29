@@ -397,7 +397,7 @@ elements:
   - {kind: node, id: wall, type: EC2, x: 300, y: 100}
   - {kind: node, id: b, type: EC2, x: 500, y: 100}
 links:
-  - {id: ab, from: a, to: b}
+  - {id: ab, from: a, to: b, fromSide: right, toSide: left}  # forced straight through `wall`
 """)
     payload = json.loads(CliRunner().invoke(main, ["validate", path, "--format", "json"]).stdout)
     (detail,) = [d for d in payload["details"] if d["code"] == "link-crosses-element"]

@@ -19,12 +19,19 @@ better one. Every change is applied, re-measured, and kept only if the
 objective strictly drops - otherwise rolled back exactly - so doctor never
 makes a diagram worse.
 
-Four stages, in order (each depends on the earlier ones being settled - link
+Five stages, in order (each depends on the earlier ones being settled - link
 routing follows from positions, displacing an obstacle follows from the
 routing that's left, and a waypoint detour is the last resort); the whole
 sequence repeats while a round still improves, so running doctor again on its
 own output finds nothing more to do:
 
+  0. Arrangement - a container (or the top level) whose auto-placed children
+     are linked to each other is tried with `layout.order: flow` (children
+     laid out along their links - see layout.flow_ranks), and, if it's a
+     grid, also as a horizontal and a vertical flow; the best of these is
+     kept if it beats the arrangement as written. This is what moves a
+     diagram written in an arbitrary order towards one that reads along its
+     links, before any coordinate is pinned.
   1. Element overlaps - sibling-vs-sibling and element-vs-container-label
      collisions, and a child spilling outside its container - separated by
      moving elements (details below).
@@ -174,9 +181,17 @@ class LinkChange:
 
 
 @dataclass
+class LayoutChange:
+    id: str  # container id, or "canvas" for the top level
+    order: str
+    direction: str | None = None  # set when the arrangement's direction changed too
+
+
+@dataclass
 class DoctorResult:
     status: str  # "ok" (nothing to fix) | "fixed" | "partial" (residual remains)
     moves: list[Move] = field(default_factory=list)
+    layout_changes: list[LayoutChange] = field(default_factory=list)
     link_changes: list[LinkChange] = field(default_factory=list)
     resolved_overlaps: list[str] = field(default_factory=list)
     remaining: list[str] = field(default_factory=list)
@@ -877,7 +892,84 @@ def _collect_link_changes(original: dict, final: dict) -> list[LinkChange]:
     return changes
 
 
+def _flow_candidates(raw: dict) -> list[tuple[str, dict, str]]:
+    """(id, the mapping holding its `layout`, the key of that `layout`) for
+    the top level and every container whose auto-placed children are linked
+    to one another and that isn't already arranged by flow."""
+    links = [(link["from"], link["to"]) for link in raw.get("links", []) or []]
+
+    def linked(children: list) -> bool:
+        owner: dict[str, int] = {}
+        for index, child in enumerate(children):
+            if child.get("x") is not None and child.get("y") is not None:
+                continue
+            for node in _iter_raw_nodes([child]):
+                owner[node["id"]] = index
+        return any(a in owner and b in owner and owner[a] != owner[b] for a, b in links)
+
+    candidates = []
+    canvas = raw.get("canvas") or {}
+    if (canvas.get("layout") or {}).get("order") != "flow" and linked(raw.get("elements", [])):
+        candidates.append(("canvas", canvas, "layout"))
+    for node in _iter_raw_nodes(raw.get("elements", [])):
+        if node.get("kind") == "container" and (node.get("layout") or {}).get("order") != "flow":
+            if linked(node.get("children", []) or []):
+                candidates.append((node["id"], node, "layout"))
+    return candidates
+
+
+def _arrange_by_flow(raw: dict, registry: MultiRegistry) -> None:
+    """Stage 0: try `layout.order: flow` where the links give an order, and
+    keep the best arrangement that strictly lowers the objective."""
+    score = _score(raw, registry)
+    for _cid, holder, key in _flow_candidates(raw):
+        had_layout = key in holder
+        before = copy.deepcopy(holder.get(key)) if had_layout else None
+        current = dict(before or {})
+        options = [{**current, "order": "flow"}]
+        if current.get("direction", "grid") == "grid":
+            options += [{**current, "direction": "horizontal", "order": "flow"},
+                        {**current, "direction": "vertical", "order": "flow"}]
+        best = None
+        for option in options:
+            holder[key] = option
+            trial = _score(raw, registry)
+            if trial < score and (best is None or trial < best[0]):
+                best = (trial, option)
+        if best is not None:
+            score = best[0]
+            if had_layout:
+                holder[key] = before  # keep the author's mapping (comments, key order) ...
+                for k, v in best[1].items():
+                    holder[key][k] = v  # ... and set only what changes
+            else:
+                holder[key] = best[1]
+        elif had_layout:
+            holder[key] = before
+        else:
+            del holder[key]
+
+
+def _collect_layout_changes(original: dict, final: dict) -> list[LayoutChange]:
+    def layouts(raw: dict) -> dict[str, dict]:
+        found = {"canvas": dict((raw.get("canvas") or {}).get("layout") or {})}
+        for node in _iter_raw_nodes(raw.get("elements", [])):
+            if node.get("kind") == "container":
+                found[node["id"]] = dict(node.get("layout") or {})
+        return found
+
+    before, after = layouts(original), layouts(final)
+    changes = []
+    for cid, layout in after.items():
+        prior = before.get(cid, {})
+        if layout.get("order") == "flow" and prior.get("order") != "flow":
+            direction = layout.get("direction") if layout.get("direction") != prior.get("direction") else None
+            changes.append(LayoutChange(cid, "flow", direction))
+    return changes
+
+
 def _run_stages(raw: dict, registry: MultiRegistry, author_explicit: set[str], author_routed: set[int]) -> None:
+    _arrange_by_flow(raw, registry)  # stage 0
     _resolve_element_overlaps(raw, registry, author_explicit)  # stage 1
     _resolve_link_routing(raw, registry)  # stage 2
     _resolve_obstacles(raw, registry, author_explicit)  # stage 3
@@ -934,14 +1026,16 @@ def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
     # not counted.
     moves, pins = _collect_moves(original, raw, registry)
     link_changes = _collect_link_changes(original, raw)
+    layout_changes = _collect_layout_changes(original, raw)
     if final.attempted:
         status = "partial"
     else:
-        status = "fixed" if (moves or pins or link_changes) else "ok"
+        status = "fixed" if (moves or pins or link_changes or layout_changes) else "ok"
     initial_overlaps = {m for m in initial.attempted if m.startswith("element ")}
     return DoctorResult(
         status=status,
         moves=moves,
+        layout_changes=layout_changes,
         link_changes=link_changes,
         resolved_overlaps=sorted(initial_overlaps - set(final.attempted)),
         remaining=remaining,

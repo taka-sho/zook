@@ -72,7 +72,8 @@
           "properties": {
             "direction": { "enum": ["horizontal", "vertical", "grid"], "default": "grid" },
             "columns": { "type": "integer", "minimum": 1, "description": "Column count for grid. If omitted, the count that best fits the slide is chosen." },
-            "gap": { "type": "number", "minimum": 0, "default": 64, "description": "Spacing between top-level elements (logical units)." }
+            "gap": { "type": "number", "minimum": 0, "default": 64, "description": "Spacing between top-level elements (logical units)." },
+            "order": { "enum": ["source", "flow"], "default": "source", "description": "As for a container's layout.order: flow arranges the top-level elements by the links between them." }
           }
         },
         "fit": {
@@ -185,6 +186,11 @@
           "minimum": 0,
           "default": 32,
           "description": "Inner padding between container edge and its children (logical units)."
+        },
+        "order": {
+          "enum": ["source", "flow"],
+          "default": "source",
+          "description": "source: children in the order written. flow: arranged by the links between them - with direction horizontal (vertical), one column (row) per step along the links, left to right (top to bottom), each step's members side by side, ordered to keep links short and uncrossed; with grid, only the order the grid is filled in. Explicitly positioned children stay put."
         }
       }
     },
