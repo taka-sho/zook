@@ -12,7 +12,7 @@ top-level arrangement.
 import math
 
 import pytest
-from pptx.util import Emu
+from pptx.util import Emu, Pt
 
 from zook.layout import (
     build_layout,
@@ -465,3 +465,33 @@ def test_labels_and_lines_stay_readable_on_a_dark_canvas():
     assert str(label.text_frame.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
     (conn,) = [s for s in shapes if s._element.tag.endswith("cxnSp")]
     assert str(conn.line.color.rgb) == "FFFFFF"
+
+
+def test_a_word_in_a_box_sized_to_it_stays_on_one_line():
+    from zook.layout import link_label_box
+
+    for word in ("async", "sync", "metrics", "HTTPS", "データ"):
+        assert link_label_box(word, 8)[2] == [word]
+
+
+def test_link_color_dash_and_width_reach_the_pptx():
+    from pptx.oxml.ns import qn
+
+    doc = _doc([_node("a", 100, 100), _node("b", 400, 100), _node("c", 700, 100)], [
+        {"from": "a", "to": "b", "color": "#E7157B", "line": "dashed", "width": 3},
+        {"from": "b", "to": "c", "line": "dotted"},
+    ])
+    _, _, prs = _build(doc)
+    first, second = [s for s in _all_shapes(prs.slides[0].shapes) if s._element.tag.endswith("cxnSp")]
+    assert str(first.line.color.rgb) == "E7157B" and first.line.width == Pt(3)
+    assert first.line._get_or_add_ln().find(qn("a:prstDash")).get("val") == "dash"
+    assert second.line._get_or_add_ln().find(qn("a:prstDash")).get("val") == "sysDot"
+    assert str(second.line.color.rgb) == "545B64" and second.line.width == Pt(1.25)
+
+
+def test_an_invalid_link_colour_or_line_is_a_schema_error():
+    from zook.errors import DiagramError
+
+    for bad in ({"color": "pink"}, {"line": "wavy"}, {"width": 0}):
+        with pytest.raises(DiagramError, match="links"):
+            _doc([_node("a"), _node("b")], [{"from": "a", "to": "b", **bad}])

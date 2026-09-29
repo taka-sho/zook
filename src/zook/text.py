@@ -98,7 +98,9 @@ def wrap_lines(text: str, font_size: float, max_width: float) -> list[str]:
     only a word wider than a whole line is broken between characters."""
 
     def fits(line: str) -> bool:
-        return text_width(line.rstrip(), font_size) <= max_width
+        # (a tolerance: a box sized to the text and the text itself can differ
+        # in the last bit, which broke "async" into "asyn" / "c")
+        return text_width(line.rstrip(), font_size) <= max_width + 1e-6
 
     lines: list[str] = []
     for paragraph in text.replace("\r\n", "\n").split("\n"):

@@ -121,6 +121,9 @@ links:
     to: db
     label: "3306"       # 任意
     labelFontSize: 8      # ラベル文字サイズ(pt、既定8)。label が無ければ無効
+    color: "#E7157B"      # 任意。線と矢じりの色(既定はグレー)
+    line: dashed          # solid(既定) / dashed / dotted
+    width: 2              # 線の太さ(pt、既定1.25)。矢じりも比例して大きくなる
     arrow: end            # end(既定) / both / none
     style: straight        # straight(既定) / elbow / curved
     fromSide: bottom       # 任意。接続辺を明示指定(top/bottom/left/right)

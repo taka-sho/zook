@@ -56,7 +56,7 @@ def test_starter_is_valid_and_warning_free(tmp_path):
     runner = CliRunner()
     assert runner.invoke(main, ["init", str(out)]).exit_code == 0
     result = runner.invoke(main, ["validate", str(out), "--format", "json"])
-    assert json.loads(result.stdout) == {"status": "ok", "warnings": []}
+    assert json.loads(result.stdout) == {"status": "ok", "warnings": [], "details": []}
 
 
 def test_init_refuses_to_overwrite_and_writes_a_pattern(tmp_path):

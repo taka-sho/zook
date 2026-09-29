@@ -136,6 +136,9 @@ Applies to children with no `x`/`y`.
 | `style` | | enum(`straight`,`elbow`,`curved`) | `straight` | connector routing style |
 | `label` | | string | — | a label carried on the line (e.g. a port number) |
 | `labelFontSize` | | number > 0 | 8 | label font size (pt). The midpoint label box itself also scales proportionally with this value. No effect without `label` |
+| `color` | | `#RRGGBB` | — | line and arrowhead colour. Default grey `#545B64` (white on a dark `canvas.background`); an explicit colour is used as is |
+| `line` | | enum(`solid`,`dashed`,`dotted`) | `solid` | line pattern — e.g. `dashed` for an asynchronous call or a standby path, `dotted` for a logical or monitoring connection |
+| `width` | | number, 0 < w ≤ 12 | 1.25 | line width (pt); the arrowheads scale with it |
 | `fromSide` | | enum(`top`,`bottom`,`left`,`right`) | — | force the connection side on the `from` end. Auto-selected if omitted |
 | `toSide` | | enum(`top`,`bottom`,`left`,`right`) | — | force the connection side on the `to` end. Auto-selected if omitted |
 | `waypoints` | | array of `{x,y}` (1 or more) | — | intermediate points (absolute canvas coordinates) the path threads through, in order, connected by straight segments. Takes priority over `style` routing. Use it to detour a connector around an obstacle |

@@ -20,6 +20,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   coverage and test-result badges are generated from that same run's real
   output (`scripts/update_badges.py`, committed to `.github/badges/` on
   pushes to `main`), not a third-party dashboard.
+- Structured output for tools and AIs: under `--format json` every Warning
+  also appears in `details` with a stable `code` (`element-overlap`,
+  `unknown-type`, `link-crosses-element`, ...) and the `elements`/`links`
+  it concerns (doctor: `remainingDetails`), and an error comes with
+  `errorCode` and `errorDetails` (each schema violation's path and pointer,
+  a YAML error's line and column, an unknown link endpoint's close
+  matches). The text fields are unchanged. A container drawn off the slide
+  (`fit: none`) is one Warning, not one per element inside it; `diff`'s
+  JSON has a `status` like every other command's.
+- Link line styles: `color` (#RRGGBB), `line` (`solid`/`dashed`/`dotted`)
+  and `width` (pt, arrowheads scale with it), in the .pptx, the preview and
+  the .drawio. Mermaid import keeps a dotted link dashed and a thick one
+  thick, reads `linkStyle` (stroke colour, width, dasharray), and ranks the
+  layout with invisible `~~~` links too.
 - `zook --version`, and `python -m zook` as an alternative entry point.
 - Everything an AI agent needs now ships in the package, so zook works when
   installed with `pipx`/`uv tool` instead of cloned: `zook guide [TOPIC]`
@@ -179,6 +193,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field) and `click>=8.2` (what the tests use). The JSON Schemas' `$id` is
   their real URL, so an editor's YAML language server can validate a
   diagram as it is typed; README links work on PyPI.
+- A label whose box was sized to its own text could still wrap one letter
+  onto a second line (`async` -> `asyn` / `c`) through float rounding.
 - Mermaid import: a statement zook can't read is an error naming the line;
   unsupported edges used to drop the whole statement, nodes included,
   silently with status ok. A top-level `direction` statement is ignored, as

@@ -19,6 +19,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .errors import Finding
 from .model import TOP_LEVEL_GAP_DEFAULT, Diagram, Element, Layout, Link
 from .registry import MultiRegistry, icon_png
 from .text import line_height, longest_word_width, natural_width, text_block_height, wrap_lines
@@ -662,15 +663,19 @@ def overlap_warnings(root_box: Box, registry: MultiRegistry, margin: float = 0) 
             for j in range(i + 1, len(children)):
                 a, b = children[i], children[j]
                 if _rects_overlap(_inflate_rect(_footprint_rect(a), margin), _footprint_rect(b)):
-                    messages.append(f"element {a.element.id!r} overlaps element {b.element.id!r}")
+                    messages.append(Finding(
+                        f"element {a.element.id!r} overlaps element {b.element.id!r}",
+                        "element-overlap", [a.element.id, b.element.id],
+                    ))
 
         label_rect = container_label_rect(box, registry)
         if label_rect is not None:
             for child in children:
                 if _rects_overlap(_inflate_rect(label_rect, margin), _footprint_rect(child)):
-                    messages.append(
-                        f"element {child.element.id!r} overlaps the label of container {box.element.id!r}"
-                    )
+                    messages.append(Finding(
+                        f"element {child.element.id!r} overlaps the label of container {box.element.id!r}",
+                        "container-label-overlap", [child.element.id, box.element.id],
+                    ))
 
         for child in children:
             check(child)
@@ -1323,27 +1328,43 @@ class LinkCheckContext:
         messages = []
         for eid, rect in self.obstacles:
             if eid not in exclude and self.crosses(i, rect):
-                messages.append(f"{name} passes through element {eid!r}")
+                messages.append(Finding(f"{name} passes through element {eid!r}", "link-crosses-element", [eid], [link]))
         for cid, rect in self.container_labels:
             if cid not in endpoints_only and self.crosses(i, rect):
-                messages.append(f"{name} passes through the label of container {cid!r}")
+                messages.append(Finding(
+                    f"{name} passes through the label of container {cid!r}", "link-crosses-container-label", [cid], [link]
+                ))
         for j, rect in self.label_rects.items():
             if j != i and self.crosses(i, rect):
                 other = self.links[j]
-                messages.append(f"{name} passes through the label of link {other.from_id!r} -> {other.to_id!r}")
+                messages.append(Finding(
+                    f"{name} passes through the label of link {other.from_id!r} -> {other.to_id!r}",
+                    "link-crosses-link-label", [], [link, other],
+                ))
         if any(self.crosses(i, rect) for rect in self.own_rects.get(i, [])):
-            messages.append(f"{name} runs back through one of its own endpoints")
+            messages.append(Finding(
+                f"{name} runs back through one of its own endpoints", "link-through-own-endpoint",
+                [link.from_id, link.to_id], [link],
+            ))
         own_label = self.label_rects.get(i)
         if own_label is not None and any(_rects_overlap(own_label, rect) for rect in self.own_rects.get(i, [])):
             # link_label_rect() found no spot clear of them (e.g. endpoints too close)
-            messages.append(f"the label of {name} covers one of its own endpoints")
+            messages.append(Finding(
+                f"the label of {name} covers one of its own endpoints", "link-label-covers-endpoint",
+                [link.from_id, link.to_id], [link],
+            ))
         if own_label is not None:
             for eid, rect in self.obstacles:
                 if eid not in exclude and _rects_overlap(own_label, rect):
-                    messages.append(f"the label of {name} overlaps element {eid!r}")
+                    messages.append(Finding(
+                        f"the label of {name} overlaps element {eid!r}", "link-label-overlaps-element", [eid], [link]
+                    ))
             for cid, rect in self.container_labels:
                 if cid not in endpoints_only and _rects_overlap(own_label, rect):
-                    messages.append(f"the label of {name} overlaps the label of container {cid!r}")
+                    messages.append(Finding(
+                        f"the label of {name} overlaps the label of container {cid!r}",
+                        "link-label-overlaps-container-label", [cid], [link],
+                    ))
         return messages
 
     def label_pair_message(self, i: int, j: int) -> str | None:
@@ -1351,9 +1372,9 @@ class LinkCheckContext:
         if ri is None or rj is None or not _rects_overlap(ri, rj):
             return None
         a, b = self.links[i], self.links[j]
-        return (
-            f"the label of link {a.from_id!r} -> {a.to_id!r} overlaps the label of link "
-            f"{b.from_id!r} -> {b.to_id!r}"
+        return Finding(
+            f"the label of link {a.from_id!r} -> {a.to_id!r} overlaps the label of link {b.from_id!r} -> {b.to_id!r}",
+            "link-labels-overlap", [], [a, b],
         )
 
     def crosses_label_of(self, i: int, j: int) -> bool:
@@ -1390,9 +1411,10 @@ class LinkCheckContext:
         if overlap is None:
             return None
         (x0, y0), (x1, y1) = overlap
-        return (
+        return Finding(
             f"link {a.from_id!r} -> {a.to_id!r} and link {b.from_id!r} -> {b.to_id!r} share a collinear "
-            f"segment near ({x0:.0f}, {y0:.0f})-({x1:.0f}, {y1:.0f}), which may appear as a direct connection"
+            f"segment near ({x0:.0f}, {y0:.0f})-({x1:.0f}, {y1:.0f}), which may appear as a direct connection",
+            "link-aliasing", [], [a, b],
         )
 
 
@@ -1501,21 +1523,29 @@ def icon_resolution_warnings(root_box: Box, registry: MultiRegistry) -> list[str
             continue
         if element.kind == "container":
             if registry.resolve_group(element.type, element.provider) is None:
-                messages.append(
+                messages.append(Finding(
                     f"unknown container type {element.type!r} for container {element.id!r}; drawn as a plain frame"
-                    + registry.suggest_type(element.type, element.provider, kind="container")
-                )
+                    + registry.suggest_type(element.type, element.provider, kind="container"),
+                    "unknown-container-type", [element.id],
+                ))
             continue
         icon_entry = registry.resolve_icon(element.type, element.provider)
         if icon_entry is None:
-            messages.append(
+            messages.append(Finding(
                 f"unknown type {element.type!r} for node {element.id!r} (provider {element.provider!r}); "
-                "using placeholder icon" + registry.suggest_type(element.type, element.provider)
-            )
+                "using placeholder icon" + registry.suggest_type(element.type, element.provider),
+                "unknown-type", [element.id],
+            ))
         elif not icon_entry.file.exists():
-            messages.append(f"icon file missing for type {element.type!r} ({icon_entry.file}); using placeholder icon")
+            messages.append(Finding(
+                f"icon file missing for type {element.type!r} ({icon_entry.file}); using placeholder icon",
+                "icon-file-missing", [element.id],
+            ))
         elif (problem := icon_png(icon_entry.file)[1]) is not None:
-            messages.append(f"icon file for type {element.type!r} ({icon_entry.file}) {problem}; using placeholder icon")
+            messages.append(Finding(
+                f"icon file for type {element.type!r} ({icon_entry.file}) {problem}; using placeholder icon",
+                "icon-file-unreadable", [element.id],
+            ))
     return messages
 
 
@@ -1556,16 +1586,20 @@ def _drawn_rects(root_box: Box, links: list[Link]):
             continue
         by_id[box.element.id] = box
         rect = _footprint_rect(box) if box.element.kind == "node" else (box.abs_x, box.abs_y, box.width, box.height)
-        yield f"element {box.element.id!r}", rect
+        yield f"element {box.element.id!r}", rect, ([box.element.id], [])
     for link in links:
         from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
         if from_box is None or to_box is None:
             continue
         _, _, _, path = link_render_plan(from_box, to_box, link)
         xs, ys = [p[0] for p in path], [p[1] for p in path]
-        yield f"link {link.from_id!r} -> {link.to_id!r}", (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+        yield f"link {link.from_id!r} -> {link.to_id!r}", (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)), ([], [link])
         if link.label:
-            yield f"the label of link {link.from_id!r} -> {link.to_id!r}", link_label_rect_for(from_box, to_box, path, link)
+            yield (
+                f"the label of link {link.from_id!r} -> {link.to_id!r}",
+                link_label_rect_for(from_box, to_box, path, link),
+                ([], [link]),
+            )
 
 
 def fit_transform(diagram: Diagram, root_box: Box) -> FitTransform:
@@ -1577,7 +1611,7 @@ def fit_transform(diagram: Diagram, root_box: Box) -> FitTransform:
     if diagram.canvas.fit == "none":
         return FitTransform()
     canvas_w, canvas_h = diagram.canvas.size
-    rects = [r for _, r in _drawn_rects(root_box, diagram.links)]
+    rects = [r for _, r, _ in _drawn_rects(root_box, diagram.links)]
     if not rects:
         return FitTransform()
     min_x = min(r[0] for r in rects)
@@ -1607,13 +1641,13 @@ def canvas_warnings(diagram: Diagram, root_box: Box) -> list[str]:
         if transform.scale < FIT_WARNING_SCALE:
             # One mistyped coordinate (x: 12000 for 1200) shrinks everything
             # else to a speck - name it rather than blame the element count.
-            stray = [
-                f"{box.element.id!r} (x={box.abs_x:.0f}, y={box.abs_y:.0f})"
-                for box in iter_boxes(root_box)
+            stray_boxes = [
+                box for box in iter_boxes(root_box)
                 if box.element.id != "__root__"
                 and box.element.has_explicit_position
                 and not _within(_footprint_rect(box), canvas_w, canvas_h)
             ]
+            stray = [f"{box.element.id!r} (x={box.abs_x:.0f}, y={box.abs_y:.0f})" for box in stray_boxes]
             if stray:
                 hint = (
                     f"explicitly positioned outside the canvas: {', '.join(stray)} - check "
@@ -1622,15 +1656,31 @@ def canvas_warnings(diagram: Diagram, root_box: Box) -> list[str]:
             else:
                 wider = ", or aspectRatio 16:9" if diagram.canvas.aspect_ratio != "16:9" else ""
                 hint = f"consider fewer elements per slide or a smaller layout gap/padding{wider}"
-            return [
+            return [Finding(
                 f"the diagram was scaled to {transform.scale:.0%} to fit the slide, so its text is that much "
-                f"smaller - {hint}"
-            ]
+                f"smaller - {hint}",
+                "canvas-shrunk", [box.element.id for box in stray_boxes],
+            )]
         return []
     messages = []
-    for what, (x, y, w, h) in _drawn_rects(root_box, diagram.links):
-        if not _within((x, y, w, h), canvas_w, canvas_h):
-            messages.append(f"{what} is positioned outside the canvas bounds (x={x:.0f}, y={y:.0f}, w={w:.0f}, h={h:.0f})")
+    parent_of = _routing_index(root_box)["parent_of"]
+    reported: set[str] = set()
+    for what, (x, y, w, h), (elements, links) in _drawn_rects(root_box, diagram.links):
+        if _within((x, y, w, h), canvas_w, canvas_h):
+            continue
+        if elements:
+            # One report for a whole container that's off the slide, not one
+            # per element inside it.
+            ancestor = parent_of.get(elements[0])
+            while ancestor is not None and ancestor not in reported:
+                ancestor = parent_of.get(ancestor)
+            if ancestor is not None:
+                continue
+            reported.add(elements[0])
+        messages.append(Finding(
+            f"{what} is positioned outside the canvas bounds (x={x:.0f}, y={y:.0f}, w={w:.0f}, h={h:.0f})",
+            "off-canvas", elements, links,
+        ))
     return messages
 
 
@@ -1668,7 +1718,10 @@ def containment_warnings(root_box: Box) -> list[str]:
         for child in box.children:
             x, y, w, h = _footprint_rect(child)
             if x < left or y < top or x + w > right or y + h > bottom:
-                messages.append(f"element {child.element.id!r} extends outside its container {box.element.id!r}")
+                messages.append(Finding(
+                    f"element {child.element.id!r} extends outside its container {box.element.id!r}",
+                    "outside-container", [child.element.id, box.element.id],
+                ))
     return messages
 
 

@@ -497,3 +497,23 @@ def test_a_chain_written_out_of_order_is_laid_out_forward():
     # back through J and K.
     raw = parse_flowchart("flowchart LR\nJ --> K\nM --> N\nF --> J\n")
     assert _node_ids(raw["elements"]) == ["F", "J", "K", "M", "N"]
+
+
+def test_dotted_and_thick_links_and_link_style_are_kept():
+    raw = parse_flowchart(
+        "flowchart LR\n"
+        "A --> B\n"
+        "B -.-> C\n"
+        "C ==> D\n"
+        "D ~~~ E\n"
+        "E --> F\n"
+        "linkStyle 4 stroke:#f00,stroke-width:4px,stroke-dasharray: 2, 2\n"
+        "linkStyle default stroke:green\n"
+    )
+    validate(raw)
+    links = {(l["from"], l["to"]): l for l in raw["links"]}
+    assert ("D", "E") not in links  # invisible: no line, but it still counts for linkStyle numbering
+    assert links[("B", "C")]["line"] == "dashed"
+    assert links[("C", "D")]["width"] == 2.5
+    assert links[("A", "B")]["color"] == "#008000"  # linkStyle default
+    assert links[("E", "F")] == {"from": "E", "to": "F", "color": "#FF0000", "width": 3.0, "line": "dotted"}

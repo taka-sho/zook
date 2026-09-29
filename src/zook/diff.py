@@ -196,6 +196,9 @@ def _link_signature(link: Link) -> dict[str, Any]:
         "toSide": link.to_side,
         "waypoints": [list(p) for p in link.waypoints],
         "labelFontSize": link.label_font_size,
+        "color": None if (link.color or "").upper() in ("", "#545B64") else link.color.upper(),
+        "line": link.line,
+        "width": link.width,
     }
 
 

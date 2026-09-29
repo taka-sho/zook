@@ -37,7 +37,7 @@ from typing import Optional
 
 import yaml
 
-from .errors import DiagramError
+from .errors import DiagramError, Finding
 from .loader import load_yaml
 
 DEFAULT_ICON_SIZE = 64
@@ -214,11 +214,12 @@ class _Layers:
                 alias_key = normalize_type(alias)
                 if alias_key in self.entries and alias_key != norm:
                     if (norm, alias) in self.user_aliases:
-                        warnings.append(
+                        warnings.append(Finding(
                             f"alias {alias!r} of {what} {name!r} in {self.user_aliases[(norm, alias)]} is already the "
                             f"{what} {self.entries[alias_key][0]!r} - ignored (redefine {self.entries[alias_key][0]!r} "
-                            "itself to change it)"
-                        )
+                            "itself to change it)",
+                            "registry-alias-ignored",
+                        ))
                     continue
                 index[alias_key] = entry
         return index
@@ -247,12 +248,15 @@ def load_user_registry(path: str) -> dict:
     """Read a `--registry` file and check it against icon-registry.schema.json
     (the format docs-site/icons.md documents), so a malformed registry is a
     Fatal naming the file and field - not a KeyError deep inside layout."""
-    from .validate import schema_errors
+    from .validate import schema_violations
 
     raw = load_yaml(path)
-    lines = schema_errors(raw, "icon-registry.schema.json")
-    if lines:
-        raise DiagramError(f"invalid icon registry {path}:\n" + "\n".join(lines))
+    violations = schema_violations(raw, "icon-registry.schema.json")
+    if violations:
+        raise DiagramError(
+            f"invalid icon registry {path}:\n" + "\n".join(f"  {v['path']}: {v['message']}" for v in violations),
+            "invalid-registry", [{"file": path, **v} for v in violations],
+        )
     return raw
 
 
