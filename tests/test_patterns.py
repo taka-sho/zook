@@ -27,7 +27,7 @@ def test_patterns_directory_is_not_empty():
 
 @pytest.mark.parametrize("path", PATTERN_FILES, ids=lambda p: p.name)
 def test_pattern_renders_without_warnings(path: Path):
-    raw = yaml.safe_load(path.read_text())
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     validate(raw)
     diagram = parse_diagram(raw)
     registry = load_registries()

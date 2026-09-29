@@ -55,8 +55,7 @@ from .text import PT_TO_LOGICAL
 
 SCALE = 1.5  # px per logical unit
 BACKGROUND = (255, 255, 255, 255)
-TEXT_COLOR = (30, 30, 30, 255)
-LINE_COLOR = (84, 91, 100, 255)
+TEXT_COLOR = (30, 30, 30, 255)  # link labels, on their white box
 LABEL_BG = (255, 255, 255, 230)
 SHAPE_BORDER_PT = 0.75  # the default theme line of a shape node
 CORNER_BADGE_SIZE = 20  # logical units; same as render.py
@@ -326,6 +325,12 @@ def _draw_container(image, draw: ImageDraw.ImageDraw, box: Box, registry: MultiR
     badge = badge_png is not None and "left" in style.label_position
     if badge:
         badge_y = ly + CORNER_BADGE_PADDING if "top" in style.label_position else ly + lh - CORNER_BADGE_PADDING - CORNER_BADGE_SIZE
+        if c.color(style.border_color, box.element.id, inside=True) != _hex_to_rgba(style.border_color):
+            # as render.py: a white tile under a badge the backdrop would hide
+            from .render import badge_tile_rect
+
+            draw.rounded_rectangle(c.rect(badge_tile_rect(lx + CORNER_BADGE_PADDING, badge_y)),
+                                   radius=c.length(3), fill=(255, 255, 255, 255))
         _paste_icon(image, badge_png, c.x(lx + CORNER_BADGE_PADDING), c.y(badge_y),
                     c.length(CORNER_BADGE_SIZE), c.length(CORNER_BADGE_SIZE))
     left = lx + (CORNER_BADGE_SIZE + CORNER_BADGE_PADDING if badge else inset)

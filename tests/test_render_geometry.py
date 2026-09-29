@@ -495,3 +495,37 @@ def test_an_invalid_link_colour_or_line_is_a_schema_error():
     for bad in ({"color": "pink"}, {"line": "wavy"}, {"width": 0}):
         with pytest.raises(DiagramError, match="links"):
             _doc([_node("a"), _node("b")], [{"from": "a", "to": "b", **bad}])
+
+
+def _stacked_pair(**container):
+    return _doc([
+        {"kind": "container", "id": "v", "type": "group", "label": "Pair", "layout": {"direction": "vertical"},
+         "children": [_node("d", label="Top"), _node("e", label="Bottom")], **container},
+    ], [{"from": "d", "to": "e", "label": "PutObject with multipart upload and retry"}])
+
+
+def test_an_auto_sized_container_grows_to_hold_a_link_label():
+    # The label beside the short link between two stacked icons used to
+    # stick out of the frame, its white box cutting the frame line.
+    diagram, root, _ = _build(_stacked_pair())
+    boxes = {b.element.id: b for b in iter_boxes(root)}
+    path = link_render_plan(boxes["d"], boxes["e"], diagram.links[0])[3]
+    x, y, w, h = link_label_rect_for(boxes["d"], boxes["e"], path, diagram.links[0])
+    v = boxes["v"]
+    assert v.abs_x <= x and x + w <= v.abs_x + v.width and y + h <= v.abs_y + v.height
+    assert diagram_warnings(diagram, root, REGISTRY) == []
+
+
+def test_a_label_sticking_out_of_a_fixed_size_container_is_a_warning():
+    diagram, root, _ = _build(_stacked_pair(width=160, height=300))
+    codes = [getattr(w, "code", None) for w in diagram_warnings(diagram, root, REGISTRY)]
+    assert "link-label-outside-container" in codes
+
+
+@pytest.mark.parametrize("background, tiled", [(None, False), ("#1E2A38", True)])
+def test_a_corner_badge_gets_a_tile_only_where_it_would_vanish(background, tiled):
+    extra = {"background": background} if background else {}
+    doc = _doc([{"kind": "container", "id": "aws", "type": "cloud", "children": [_node("a")]}], **extra)
+    _, _, prs = _build(doc)
+    names = {s.name for s in _all_shapes(prs.slides[0].shapes)}
+    assert ("aws badge tile" in names) is tiled

@@ -65,10 +65,10 @@ Container types: `cloud`, `vpc`, `project`
 
 | Category | Services |
 |---|---|
-| Compute | VirtualMachine, Functions, AKS, ContainerApps, AppService, ContainerRegistry, Bastion |
+| Compute | VirtualMachine, Functions, AKS, ContainerApps, AppService, ContainerRegistry |
 | Storage | BlobStorage, ManagedDisk, StorageAccount |
 | Database | SQLDatabase, CosmosDB, CacheForRedis, PostgreSQL, MySQL |
-| Networking | LoadBalancer, FrontDoor, DNS, APIManagement, NATGateway, ApplicationGateway, Firewall, VPNGateway, ExpressRoute, TrafficManager, DDoSProtection |
+| Networking | LoadBalancer, FrontDoor, DNS, APIManagement, NATGateway, ApplicationGateway, Firewall, VPNGateway, ExpressRoute, TrafficManager, DDoSProtection, Bastion |
 | Integration | ServiceBus, EventGrid, EventHubs, LogicApps |
 | Security | EntraID, KeyVault, Sentinel |
 | Management | Monitor, ApplicationInsights |

@@ -130,7 +130,7 @@ def test_missing_output_directory_is_a_json_error(tmp_path):
 
 @pytest.mark.parametrize("command", ["build", "export-drawio", "preview"])
 def test_output_path_equal_to_input_is_refused(tmp_path, command):
-    path = _write(tmp_path, "d.png" if command == "preview" else "d.yaml", FIXTURE.read_text())
+    path = _write(tmp_path, "d.png" if command == "preview" else "d.yaml", FIXTURE.read_text(encoding="utf-8"))
     original = Path(path).read_bytes()
     result = CliRunner().invoke(main, [command, path, "-o", path, "--format", "json"])
 
@@ -142,7 +142,7 @@ def test_from_mermaid_refuses_to_overwrite_its_input(tmp_path):
     path = _write(tmp_path, "d.mmd", "flowchart TD\n  A --> B\n")
     result = CliRunner().invoke(main, ["from-mermaid", path, "-o", path, "--format", "json"])
     assert result.exit_code == 1
-    assert Path(path).read_text() == "flowchart TD\n  A --> B\n"
+    assert Path(path).read_text(encoding="utf-8") == "flowchart TD\n  A --> B\n"
 
 
 def test_preview_rejects_a_non_png_output(tmp_path):
@@ -197,13 +197,13 @@ def test_unexpected_exception_still_honours_the_json_contract(tmp_path, monkeypa
 
 
 def test_sync_with_malformed_drawio_is_a_json_error(tmp_path):
-    yaml_path = _write(tmp_path, "d.yaml", FIXTURE.read_text())
+    yaml_path = _write(tmp_path, "d.yaml", FIXTURE.read_text(encoding="utf-8"))
     drawio_path = _write(tmp_path, "d.drawio", "<mxfile><diagram>")
     result = CliRunner().invoke(main, ["sync", yaml_path, drawio_path, "--format", "json"])
 
     assert result.exit_code == 1
     assert "not a valid .drawio XML file" in _json_error(result)
-    assert Path(yaml_path).read_text() == FIXTURE.read_text()
+    assert Path(yaml_path).read_text(encoding="utf-8") == FIXTURE.read_text(encoding="utf-8")
 
 
 def test_version_option():
@@ -229,7 +229,7 @@ def test_every_text_read_is_locale_independent(tmp_path):
         "main()\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code, str(FIXTURE)], capture_output=True, text=True, env=env, check=False
+        [sys.executable, "-c", code, str(FIXTURE)], capture_output=True, encoding="utf-8", env=env, check=False
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "ok"
@@ -262,7 +262,7 @@ def test_missing_registry_file_is_a_json_error(tmp_path):
 
 @pytest.mark.skipif(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0), reason="chmod 000 isn't enforced")
 def test_unreadable_input_is_a_json_error(tmp_path):
-    path = Path(_write(tmp_path, "noperm.yaml", FIXTURE.read_text()))
+    path = Path(_write(tmp_path, "noperm.yaml", FIXTURE.read_text(encoding="utf-8")))
     path.chmod(0)
     try:
         result = CliRunner().invoke(main, ["validate", str(path), "--format", "json"])
@@ -281,29 +281,29 @@ def test_directory_as_output_is_a_json_error(tmp_path):
 
 
 def test_case_variant_or_hard_link_of_the_input_is_refused(tmp_path):
-    src = Path(_write(tmp_path, "victim.yaml", FIXTURE.read_text()))
+    src = Path(_write(tmp_path, "victim.yaml", FIXTURE.read_text(encoding="utf-8")))
     link = tmp_path / "hard.yaml"
     os.link(src, link)
     result = CliRunner().invoke(main, ["build", str(src), "-o", str(link), "--format", "json"])
     assert result.exit_code == 1
-    assert src.read_text() == FIXTURE.read_text()
+    assert src.read_text(encoding="utf-8") == FIXTURE.read_text(encoding="utf-8")
 
     upper = tmp_path / "VICTIM.yaml"
     if upper.exists():  # case-insensitive filesystem (macOS/Windows default)
         result = CliRunner().invoke(main, ["build", str(src), "-o", str(upper), "--format", "json"])
         assert result.exit_code == 1
-        assert src.read_text() == FIXTURE.read_text()
+        assert src.read_text(encoding="utf-8") == FIXTURE.read_text(encoding="utf-8")
 
 
 def test_sync_refuses_to_write_over_its_drawio_input(tmp_path):
-    yaml_path = _write(tmp_path, "d.yaml", FIXTURE.read_text())
+    yaml_path = _write(tmp_path, "d.yaml", FIXTURE.read_text(encoding="utf-8"))
     drawio_path = str(tmp_path / "d.drawio")
     assert CliRunner().invoke(main, ["export-drawio", yaml_path, "-o", drawio_path]).exit_code == 0
-    original = Path(drawio_path).read_text()
+    original = Path(drawio_path).read_text(encoding="utf-8")
 
     result = CliRunner().invoke(main, ["sync", yaml_path, drawio_path, "-o", drawio_path, "--format", "json"])
     assert result.exit_code == 1
-    assert Path(drawio_path).read_text() == original
+    assert Path(drawio_path).read_text(encoding="utf-8") == original
 
 
 def test_non_utf8_console_cannot_crash_a_report(tmp_path):

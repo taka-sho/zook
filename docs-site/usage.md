@@ -196,6 +196,7 @@ These print a warning but let generation continue (exit code `0` by default; `1`
 - A child element overlaps its container's own label-text area
 - A child element extends outside its own container (an explicit x/y beyond the container's explicit width/height, or a negative x/y)
 - A link's path runs back through one of its own endpoint nodes (e.g. `fromSide: top` on a link that goes down)
+- A link's label sticks out of the container both ends of the link are in. An auto-sized container is grown at its right/bottom to hold the label first, so this only fires for a container with an explicit size
 - A link's label covers one of its own endpoint nodes. A label that would hide the arrowhead of a short link is moved beside the line — past the endpoint icons if need be — so this only fires when no such spot is free
 - A link's (arrow's) path, or its own label, overlaps an unrelated element, another link's label, or a container's label → mechanically judged from the actual rendered path from the connection points (`straight`/`elbow` are exact; only `curved` is a straight-line approximation). Overlap with a container's label is never excluded even for an ancestor container
 - Two separate links' Z-routes run collinear through a shared node's connection point, reading as one direct connection (false edge aliasing — see [Known Limitations](limitations.md) for details)
@@ -232,6 +233,7 @@ $ zook validate broken.yaml --format json
 | `link-crosses-element` / `link-crosses-container-label` / `link-crosses-link-label` | a link's path runs through an element / a container's label / another link's label (that element or container; the link, and the other link) |
 | `link-through-own-endpoint` | a link doubles back through one of its own endpoints |
 | `link-label-overlaps-element` / `link-label-overlaps-container-label` / `link-labels-overlap` / `link-label-covers-endpoint` | a link's label covers something |
+| `link-label-outside-container` | a link's label sticks out of the container it belongs in, across its frame (that container; the link) |
 | `link-aliasing` | two links share a collinear segment and read as one connection (both links) |
 | `canvas-shrunk` / `off-canvas` | shrunk below 70% to fit the slide (any stray explicitly positioned elements) / drawn outside the slide with `fit: none` |
 | `registry-alias-ignored` | a `--registry` alias names another type |

@@ -434,12 +434,21 @@ def _container_label_needs(element: Element, registry: MultiRegistry) -> tuple[s
     return text, font, natural_width(text, font) + 2 * CONTAINER_LABEL_INSET + badge + LABEL_TEXT_SLACK
 
 
-def measure(element: Element, registry: MultiRegistry, available: tuple[float, float] | None = None) -> Box:
+def measure(
+    element: Element,
+    registry: MultiRegistry,
+    available: tuple[float, float] | None = None,
+    room: dict[str, tuple[float, float]] | None = None,
+) -> Box:
+    """Size an element (a container from its children, recursively).
+    `room` gives auto-sized containers extra (width, height) at their right
+    and bottom - see build_layout: a link label that didn't fit inside."""
     if element.kind == "node":
         return _measure_node(element, registry)
 
     layout = element.layout or Layout()
-    children = [measure(c, registry) for c in element.children]
+    children = [measure(c, registry, room=room) for c in element.children]
+    extra_w, extra_h = (room or {}).get(element.id, (0.0, 0.0))
     text, font, label_wants = _container_label_needs(element, registry)
     label_at_bottom = bool(text) and "bottom" in resolve_container_label_position(element, registry)
 
@@ -451,6 +460,7 @@ def measure(element: Element, registry: MultiRegistry, available: tuple[float, f
         content_top = layout.padding + (0.0 if label_at_bottom else band)
         _arrange_children(children, layout, content_top, available)
         bbox_w, bbox_h = _bbox(children, content_top, layout.padding)
+        bbox_w, bbox_h = bbox_w + extra_w, bbox_h + extra_h
         if element.width is not None:
             width = element.width
         else:
@@ -479,7 +489,51 @@ def assign_absolute(box: Box, parent_abs_x: float = 0.0, parent_abs_y: float = 0
         assign_absolute(child, box.abs_x, box.abs_y)
 
 
+LABEL_ROOM_MARGIN = 6  # clearance an auto-sized container keeps around a link label it grew for
+
+
 def build_layout(diagram: Diagram, registry: MultiRegistry) -> Box:
+    """Lay the diagram out. An auto-sized container that a link label
+    would stick out of (a long label beside the link between two stacked
+    icons) is grown at its right/bottom until the label fits, a few passes
+    at most - the label's spot depends on the layout it changes."""
+    room: dict[str, tuple[float, float]] = {}
+    for _ in range(3):
+        root = _layout_pass(diagram, registry, room)
+        grown = False
+        for container_id, (need_w, need_h) in _label_overflow(root, diagram.links).items():
+            have_w, have_h = room.get(container_id, (0.0, 0.0))
+            if need_w > 0.5 or need_h > 0.5:
+                room[container_id] = (have_w + need_w, have_h + need_h)
+                grown = True
+        if not grown:
+            break
+    return root
+
+
+def _label_overflow(root: Box, links: list[Link]) -> dict[str, tuple[float, float]]:
+    """How much wider/taller each auto-sized container must be for the
+    labels of the links inside it to fit (right/bottom only)."""
+    by_id = _routing_index(root)["by_id"]
+    need: dict[str, tuple[float, float]] = {}
+    for link in links:
+        from_box, to_box = by_id.get(link.from_id), by_id.get(link.to_id)
+        if not link.label or from_box is None or to_box is None:
+            continue
+        container = _enclosing_container(from_box, to_box)
+        if container is None:
+            continue
+        path = link_render_plan(from_box, to_box, link)[3]
+        x, y, w, h = link_label_rect_for(from_box, to_box, path, link)
+        over_w = x + w + LABEL_ROOM_MARGIN - (container.abs_x + container.width) if container.element.width is None else 0.0
+        over_h = y + h + LABEL_ROOM_MARGIN - (container.abs_y + container.height) if container.element.height is None else 0.0
+        if over_w > 0.5 or over_h > 0.5:
+            old_w, old_h = need.get(container.element.id, (0.0, 0.0))
+            need[container.element.id] = (max(old_w, over_w, 0.0), max(old_h, over_h, 0.0))
+    return need
+
+
+def _layout_pass(diagram: Diagram, registry: MultiRegistry, room: dict[str, tuple[float, float]]) -> Box:
     canvas_w, canvas_h = diagram.canvas.size
     padding = diagram.canvas.padding
     top = diagram.canvas.layout or Layout(direction="grid", gap=TOP_LEVEL_GAP_DEFAULT)
@@ -492,7 +546,7 @@ def build_layout(diagram: Diagram, registry: MultiRegistry) -> Box:
         children=diagram.elements,
     )
     available = (max(1.0, canvas_w - 2 * padding), max(1.0, canvas_h - 2 * padding))
-    root_box = measure(root_element, registry, available)
+    root_box = measure(root_element, registry, available, room)
     root_box.width = root_box.footprint_w = canvas_w
     root_box.height = root_box.footprint_h = canvas_h
     assign_absolute(root_box)
@@ -1033,6 +1087,7 @@ def link_label_rect(
     text: str,
     font_size: float,
     avoid: list[tuple[float, float, float, float]] = (),
+    bounds: tuple[float, float, float, float] | None = None,
 ) -> tuple[float, float, float, float]:
     """Where a link's label box is drawn: centred on the path's arc-length
     midpoint - unless that would cover an end of the link (its arrowhead), as
@@ -1054,10 +1109,13 @@ def link_label_rect(
     def covers_end(rect: tuple[float, float, float, float]) -> bool:
         return any(_contains(rect, p) for p in ends)
 
+    def inside(rect: tuple[float, float, float, float]) -> bool:
+        return bounds is None or _contains_rect(bounds, rect)
+
     def clear(rect: tuple[float, float, float, float]) -> bool:
         return not covers_end(rect) and not any(_rects_overlap(rect, a) for a in avoid)
 
-    if clear(centred):
+    if clear(centred) and inside(centred):
         return centred
     left, top = ax - width / 2, ay - height / 2
     above, below = (left, ay - height - LINK_LABEL_OFFSET, width, height), (left, ay + LINK_LABEL_OFFSET, width, height)
@@ -1074,11 +1132,49 @@ def link_label_rect(
     if rows:
         candidates.append((max(a[0] + a[2] for a in rows) + LINK_LABEL_OFFSET, top, width, height))
         candidates.append((min(a[0] for a in rows) - LINK_LABEL_OFFSET - width, top, width, height))
-    free = [(round(_distance_to_rect((ax, ay), r), 1), i, r) for i, r in enumerate(candidates) if clear(r)]
-    free = [f for f in free if f[0] <= LINK_LABEL_MAX_SHIFT]
-    if free:
-        return min(free)[2]
+    # The nearest free spot, preferring one inside the link's container; a
+    # spot sticking out of it (reported as a Warning) beats covering an
+    # icon, and anything further than LINK_LABEL_MAX_SHIFT reads as some
+    # other link's label, which is worse than either.
+    near = [
+        (not inside(r), round(_distance_to_rect((ax, ay), r), 1), i, r)
+        for i, r in enumerate([centred, *candidates])
+        if clear(r) and _distance_to_rect((ax, ay), r) <= LINK_LABEL_MAX_SHIFT
+    ]
+    if near:
+        return min(near)[3]
     return centred if not covers_end(centred) else candidates[0]
+
+
+def _contains_rect(outer: tuple[float, float, float, float], inner: tuple[float, float, float, float]) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ix >= ox - 0.5 and iy >= oy - 0.5 and ix + iw <= ox + ow + 0.5 and iy + ih <= oy + oh + 0.5
+
+
+def _enclosing_container(from_box: Box, to_box: Box) -> Box | None:
+    """The innermost container holding both ends of a link (for a link
+    between a container and something inside it, that container) - where
+    its label belongs; None at the top level."""
+    root = from_box.root
+    if root is None or to_box.root is not root:
+        return None
+    index = _routing_index(root)
+    parent_of, by_id = index["parent_of"], index["by_id"]
+
+    def chain(box: Box) -> list[str]:
+        ids = [box.element.id] if box.element.kind == "container" else []
+        cur = parent_of.get(box.element.id)
+        while cur is not None:
+            ids.append(cur)
+            cur = parent_of.get(cur)
+        return ids
+
+    to_chain = set(chain(to_box))
+    common = next((eid for eid in chain(from_box) if eid in to_chain), None)
+    if common is None or common == "__root__":
+        return None
+    return by_id[common]
 
 
 def _distance_to_rect(point: tuple[float, float], rect: tuple[float, float, float, float]) -> float:
@@ -1090,8 +1186,16 @@ def _distance_to_rect(point: tuple[float, float], rect: tuple[float, float, floa
 
 def link_label_rect_for(from_box: Box, to_box: Box, path: list[tuple[float, float]], link: Link) -> tuple[float, float, float, float]:
     """link_label_rect() for `link` drawn along `path`, kept off its own
-    endpoint icons and their labels."""
-    return link_label_rect(path, link.label, link.label_font_size, own_endpoint_rects(from_box, to_box))
+    endpoint icons and their labels, and inside the container the link
+    lives in (an opaque label box sticking out cut through its frame)."""
+    return link_label_rect(
+        path, link.label, link.label_font_size, own_endpoint_rects(from_box, to_box), _label_bounds(from_box, to_box)
+    )
+
+
+def _label_bounds(from_box: Box, to_box: Box) -> tuple[float, float, float, float] | None:
+    container = _enclosing_container(from_box, to_box)
+    return None if container is None else (container.abs_x, container.abs_y, container.width, container.height)
 
 
 def link_label_anchor(path: list[tuple[float, float]]) -> tuple[float, float]:
@@ -1271,6 +1375,7 @@ class LinkCheckContext:
         self.axis_ranges: dict[int, list] = {}
         self.label_rects: dict[int, tuple[float, float, float, float]] = {}
         self.own_rects: dict[int, list[tuple[float, float, float, float]]] = {}
+        self.label_homes: dict[int, str] = {}  # link -> the container its label sticks out of
         for i, link in enumerate(self.links):
             self.set_link(i, link)
 
@@ -1299,10 +1404,13 @@ class LinkCheckContext:
         self.bboxes[i] = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
         self.axis_ranges[i] = [_segment_axis_range(a, b) for a, b in zip(path, path[1:])]
         self.own_rects[i] = own_endpoint_rects(from_box, to_box)
+        self.label_homes.pop(i, None)
         if link.label:
-            self.label_rects[i] = _inflate_rect(
-                link_label_rect(path, link.label, link.label_font_size, self.own_rects[i]), self.margin
-            )
+            bounds = _label_bounds(from_box, to_box)
+            label = link_label_rect(path, link.label, link.label_font_size, self.own_rects[i], bounds)
+            self.label_rects[i] = _inflate_rect(label, self.margin)
+            if bounds is not None and not _contains_rect(bounds, label):
+                self.label_homes[i] = _enclosing_container(from_box, to_box).element.id
 
     def crosses(self, i: int, rect: tuple[float, float, float, float]) -> bool:
         path = self.paths[i]
@@ -1347,6 +1455,13 @@ class LinkCheckContext:
                 [link.from_id, link.to_id], [link],
             ))
         own_label = self.label_rects.get(i)
+        if i in self.label_homes:
+            home = self.label_homes[i]
+            messages.append(Finding(
+                f"the label of {name} sticks out of container {home!r}, across its frame - shorten the label, "
+                "give the container room, or move the link's ends",
+                "link-label-outside-container", [home], [link],
+            ))
         if own_label is not None and any(_rects_overlap(own_label, rect) for rect in self.own_rects.get(i, [])):
             # link_label_rect() found no spot clear of them (e.g. endpoints too close)
             messages.append(Finding(

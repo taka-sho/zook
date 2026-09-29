@@ -59,7 +59,7 @@ provider: aws
 icons:
   EC2: {{ file: "{override_file.name}", category: Custom }}
 """
-    )
+    , encoding="utf-8")
     registry = load_registry("aws", user_registry_path=str(user_registry))
     entry = registry.resolve_icon("EC2")
     assert entry.file == override_file
@@ -118,7 +118,7 @@ provider: custom
 icons:
   InternalService: {{ file: "{icon_file.name}", category: Custom }}
 """
-        )
+        , encoding="utf-8")
         multi = load_registries(user_registry_path=str(user_registry))
         assert multi.resolve_icon("InternalService", "custom") is not None
         # A node that forgets to set provider: custom doesn't accidentally pick it up.

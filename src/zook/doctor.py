@@ -118,6 +118,19 @@ _MAX_CANDIDATES = 8
 
 # Whole-pipeline rounds; each must strictly improve on the last.
 _MAX_ROUNDS = 4
+# Round sequences, each against what's fixed so far (see diagnose_and_fix).
+_MAX_CYCLES = 3
+
+
+def _routed_links(raw) -> set[int]:
+    """Links whose routing is spelled out - explicit waypoints or a forced
+    connection side. That expresses routing intent, so stages 2 and 4 leave
+    them be rather than re-routing them a different way."""
+    return {
+        i
+        for i, link in enumerate(raw.get("links", []) or [])
+        if link.get("waypoints") or link.get("fromSide") or link.get("toSide")
+    }
 
 Rect = tuple[float, float, float, float]
 
@@ -185,6 +198,7 @@ _WEIGHTS = [
     (re.compile(r"^element '.*' overlaps the label of container "), 3),
     (re.compile(r" runs back through one of its own endpoints$"), 5),
     (re.compile(r"^the label of link .* covers one of its own endpoints$"), 3),
+    (re.compile(r"^the label of link .* sticks out of container "), 2),
     (re.compile(r"^link .* passes through element '(?P<id>.*)'$"), None),  # 3 for a node, 1 for a container
     (re.compile(r"^the label of link .* overlaps element '(?P<id>.*)'$"), None),
     (re.compile(r"passes through the label of (container|link) "), 2),
@@ -888,25 +902,28 @@ def diagnose_and_fix(raw: dict, registry: MultiRegistry) -> DoctorResult:
         return DoctorResult(status="ok", remaining=_unfixable_warnings(root, diagram, registry))
 
     original = copy.deepcopy(raw)
-    author_explicit = _explicit_ids(raw)
-    # A link whose routing the author touched at all - explicit waypoints or a
-    # forced connection side - expresses routing intent, so stages 2 and 4
-    # leave it be rather than re-routing it a different way.
-    author_routed = {
-        i
-        for i, link in enumerate(original.get("links", []) or [])
-        if link.get("waypoints") or link.get("fromSide") or link.get("toSide")
-    }
+    fixed = (_explicit_ids(raw), _routed_links(raw))
 
     score = initial.score
-    for _ in range(_MAX_ROUNDS):
-        snapshot = copy.deepcopy(raw)
-        _run_stages(raw, registry, author_explicit, author_routed)
-        new_score = _score(raw, registry)
-        if new_score >= score:
-            _restore(raw, snapshot)  # nothing gained this round: no churn either
+    for cycle in range(_MAX_CYCLES):
+        improved = False
+        for _ in range(_MAX_ROUNDS):
+            snapshot = copy.deepcopy(raw)
+            _run_stages(raw, registry, *fixed)
+            new_score = _score(raw, registry)
+            if new_score >= score:
+                _restore(raw, snapshot)  # nothing gained this round: no churn either
+                break
+            score, improved = new_score, True
+        # A second `doctor` run treats what this one wrote - the coordinates
+        # it pinned, the sides and waypoints it gave links - as the author's,
+        # which steers its search elsewhere; it could then still find
+        # something. Settle against that view too before stopping, so a
+        # second run changes nothing.
+        fresh = (_explicit_ids(raw), _routed_links(raw))
+        if (cycle > 0 and not improved) or (not improved and fresh == fixed):
             break
-        score = new_score
+        fixed = fresh
 
     final = _assess(raw, registry)
     diagram = parse_diagram(raw)

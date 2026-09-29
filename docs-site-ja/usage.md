@@ -195,6 +195,7 @@ $ echo $?
 - 子要素がコンテナ自身のラベル文字の領域と重なっている
 - 子要素が自分のコンテナからはみ出している(コンテナの明示サイズを超える明示座標や、負の座標)
 - リンクの経路が自分の端点ノードを貫いている(例: 下へ向かうリンクに `fromSide: top` を指定した場合)
+- リンクのラベルが、リンクの両端を含むコンテナからはみ出している。自動サイズのコンテナはラベルが収まるよう右端・下端を先に広げるので、この警告は明示サイズのコンテナでだけ出る
 - リンクのラベルが自分の端点ノードを覆っている。短いリンクの矢じりを隠してしまうラベルは、線の横へ(必要なら端点のアイコンの外側まで)ずらして置くので、この警告はずらす先が見つからない場合にだけ出る
 - リンク(矢印)の経路、またはリンクラベル自体が、接続先以外の要素・他リンクのラベル・コンテナのラベルと重なっている → 接続点から実際に描画される経路(`straight`/`elbow` は正確、`curved` のみ直線近似)をもとに機械的に判定して警告。コンテナのラベルとの重なりは祖先コンテナであっても除外されない
 - 2本の別リンクのZルートが共通ノードの同一接続点で連続し、直接接続に見える(false edge aliasing、詳細は[既知の制約](limitations.md))
@@ -231,6 +232,7 @@ $ zook validate broken.yaml --format json
 | `link-crosses-element` / `link-crosses-container-label` / `link-crosses-link-label` | リンクの経路が要素・コンテナのラベル・他のリンクのラベルを貫いている(その要素やコンテナ。そのリンクと、相手のリンク) |
 | `link-through-own-endpoint` | リンクが自分の端点を貫いて折り返している |
 | `link-label-overlaps-element` / `link-label-overlaps-container-label` / `link-labels-overlap` / `link-label-covers-endpoint` | リンクのラベルが何かを覆っている |
+| `link-label-outside-container` | リンクのラベルが、属するコンテナの枠を越えてはみ出している(そのコンテナ、そのリンク) |
 | `link-aliasing` | 2本のリンクが同じ直線上で重なり、1本の接続に見える(両方のリンク) |
 | `canvas-shrunk` / `off-canvas` | スライドに収めるため 70% 未満に縮小した(キャンバス外に明示座標で置かれた要素)/ `fit: none` でスライドの外に描かれる |
 | `registry-alias-ignored` | `--registry` の別名が、別の type の名前と同じ |
