@@ -78,7 +78,7 @@ jobs:
 
       - name: Open PR with the updated YAML
         if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "Sync diagram position/size changes from draw.io"
           title: "Sync draw.io position/size changes"
