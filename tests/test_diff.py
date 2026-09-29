@@ -158,7 +158,7 @@ def _write(tmp_path, name, doc):
     import yaml
 
     path = tmp_path / name
-    path.write_text(yaml.safe_dump(doc))
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
     return str(path)
 
 
@@ -207,7 +207,7 @@ def test_cli_fatal_on_invalid_input(tmp_path):
     good = _write(tmp_path, "good.yaml", _clone())
     bad = tmp_path / "bad.yaml"
     bad.write_text("version: '1.0'\ncanvas: {aspectRatio: '16:9'}\nelements:\n  - {kind: node, id: a, type: EC2}\n"
-                   "links:\n  - {from: a, to: ghost}\n")
+                   "links:\n  - {from: a, to: ghost}\n", encoding="utf-8")
     result = CliRunner().invoke(main, ["diff", good, str(bad), "--format", "json"])
     # 2, not 1: `--exit-code` uses 1 for "the diagrams differ", so an invalid
     # input must be distinguishable from a real difference (like diff(1)).

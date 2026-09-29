@@ -180,6 +180,7 @@ Applies to children with no `x`/`y`.
 | A child extends outside its own container (explicit x/y beyond the container's explicit size, or negative) | Warning | placed as-is, with a warning |
 | A link's path runs back through one of its own endpoint nodes (icon or label) | Warning | placed as-is, with a warning |
 | A link's label covers one of its own endpoint nodes (no spot beside the line clear of them was found) | Warning | placed as-is, with a warning |
+| A link's label sticks out of the container both its ends are in (an auto-sized container is first grown at its right/bottom to hold it; this is left when its size is explicit) | Warning | placed as-is, with a warning |
 | A link's path or label overlaps an unrelated element, another link's label, or a container's label | Warning | placed as-is, with a warning (no detour) |
 | Two separate links' Z-routes run collinear through a shared node's connection point, reading as one direct connection (false edge aliasing) - not a fan-out/fan-in trunk shared by links leaving (or entering) the same point | Warning | placed as-is, with a warning (connection points aren't shifted) |
 | Both `link.fromSide`/`toSide` set with a mismatched axis (horizontal/vertical) (only when `waypoints` is not set) | Fatal | generation stops |

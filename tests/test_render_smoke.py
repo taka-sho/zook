@@ -27,7 +27,7 @@ def _build(raw):
 
 
 def test_example_yaml_renders_without_warnings():
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     presentation, warnings = _build(raw)
     assert warnings.messages == []
     slide = presentation.slides[0]
@@ -36,7 +36,7 @@ def test_example_yaml_renders_without_warnings():
 
 
 def test_example_yaml_output_reopens_cleanly(tmp_path):
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     presentation, _ = _build(raw)
     out = tmp_path / "out.pptx"
     presentation.save(out)
@@ -75,7 +75,7 @@ elements:
     id: a
     type: S3
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["build", str(bad_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 1
@@ -95,7 +95,7 @@ def test_cli_succeeds_on_example_yaml(tmp_path):
 
 
 def test_example_cloud_actors_renders_without_warnings():
-    raw = yaml.safe_load(CLOUD_ACTORS_FIXTURE.read_text())
+    raw = yaml.safe_load(CLOUD_ACTORS_FIXTURE.read_text(encoding="utf-8"))
     presentation, warnings = _build(raw)
     assert warnings.messages == []
     slide = presentation.slides[0]
@@ -137,7 +137,7 @@ elements:
     x: 105
     y: 105
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["build", str(overlapping_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
@@ -175,7 +175,7 @@ links:
   - from: a
     to: c
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["build", str(crossing_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
@@ -224,7 +224,7 @@ links:
   - from: vpc
     to: s3
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["build", str(aliasing_yaml), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 0
@@ -258,7 +258,7 @@ links:
     to: b
     fromSide: bottom
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     out_path = tmp_path / "out.pptx"
     result = runner.invoke(main, ["build", str(raw), "-o", str(out_path)])
@@ -294,7 +294,7 @@ links:
     fromSide: bottom
     toSide: left
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["build", str(raw), "-o", str(tmp_path / "out.pptx")])
     assert result.exit_code == 1
@@ -317,7 +317,7 @@ elements:
     id: a
     type: NotARealService
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     lenient = runner.invoke(main, ["build", str(unknown_yaml), "-o", str(tmp_path / "out1.pptx")])
     assert lenient.exit_code == 0
@@ -355,7 +355,7 @@ elements:
     id: a
     type: NotARealService
 """
-        )
+        , encoding="utf-8")
         result = runner.invoke(main, ["validate", "unknown.yaml", "--format", "json"])
         assert result.exit_code == 0
         assert "NotARealService" in result.output
@@ -478,7 +478,7 @@ links:
     label: talks to
     labelFontSize: 16
 """
-    )
+    , encoding="utf-8")
     runner = CliRunner()
     pptx_out = tmp_path / "out.pptx"
     result = runner.invoke(main, ["build", str(raw), "-o", str(pptx_out)])

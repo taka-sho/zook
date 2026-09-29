@@ -33,11 +33,9 @@ icons:
   EntraID: { file: "Security/EntraID.png", category: Security, aliases: [azuread, aad, iam] }
   KeyVault: { file: "Security/KeyVault.png", category: Security }
 
-# ---- Containers: frame styles ----
   # Compute (Tier 2)
   AppService: { file: "Compute/AppService.png", category: Compute, aliases: [WebApp, WebApps] }
   ContainerRegistry: { file: "Compute/ContainerRegistry.png", category: Compute, aliases: [ACR] }
-  Bastion: { file: "Compute/Bastion.png", category: Compute }
   # Storage (Tier 2)
   StorageAccount: { file: "Storage/StorageAccount.png", category: Storage, aliases: [StorageAccounts] }
   # Database (Tier 2)
@@ -50,6 +48,7 @@ icons:
   ExpressRoute: { file: "Networking/ExpressRoute.png", category: Networking }
   TrafficManager: { file: "Networking/TrafficManager.png", category: Networking }
   DDoSProtection: { file: "Networking/DDoSProtection.png", category: Networking, aliases: [DDoS] }
+  Bastion: { file: "Networking/Bastion.png", category: Networking }
   # Integration (Tier 2)
   EventHubs: { file: "Integration/EventHubs.png", category: Integration, aliases: [EventHub] }
   LogicApps: { file: "Integration/LogicApps.png", category: Integration, aliases: [LogicApp] }
@@ -66,6 +65,7 @@ icons:
   OpenAI: { file: "MachineLearning/OpenAI.png", category: MachineLearning, aliases: [AzureOpenAI] }
   MachineLearning: { file: "MachineLearning/MachineLearning.png", category: MachineLearning, aliases: [AzureML] }
 
+# ---- Containers: frame styles ----
 groups:
   cloud: { label: "Microsoft Azure", borderColor: "#0078D4", dashed: false, labelPosition: top-left, icon: "General/azure-cloud-badge.png" }
   vpc: { label: "Virtual Network", borderColor: "#0078D4", dashed: false, labelPosition: top-left }

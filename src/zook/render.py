@@ -58,6 +58,13 @@ LOGICAL_TO_EMU = 9525
 LOGICAL_TO_PT = LOGICAL_TO_EMU / 12700  # 1pt = 12700 EMU
 CORNER_BADGE_SIZE = 20  # logical units; corner icon for a container's group style (e.g. "AWS Cloud")
 CORNER_BADGE_PADDING = 6
+
+
+def badge_tile_rect(badge_x: float, badge_y: float) -> tuple[float, float, float, float]:
+    """The white tile behind a corner badge on a backdrop it would vanish
+    into: around the glyph (which sits in the middle of the badge square),
+    ending 2 units short of where the label text starts."""
+    return (badge_x - 3, badge_y - 1, CORNER_BADGE_SIZE + 1, CORNER_BADGE_SIZE + 2)
 _ROT_90 = str(90 * 60000)  # OOXML angles are in 1/60000 degree
 
 
@@ -171,6 +178,17 @@ def _add_container_rect(shapes, box: Box, registry: MultiRegistry, s: _Slide):
             if "top" in style.label_position
             else band_y + band_h - CORNER_BADGE_PADDING - CORNER_BADGE_SIZE
         )
+        if s.rgb(style.border_color, element.id, inside=True) != RGBColor.from_string(style.border_color.lstrip("#")):
+            # The badge is drawn in the frame's brand colour, which this
+            # backdrop makes unreadable (navy on a dark canvas): give it a
+            # white tile to sit on.
+            tx, ty, tw, th = badge_tile_rect(badge_x, badge_y)
+            tile = shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, s.x(tx), s.y(ty), s.length(tw), s.length(th))
+            tile.name = f"{element.id} badge tile"
+            tile.fill.solid()
+            tile.fill.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+            tile.line.fill.background()
+            _no_shadow(tile)
         shapes.add_picture(
             io.BytesIO(badge_png), s.x(badge_x), s.y(badge_y), s.length(CORNER_BADGE_SIZE), s.length(CORNER_BADGE_SIZE)
         )

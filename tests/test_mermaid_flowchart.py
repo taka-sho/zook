@@ -166,7 +166,7 @@ def test_unclosed_subgraph_raises_diagram_error():
 
 
 def test_output_conforms_to_schema_and_parses_into_a_diagram():
-    raw = parse_flowchart(FIXTURE.read_text())
+    raw = parse_flowchart(FIXTURE.read_text(encoding="utf-8"))
     validate(raw)
     diagram = parse_diagram(raw)
     assert len(diagram.elements) == 1
@@ -198,7 +198,7 @@ def test_cli_from_mermaid_rejects_sequence_diagram(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "in.mmd"
-    src.write_text("sequenceDiagram\n  A->>B: hi\n")
+    src.write_text("sequenceDiagram\n  A->>B: hi\n", encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["from-mermaid", str(src), "-o", str(tmp_path / "out.yaml"), "--format", "json"])
     assert result.exit_code == 1

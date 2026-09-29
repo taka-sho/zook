@@ -34,7 +34,6 @@ icons:
   CloudIAM: { file: "Security/CloudIAM.png", category: Security, aliases: [iam] }
   IdentityPlatform: { file: "Security/IdentityPlatform.png", category: Security }
 
-# ---- Containers: frame styles ----
   # Compute (Tier 2)
   AppEngine: { file: "Compute/AppEngine.png", category: Compute, aliases: [GAE] }
   # Database (Tier 2)
@@ -64,6 +63,7 @@ icons:
   CloudBuild: { file: "Management/CloudBuild.png", category: Management }
   ArtifactRegistry: { file: "Management/ArtifactRegistry.png", category: Management, aliases: [GAR, ContainerRegistry] }
 
+# ---- Containers: frame styles ----
 groups:
   cloud: { label: "Google Cloud", borderColor: "#4285F4", dashed: false, labelPosition: top-left, icon: "General/gcp-cloud-badge.png" }
   vpc: { label: "VPC Network", borderColor: "#4285F4", dashed: false, labelPosition: top-left }

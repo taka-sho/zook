@@ -27,7 +27,7 @@ def _model_root(xml_str: str) -> ET.Element:
 
 
 def test_export_produces_parseable_xml_with_expected_structure():
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     model = _model_root(xml_str)
 
@@ -42,7 +42,7 @@ def test_export_produces_parseable_xml_with_expected_structure():
 
 
 def test_export_uses_official_drawio_shape_when_the_registry_has_one():
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     model = _model_root(xml_str)
     ec2_cell = next(c for c in model.findall(".//mxCell") if c.get("id") == "web-a")
@@ -70,7 +70,7 @@ def test_export_falls_back_to_embedded_png_without_a_registry_shape():
 
 
 def test_links_export_as_edges_with_source_and_target():
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     model = _model_root(xml_str)
     edges = [c for c in model.findall(".//mxCell") if c.get("edge") == "1"]
@@ -79,20 +79,20 @@ def test_links_export_as_edges_with_source_and_target():
 
 def test_sync_with_no_changes_is_a_no_op(tmp_path):
     drawio_path = tmp_path / "example.drawio"
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
-    drawio_path.write_text(xml_str)
+    drawio_path.write_text(xml_str, encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(FIXTURE), str(drawio_path))
     assert warnings == []
     out_path = tmp_path / "roundtrip.yaml"
     dump_yaml(updated, str(out_path))
-    assert out_path.read_text() == FIXTURE.read_text()
+    assert out_path.read_text(encoding="utf-8") == FIXTURE.read_text(encoding="utf-8")
 
 
 def test_sync_freezes_only_the_moved_auto_placed_element(tmp_path):
     drawio_path = tmp_path / "example.drawio"
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     # web-a is auto-placed (no explicit x/y in example.yaml); nudge it.
     edited = xml_str.replace(
@@ -102,7 +102,7 @@ def test_sync_freezes_only_the_moved_auto_placed_element(tmp_path):
         '<mxCell id="db-a"',
     )
     assert edited != xml_str, "replacement did not match - fixture geometry changed?"
-    drawio_path.write_text(edited)
+    drawio_path.write_text(edited, encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(FIXTURE), str(drawio_path))
     assert warnings == []
@@ -117,11 +117,11 @@ def test_sync_freezes_only_the_moved_auto_placed_element(tmp_path):
 
 def test_sync_updates_an_already_explicit_element_in_place(tmp_path):
     drawio_path = tmp_path / "example.drawio"
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     edited = xml_str.replace('x="1080.00" y="300.00" width="96.00" height="96.00"', 'x="900.00" y="250.00" width="96.00" height="96.00"')
     assert edited != xml_str
-    drawio_path.write_text(edited)
+    drawio_path.write_text(edited, encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(FIXTURE), str(drawio_path))
     assert warnings == []
@@ -133,14 +133,14 @@ def test_sync_updates_an_already_explicit_element_in_place(tmp_path):
 
 def test_sync_warns_on_an_unknown_cell_and_leaves_yaml_unchanged(tmp_path):
     drawio_path = tmp_path / "example.drawio"
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     edited = xml_str.replace(
         "</root>",
         '<mxCell id="mystery" value="X" style="" vertex="1" parent="1">'
         '<mxGeometry x="0" y="0" width="10" height="10" as="geometry"/></mxCell></root>',
     )
-    drawio_path.write_text(edited)
+    drawio_path.write_text(edited, encoding="utf-8")
 
     _, warnings = sync_from_drawio(str(FIXTURE), str(drawio_path))
     assert any("mystery" in w and "ignored" in w for w in warnings)
@@ -150,11 +150,11 @@ def test_sync_warns_when_a_known_element_is_missing_from_the_drawio_file(tmp_pat
     import re
 
     drawio_path = tmp_path / "example.drawio"
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     edited = re.sub(r'<mxCell id="fn-c"[^>]*>.*?</mxCell>', "", xml_str)
     assert 'id="fn-c"' not in edited
-    drawio_path.write_text(edited)
+    drawio_path.write_text(edited, encoding="utf-8")
 
     _, warnings = sync_from_drawio(str(FIXTURE), str(drawio_path))
     assert any("fn-c" in w and "deleted" in w for w in warnings)
@@ -222,9 +222,9 @@ def test_undecodable_compressed_diagram_is_a_diagram_error(tmp_path):
     from zook.errors import DiagramError
 
     yaml_path = tmp_path / "d.yaml"
-    yaml_path.write_text(FIXTURE.read_text())
+    yaml_path.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     drawio_path = tmp_path / "d.drawio"
-    drawio_path.write_text('<mxfile><diagram id="x">not base64 at all!</diagram></mxfile>')
+    drawio_path.write_text('<mxfile><diagram id="x">not base64 at all!</diagram></mxfile>', encoding="utf-8")
     with pytest.raises(DiagramError, match="could not decode"):
         sync_from_drawio(str(yaml_path), str(drawio_path))
 
@@ -240,9 +240,9 @@ def test_compressed_diagram_that_inflates_too_far_is_refused(tmp_path, monkeypat
     compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
     data = base64.b64encode(compressor.compress(payload.encode()) + compressor.flush()).decode()
     yaml_path = tmp_path / "d.yaml"
-    yaml_path.write_text(FIXTURE.read_text())
+    yaml_path.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     drawio_path = tmp_path / "d.drawio"
-    drawio_path.write_text(f'<mxfile><diagram id="x">{data}</diagram></mxfile>')
+    drawio_path.write_text(f'<mxfile><diagram id="x">{data}</diagram></mxfile>', encoding="utf-8")
     with pytest.raises(DiagramError, match="inflates past"):
         sync_from_drawio(str(yaml_path), str(drawio_path))
 
@@ -258,13 +258,13 @@ def _compressed_drawio(xml_model: str, wrap: int | None = None) -> str:
 
 def test_sync_accepts_base64_wrapped_with_newlines(tmp_path):
     # draw.io decodes with atob(), which ignores whitespace in the payload.
-    raw = yaml.safe_load(FIXTURE.read_text())
+    raw = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     _, _, xml_str = _export(raw)
     model_xml = ET.tostring(_model_root(xml_str), encoding="unicode")
     yaml_path = tmp_path / "d.yaml"
-    yaml_path.write_text(FIXTURE.read_text())
+    yaml_path.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     drawio_path = tmp_path / "d.drawio"
-    drawio_path.write_text(_compressed_drawio(model_xml, wrap=76))
+    drawio_path.write_text(_compressed_drawio(model_xml, wrap=76), encoding="utf-8")
     _, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert warnings == []
 
@@ -275,7 +275,7 @@ def test_non_ascii_compressed_content_is_a_diagram_error(tmp_path):
     from zook.errors import DiagramError
 
     yaml_path = tmp_path / "d.yaml"
-    yaml_path.write_text(FIXTURE.read_text())
+    yaml_path.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     drawio_path = tmp_path / "d.drawio"
     drawio_path.write_text('<mxfile><diagram id="x">図のテキスト</diagram></mxfile>', encoding="utf-8")
     with pytest.raises(DiagramError, match="could not decode"):
@@ -307,7 +307,7 @@ def test_unchanged_sync_leaves_the_yaml_byte_identical(tmp_path):
     from zook.cli import main
 
     yaml_path = tmp_path / "d.yaml"
-    yaml_path.write_text("# a comment\n" + FIXTURE.read_text())
+    yaml_path.write_text("# a comment\n" + FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     original = yaml_path.read_bytes()
     drawio_path = tmp_path / "d.drawio"
     assert CliRunner().invoke(main, ["export-drawio", str(yaml_path), "-o", str(drawio_path)]).exit_code == 0
@@ -342,7 +342,7 @@ _VERTICAL = {
 
 def _roundtrip_files(tmp_path, raw):
     yaml_path = tmp_path / "d.yaml"
-    yaml_path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    yaml_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
     _, _, xml_str = _export(raw)
     drawio_path = tmp_path / "d.drawio"
     return yaml_path, drawio_path, xml_str
@@ -367,7 +367,7 @@ def test_moving_one_auto_element_keeps_its_siblings_where_drawio_showed_them(tmp
     # into its old spot (and could land on top of each other).
     yaml_path, drawio_path, xml_str = _roundtrip_files(tmp_path, _VERTICAL)
     before = _layout_of(_VERTICAL)
-    drawio_path.write_text(_move(xml_str, "a", 200, 40))
+    drawio_path.write_text(_move(xml_str, "a", 200, 40), encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert warnings == []
@@ -378,9 +378,9 @@ def test_moving_one_auto_element_keeps_its_siblings_where_drawio_showed_them(tmp
 
 def test_a_drawio_exported_before_a_yaml_edit_does_not_revert_it(tmp_path):
     yaml_path, drawio_path, xml_str = _roundtrip_files(tmp_path, _VERTICAL)
-    drawio_path.write_text(xml_str)
+    drawio_path.write_text(xml_str, encoding="utf-8")
     changed = _copy_with_gap(_VERTICAL, 60)  # the YAML changes after the export
-    yaml_path.write_text(yaml.safe_dump(changed, sort_keys=False))
+    yaml_path.write_text(yaml.safe_dump(changed, sort_keys=False), encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert any("changed since this .drawio was exported" in w for w in warnings)
@@ -402,7 +402,7 @@ def test_reparenting_in_drawio_is_reported_not_misapplied(tmp_path):
         _re.search(r'<mxCell id="b"[^>]*>', xml_str).group(0),
         _re.search(r'<mxCell id="b"[^>]*>', xml_str).group(0).replace('parent="g"', 'parent="1"'),
     )
-    drawio_path.write_text(_move(edited, "b", 400, 300))
+    drawio_path.write_text(_move(edited, "b", 400, 300), encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert any("'b' was moved into the top level" in w for w in warnings)
@@ -417,7 +417,7 @@ def test_edited_bend_points_become_waypoints_and_label_edits_are_reported(tmp_pa
         '<mxGeometry relative="1" as="geometry"/>',
         '<mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="300" y="80"/></Array></mxGeometry>',
     ).replace('value="HTTPS"', 'value="HTTP/2"')
-    drawio_path.write_text(edited)
+    drawio_path.write_text(edited, encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert updated["links"][0]["waypoints"] == [{"x": 300, "y": 80}]
@@ -426,7 +426,7 @@ def test_edited_bend_points_become_waypoints_and_label_edits_are_reported(tmp_pa
 
 def test_a_file_without_a_diagram_is_an_error(tmp_path):
     yaml_path, drawio_path, _ = _roundtrip_files(tmp_path, _VERTICAL)
-    drawio_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    drawio_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
     with _pytest.raises(_DiagramError, match="no <diagram>"):
         sync_from_drawio(str(yaml_path), str(drawio_path))
 
@@ -437,7 +437,7 @@ def test_a_shape_wrapped_in_a_user_object_is_still_synced(tmp_path):
     cell = _re.search(r'<mxCell id="z"[^>]*>.*?</mxCell>', xml_str).group(0)
     wrapped = cell.replace('<mxCell id="z" value="S3" ', '<UserObject label="S3" link="https://example.com" id="z"><mxCell ')
     wrapped = wrapped.replace('x="600.00" y="100.00"', 'x="650" y="120"') + "</UserObject>"
-    drawio_path.write_text(xml_str.replace(cell, wrapped))
+    drawio_path.write_text(xml_str.replace(cell, wrapped), encoding="utf-8")
 
     updated, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert not any("'z'" in w and "deleted" in w for w in warnings)
@@ -447,7 +447,7 @@ def test_a_shape_wrapped_in_a_user_object_is_still_synced(tmp_path):
 def test_the_zook_page_is_synced_when_there_are_several(tmp_path):
     yaml_path, drawio_path, xml_str = _roundtrip_files(tmp_path, _VERTICAL)
     other = '<diagram id="other" name="Notes"><mxGraphModel><root><mxCell id="0"/></root></mxGraphModel></diagram>'
-    drawio_path.write_text(_move(xml_str, "z", 700, 100).replace('<mxfile host="zook">', '<mxfile host="zook">' + other))
+    drawio_path.write_text(_move(xml_str, "z", 700, 100).replace('<mxfile host="zook">', '<mxfile host="zook">' + other), encoding="utf-8")
     updated, warnings = sync_from_drawio(str(yaml_path), str(drawio_path))
     assert updated["elements"][1]["x"] == 700
     assert warnings == []

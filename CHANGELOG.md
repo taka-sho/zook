@@ -118,6 +118,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the line instead - just beside it, or past the endpoint icons when it is
   wider than the gap between them. A new Warning reports a link label that
   still covers one of its own endpoints.
+- A link's label stays inside the container its link lives in: an
+  auto-sized container grows at its right/bottom to hold it, and a label
+  sticking out of a fixed-size one is a Warning
+  (`link-label-outside-container`). Its opaque box used to cut through the
+  container's frame while validate said ok.
 - A link from an element to itself (Mermaid's `B -->|retry| B`) is drawn as
   a loop round one of its corners; a link between a container and an
   element inside it runs straight to the nearest point of the frame; links
@@ -213,8 +218,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Elements are moved the shortest way (right/down/left/up) that stays inside
   their container and on the slide; a child outside its container is pulled
   back in.
-- The stages repeat while a round improves, so a second `doctor` run on its
-  own output changes nothing.
+- The stages repeat while a round improves - and once more against what a
+  second run would treat as the author's (the positions and routes this run
+  wrote) - so a second `doctor` run on its own output changes nothing.
 - Stage 2 scores candidate connection sides incrementally: a 30-link,
   crossing-heavy diagram went from ~7 minutes to a few seconds.
 - Stage-4 detours are right-angled; they used to add diagonal segments.
@@ -299,7 +305,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Korean text is tagged with its language (LibreOffice drew Japanese in a
   Chinese font).
 - On a dark `canvas.background`, labels, container frames and lines that
-  would be unreadable (black on navy) switch to white.
+  would be unreadable (black on navy) switch to white, and a container's
+  corner badge (the navy AWS Cloud logo) gets a white tile to sit on.
 - The .pptx no longer carries python-pptx's template metadata (author "Steve
   Canny", a 2013 date, a 4:3 slide-size type, "On-screen Show (4:3)");
   `SOURCE_DATE_EPOCH` fixes its timestamps.

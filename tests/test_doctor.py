@@ -337,14 +337,14 @@ def test_cli_dry_run_does_not_write(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "d.yaml"
-    src.write_text(_BROKEN_YAML)
+    src.write_text(_BROKEN_YAML, encoding="utf-8")
     result = CliRunner().invoke(main, ["doctor", str(src), "--format", "json"])
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["status"] == "fixed"
     assert "output" not in payload
-    assert src.read_text() == _BROKEN_YAML  # untouched on a dry run
+    assert src.read_text(encoding="utf-8") == _BROKEN_YAML  # untouched on a dry run
 
 
 def test_cli_fix_writes_clean_yaml_and_keeps_comments(tmp_path):
@@ -353,13 +353,13 @@ def test_cli_fix_writes_clean_yaml_and_keeps_comments(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "d.yaml"
-    src.write_text(_BROKEN_YAML)
+    src.write_text(_BROKEN_YAML, encoding="utf-8")
     result = CliRunner().invoke(main, ["doctor", str(src), "--fix", "--format", "json"])
 
     assert result.exit_code == 0
     assert json.loads(result.stdout)["status"] == "fixed"
 
-    written = src.read_text()
+    written = src.read_text(encoding="utf-8")
     assert "# keep-this-comment" in written  # ruamel round-trip preserved it
     assert _overlaps(yaml.safe_load(written)) == []
 
@@ -390,7 +390,7 @@ def test_cli_fix_through_obstacle_stage_keeps_comments(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "d.yaml"
-    src.write_text(_OBSTACLE_YAML)
+    src.write_text(_OBSTACLE_YAML, encoding="utf-8")
     result = CliRunner().invoke(main, ["doctor", str(src), "--fix", "--format", "json"])
 
     assert result.exit_code == 0
@@ -398,7 +398,7 @@ def test_cli_fix_through_obstacle_stage_keeps_comments(tmp_path):
     assert payload["status"] == "fixed"
     assert [m["id"] for m in payload["moves"]] == ["C"]
 
-    written = src.read_text()
+    written = src.read_text(encoding="utf-8")
     assert "# obstacle-comment" in written
     assert _link_warnings(yaml.safe_load(written)) == []
 
@@ -408,7 +408,7 @@ def test_cli_reports_fatal_error(tmp_path):
 
     src = tmp_path / "d.yaml"
     src.write_text("version: '1.0'\ncanvas:\n  aspectRatio: '16:9'\nelements: []\n"
-                   "links:\n  - from: nope\n    to: alsonope\n")
+                   "links:\n  - from: nope\n    to: alsonope\n", encoding="utf-8")
     result = CliRunner().invoke(main, ["doctor", str(src), "--format", "json"])
 
     assert result.exit_code == 1
@@ -455,7 +455,7 @@ def test_cli_text_and_github_reports_survive_container_moves(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "d.yaml"
-    src.write_text(_CONTAINERS_WITH_AUTO_CHILDREN)
+    src.write_text(_CONTAINERS_WITH_AUTO_CHILDREN, encoding="utf-8")
     for fmt in ("text", "github"):
         result = CliRunner().invoke(main, ["doctor", str(src), "--format", fmt])
         assert result.exit_code == 0, result.output
@@ -470,7 +470,7 @@ def test_cli_text_and_github_reports_survive_container_moves(tmp_path):
 def yaml_load(path):
     import yaml
 
-    return yaml.safe_load(path.read_text())
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def test_cli_output_is_always_written_even_when_nothing_changed(tmp_path):
@@ -481,9 +481,9 @@ def test_cli_output_is_always_written_even_when_nothing_changed(tmp_path):
 
     clean = _base([{"kind": "node", "id": "a", "type": "EC2"}])
     src = tmp_path / "clean.yaml"
-    src.write_text(json.dumps(clean))
+    src.write_text(json.dumps(clean), encoding="utf-8")
     dest = tmp_path / "fixed.yaml"
-    dest.write_text("stale: true\n")
+    dest.write_text("stale: true\n", encoding="utf-8")
 
     result = CliRunner().invoke(main, ["doctor", str(src), "-o", str(dest), "--format", "json"])
 
@@ -499,13 +499,13 @@ def test_cli_fix_leaves_an_already_clean_file_untouched(tmp_path):
 
     text = "# a comment\n" + json.dumps(_base([{"kind": "node", "id": "a", "type": "EC2"}]))
     src = tmp_path / "clean.yaml"
-    src.write_text(text)
+    src.write_text(text, encoding="utf-8")
 
     result = CliRunner().invoke(main, ["doctor", str(src), "--fix", "--format", "json"])
 
     assert result.exit_code == 0
     assert "output" not in json.loads(result.stdout)
-    assert src.read_text() == text
+    assert src.read_text(encoding="utf-8") == text
 
 
 _YAML_11_VS_12 = """\
@@ -523,14 +523,14 @@ def test_doctor_sees_the_same_diagram_validate_does(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "d.yaml"
-    src.write_text(_YAML_11_VS_12)
+    src.write_text(_YAML_11_VS_12, encoding="utf-8")
     validate_result = json.loads(CliRunner().invoke(main, ["validate", str(src), "--format", "json"]).stdout)
     assert validate_result["warnings"] == ["element 'a' overlaps element 'b'"]
 
     result = CliRunner().invoke(main, ["doctor", str(src), "--fix", "--format", "json"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["status"] == "fixed"
-    written = src.read_text()
+    written = src.read_text(encoding="utf-8")
     assert "# 0600 is octal" in written  # comments kept
     assert _overlaps(yaml_load(src)) == []
     assert yaml_load(src)["elements"][1]["label"] == "1e3"
@@ -589,7 +589,7 @@ def _perturbed_patterns():
 
     patterns = pathlib.Path(__file__).parent.parent / "src" / "zook" / "data" / "patterns"
     for path in sorted(patterns.glob("*.yaml")):
-        raw = yaml.safe_load(path.read_text())
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         # Pin the first two siblings onto each other: an overlap (and the
         # link crossings that follow) for doctor to untangle.
         siblings = raw["elements"]
@@ -706,12 +706,16 @@ def test_pins_are_reported():
         assert pin.x is not None and pin.y is not None
 
 
-def test_doctor_is_fast_on_a_crossing_heavy_diagram():
-    # 30 crossing-heavy links took ~7 minutes before incremental scoring.
+def test_doctor_is_fast_and_idempotent_on_a_crossing_heavy_diagram():
+    # 30 crossing-heavy links took ~7 minutes before incremental scoring. A
+    # second run then still found a detour: it treats what the first one
+    # wrote as the author's, which steers its search elsewhere.
     raw = _chain(30)
     start = _time.monotonic()
     diagnose_and_fix(raw, REGISTRY)
     assert _time.monotonic() - start < 60
+    second = diagnose_and_fix(_copy.deepcopy(raw), REGISTRY)
+    assert second.moves == [] and second.link_changes == [] and second.pinned == []
 
 
 def test_cli_fix_keeps_indentation_and_integers(tmp_path):
@@ -734,10 +738,10 @@ def test_cli_fix_keeps_indentation_and_integers(tmp_path):
         "        y: 205\n"
     )
     src = tmp_path / "d.yaml"
-    src.write_text(text)
+    src.write_text(text, encoding="utf-8")
     result = CliRunner().invoke(main, ["doctor", str(src), "--fix", "--format", "json"])
     assert result.exit_code == 0
-    written = src.read_text()
+    written = src.read_text(encoding="utf-8")
     assert "    -   kind: node\n        id: a\n" in written  # the file's own indentation style
     assert "x: 200\n" in written and ".0\n" not in written
 
@@ -746,7 +750,7 @@ def test_cli_strict_fails_on_anything_remaining(tmp_path):
     from zook.cli import main
 
     src = tmp_path / "d.yaml"
-    src.write_text(json.dumps(_base([{"kind": "node", "id": "a", "type": "NoSuchService"}])))
+    src.write_text(json.dumps(_base([{"kind": "node", "id": "a", "type": "NoSuchService"}])), encoding="utf-8")
     result = CliRunner().invoke(main, ["doctor", str(src), "--strict", "--format", "json"])
     assert result.exit_code == 1
     assert json.loads(result.stdout)["remaining"]
