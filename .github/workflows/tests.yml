@@ -102,7 +102,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: test-results
       - run: python scripts/update_badges.py --coverage-json coverage.json --junit-xml junit.xml
