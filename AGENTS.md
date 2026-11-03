@@ -40,6 +40,8 @@ Everything below also ships with the package, so it works where zook was install
    zook build diagram.yaml -o diagram.pptx
    ```
 
+   If the user has a company template, add `--template corp.potx`. Its slide size has to match `canvas`, and the error says what to set if it doesn't. zook doesn't check the diagram against the template's logo or decoration, so look at the result and raise `canvas.padding` if they collide (`zook guide limitations`).
+
 If you want to adjust the look further, beyond hand-editing the YAML directly, there's also the option of draw.io integration via `zook export-drawio`/`sync` (`zook guide drawio`).
 
 ## When the Request Starts From a Mermaid Flowchart

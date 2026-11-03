@@ -3,8 +3,7 @@
 Decisions carried over from docs/detailed-design-pptx.md (confirmed via the
 prototype in prototype/build_prototype.py):
 
-- 1 logical unit == 9525 EMU == 1px @ 96dpi, for both supported aspect ratios
-  (sec8.5).
+- 1 logical unit == 9525 EMU == 1px @ 96dpi, for every slide size (sec8.5).
 - Groups get absolute (slide-level) coordinates on every descendant; relying
   on python-pptx's automatic chOff/chExt = off/ext extent recalculation
   (sec8.4) instead of a hand-rolled helper.
@@ -30,6 +29,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
@@ -51,10 +51,10 @@ from .layout import (
     readable_on,
     resolve_container_style,
 )
-from .model import Diagram, Link
+from .model import LOGICAL_TO_EMU, Canvas, Diagram, Link
 from .registry import MultiRegistry, icon_png
+from .template import blank_layout, check_slide_size, layout_background, open_template, remove_slides
 
-LOGICAL_TO_EMU = 9525
 LOGICAL_TO_PT = LOGICAL_TO_EMU / 12700  # 1pt = 12700 EMU
 CORNER_BADGE_SIZE = 20  # logical units; corner icon for a container's group style (e.g. "AWS Cloud")
 CORNER_BADGE_PADDING = 6
@@ -308,7 +308,9 @@ def _add_link_label(shapes, rect: tuple[float, float, float, float], text: str, 
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     tf.paragraphs[0].text = text
     tf.paragraphs[0].alignment = PP_ALIGN.CENTER
-    _style_text(tf.paragraphs[0], s.font(font_size))
+    # Black on its white box, always: left unset it would be the theme's text
+    # colour, which is white in a dark template.
+    _style_text(tf.paragraphs[0], s.font(font_size), RGBColor.from_string("000000"))
 
 
 _CONNECTOR_TYPES = {"straight": MSO_CONNECTOR.STRAIGHT, "elbow": MSO_CONNECTOR.ELBOW, "curved": MSO_CONNECTOR.CURVE}
@@ -396,8 +398,9 @@ def _style_text(paragraph, size: Pt, color: RGBColor | None = None) -> None:
 
 
 def _set_metadata(prs: Presentation) -> None:
-    """Replace python-pptx's template leftovers - author "Steve Canny", a 2013
-    date, a 4:3 slide-size type and "On-screen Show (4:3)" - with the truth.
+    """Replace the leftovers of the file this started from - python-pptx's
+    author "Steve Canny", a 2013 date and "On-screen Show (4:3)", a template's
+    thumbnail of its first slide and list of slide titles - with the truth.
     SOURCE_DATE_EPOCH, when set, fixes the timestamps (reproducible builds)."""
     props = prs.core_properties
     props.author = props.last_modified_by = "zook"
@@ -407,15 +410,17 @@ def _set_metadata(prs: Presentation) -> None:
     epoch = os.environ.get("SOURCE_DATE_EPOCH")
     when = datetime.fromtimestamp(int(epoch), tz=timezone.utc) if epoch and epoch.isdigit() else datetime.now(timezone.utc)
     props.created = props.modified = when.replace(tzinfo=None, microsecond=0)
-    size = prs.part._element.find(qn("p:sldSz"))
-    if size is not None and "type" in size.attrib:
-        del size.attrib["type"]  # screen4x3; the slide is whatever size canvas.aspectRatio set
-    for part in prs.part.package.iter_parts():
+    package = prs.part.package
+    for rId, rel in list(package._rels.items()):
+        if rel.reltype == RT.THUMBNAIL:
+            package._rels.pop(rId)
+    for part in package.iter_parts():
         if str(part.partname) == "/docProps/app.xml":
             xml = part.blob.decode("utf-8")
             xml = re.sub(r"<PresentationFormat>[^<]*</PresentationFormat>", "<PresentationFormat>Custom</PresentationFormat>", xml)
             xml = re.sub(r"<Slides>\d+</Slides>", "<Slides>1</Slides>", xml)
             xml = re.sub(r"<Application>[^<]*</Application>", "<Application>zook</Application>", xml)
+            xml = re.sub(r"<(HeadingPairs|TitlesOfParts)>.*?</\1>", "", xml, flags=re.DOTALL)
             part._blob = xml.encode("utf-8")
 
 
@@ -520,13 +525,32 @@ def _render_link(shapes, link: Link, shape_index: dict, s: _Slide) -> None:
         _add_link_label(shapes, link_label_rect_for(from_box, to_box, path, link), link.label, link.label_font_size, s)
 
 
-def render(diagram: Diagram, root_box: Box, registry: MultiRegistry) -> Presentation:
-    prs = Presentation()
-    canvas_w, canvas_h = diagram.canvas.size
-    prs.slide_width = E(canvas_w)
-    prs.slide_height = E(canvas_h)
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    s = _Slide(fit_transform(diagram, root_box), backdrops(root_box, registry, diagram.canvas.background), diagram.canvas.background)
+def _set_slide_size(prs: Presentation, canvas: Canvas) -> None:
+    prs.slide_width, prs.slide_height = (E(value) for value in canvas.size)
+    # The size's name in PowerPoint's dialog; python-pptx's file says screen4x3.
+    size = prs.part._element.find(qn("p:sldSz"))
+    if canvas.aspect_ratio == "A4":
+        size.set("type", "A4")
+    else:
+        size.attrib.pop("type", None)
+
+
+def render(diagram: Diagram, root_box: Box, registry: MultiRegistry, template_path: str | None = None) -> Presentation:
+    """The diagram on one slide of a new .pptx, or of a copy of `template_path`
+    (see template.py), whose own slides are left out."""
+    if template_path is None:
+        prs = Presentation()
+        _set_slide_size(prs, diagram.canvas)
+    else:
+        prs = open_template(template_path)
+        check_slide_size(prs, diagram.canvas, template_path)
+        remove_slides(prs)
+    layout = blank_layout(prs)
+    slide = prs.slides.add_slide(layout)
+    for placeholder in list(slide.placeholders):  # a template may have no truly blank layout
+        placeholder._element.getparent().remove(placeholder._element)
+    background = diagram.canvas.background or layout_background(layout)
+    s = _Slide(fit_transform(diagram, root_box), backdrops(root_box, registry, background), background)
     _set_metadata(prs)
 
     if diagram.canvas.background:

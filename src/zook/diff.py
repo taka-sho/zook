@@ -291,6 +291,8 @@ def _reorders(old: Diagram, new: Diagram) -> list[Reorder]:
 
 _CANVAS_FIELDS = [
     ("aspectRatio", "aspect_ratio"),
+    ("width", "width"),
+    ("height", "height"),
     ("padding", "padding"),
     ("background", "background"),
     ("overlapMargin", "overlap_margin"),

@@ -40,6 +40,8 @@ zook は、YAML で書いたインフラ構成から PowerPoint(.pptx)のアー�
    zook build diagram.yaml -o diagram.pptx
    ```
 
+   ユーザーが社内テンプレートを持っている場合は `--template corp.potx` を付けます。スライドサイズは `canvas` と一致している必要があり、違う場合はエラーが設定すべき値を示します。テンプレートのロゴや装飾と図の重なりは zook では検査しないので、結果を見て、重なっていれば `canvas.padding` を増やしてください(`zook guide limitations`)。
+
 見た目を調整したい場合は、YAML を直接手直しするだけでなく、`zook export-drawio`/`sync` によるdraw.io連携(`docs-site-ja/drawio-sync.md`、`zook guide drawio`)という選択肢もあります。
 
 ## Mermaidのフローチャートから始まる依頼の場合

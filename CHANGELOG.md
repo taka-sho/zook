@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `zook build --template corp.potx` starts from a company template: the slide
+  gets its master, background, logo and theme fonts, none of its slides. Its
+  slide size must match `canvas`; otherwise the build stops and says what to
+  set. Default colours stay readable on the template's background, solid or
+  not, as checked against all 58 of PowerPoint's own themes.
+- `canvas.aspectRatio: "A4"` (PowerPoint's "A4 Paper" slide size, 1040x720) and
+  `canvas.width`/`height` for any other size, portrait included.
 - CI runs the suite on Python 3.10 and the latest release, fails on any read
   or write in zook that depends on the locale's encoding, builds the wheel
   and uses it from outside the repository, and runs the tests from the

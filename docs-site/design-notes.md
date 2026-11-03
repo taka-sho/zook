@@ -12,8 +12,9 @@ Written in logical units, converted internally to EMU (English Metric Unit).
 |---|---|---|
 | `16:9` | 1280 × 720 | 13.333in × 7.5in |
 | `4:3` | 960 × 720 | 10in × 7.5in |
+| `A4` | 1040 × 720 | 10.83in × 7.5in |
 
-The simple conversion **1 logical unit = 9525 EMU = 1px at 96dpi** holds for both aspect ratios.
+`canvas.width`/`height` give any other size. The simple conversion **1 logical unit = 9525 EMU = 1px at 96dpi** holds for all of them.
 
 ## Hierarchical Grouping
 

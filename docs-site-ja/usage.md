@@ -17,9 +17,22 @@ zook build <input.yaml> -o <output.pptx>
 
 - `input.yaml` — [YAML入力仕様](yaml-guide.md)に従った構成定義ファイル
 - `-o, --output` — 出力する `.pptx` のパス(必須)
+- `--template` — 社内の `.potx` や `.pptx` をもとに生成する(後述)
 - `--registry` — 独自レジストリで組み込みレジストリを上書き([アイコン・レジストリ](icons.md)参照)
 - `--strict` — Warning が1件でもあれば非ゼロ終了する(既定では Fatal のときのみ非ゼロ終了)
 - `--format {text,json,github}` — 出力形式(後述)
+
+### テンプレートを使う
+
+```bash
+zook build diagram.yaml -o diagram.pptx --template corp.potx
+```
+
+図は、テンプレートの白紙レイアウトを使った1枚のスライドに描かれます。これにより、テンプレートのマスターにある背景、マスターとレイアウト上の図形(ロゴやフッターの帯など)、テーマのフォントが反映されます。テンプレート自体のスライドは含まれず、テンプレートのファイルも変更されません。
+
+テンプレートのスライドサイズは、図の `canvas` と一致している必要があります。一致しない場合はビルドを止め、設定すべき値を示します: `template corp.potx has 1040x720 slides but the diagram's canvas is 1280x720 - set canvas to {aspectRatio: "A4"}`
+
+ラベル・枠・線の色は、テンプレートの背景でも読めるように調整されます。読みにくい場合や、背景が画像で色を判定できない場合は、`canvas.background` を指定してください。テンプレートの背景はこの色に置き換わります。テンプレートでできないことは[既知の制限](limitations.md#templates)を参照してください。
 
 ## validate — レンダリングせずに検証だけ行う
 
@@ -247,6 +260,7 @@ $ zook validate broken.yaml --format json
 | `yaml-syntax` / `duplicate-key` / `not-utf8` / `not-a-diagram` | ファイルを図として読めない |
 | `duplicate-id` / `duplicate-link-id` / `unknown-link-endpoint` / `link-side-axis-mismatch` / `invalid-number` | id・リンク・数値の整合が取れていない |
 | `invalid-registry` | `--registry` のファイルがスキーマに合っていない |
+| `template-unreadable` / `template-size-mismatch` | `--template` のファイルが .pptx / .potx でない(またはマクロ付き) / スライドサイズが図の `canvas` と違う(`errorDetails` に両方のサイズ) |
 | `io-error` / `internal-error` / `fatal` | パスを読み書きできない / zook の不具合 / その他 |
 
 Fatal、読めないファイル、書き込めない出力先など、失敗はすべてこの形で報告され、Python のトレースバックにはなりません。想定外の内部エラーも `internal error: ...` というメッセージで同じ形に報告されます(`ZOOK_DEBUG=1` を設定すると標準エラー出力にトレースバックも出ます。報告にご協力ください)。
