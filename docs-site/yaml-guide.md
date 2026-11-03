@@ -23,14 +23,15 @@ links: [...]            # optional. connectors. omit for a lineless diagram
 
 | Field | Required | Description |
 |---|---|---|
-| `aspectRatio` | Yes | `"16:9"` or `"4:3"` |
+| `aspectRatio` | Yes, unless `width`/`height` | `"16:9"`, `"4:3"` or `"A4"` |
+| `width`, `height` | Both, instead of `aspectRatio` | any other slide size, in logical units from 96 to 5376 (96 = 1in) - portrait, or a template's own size |
 | `padding` | | margin between the slide edge and top-level elements (default 40) |
 | `background` | | background color `#RRGGBB`. On a dark one, labels, frames and lines that would be unreadable turn white |
 | `overlapMargin` | | buffer (logical units, default 0) added around each element for overlap detection. `0` detects literal overlaps only; a larger value also flags elements/link paths that are merely close together |
 | `layout` | | how the top-level elements are arranged: `direction` (`grid` default / `horizontal` / `vertical`), `columns`, `gap` (default 64). With no `columns`, the grid picks the column count that best fits the slide |
 | `fit` | | `shrink` (default): a diagram that doesn't fit the slide is scaled down uniformly — text included — and centred; one that fits is never changed. `none`: drawn as laid out, and anything outside the slide is a Warning |
 
-The logical coordinate system is 1280×720 for `16:9` and 960×720 for `4:3`. Origin is top-left, +x is right, +y is down.
+The logical coordinate system is 1280×720 for `16:9`, 960×720 for `4:3` and 1040×720 for `A4` (PowerPoint's "A4 Paper" slide size). Origin is top-left, +x is right, +y is down.
 
 A shrink below 70% is reported as a Warning, since the text shrinks with it — split the diagram, or tighten `gap`/`padding`, rather than let it become unreadable.
 

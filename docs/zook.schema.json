@@ -41,12 +41,31 @@
     },
     "canvas": {
       "type": "object",
-      "required": ["aspectRatio"],
       "additionalProperties": false,
+      "description": "The slide. Its size comes from either `aspectRatio` or both `width` and `height`.",
+      "if": { "required": ["width"] },
+      "then": { "required": ["height"], "properties": { "aspectRatio": false } },
+      "else": {
+        "if": { "required": ["height"] },
+        "then": { "required": ["width"], "properties": { "aspectRatio": false } },
+        "else": { "required": ["aspectRatio"] }
+      },
       "properties": {
         "aspectRatio": {
-          "enum": ["16:9", "4:3"],
-          "description": "Slide aspect ratio. 16:9 -> 1280x720 logical (13.333in x 7.5in); 4:3 -> 960x720 logical (10in x 7.5in)."
+          "enum": ["16:9", "4:3", "A4"],
+          "description": "Slide size. 16:9 -> 1280x720 logical (13.333in x 7.5in); 4:3 -> 960x720 logical (10in x 7.5in); A4 -> 1040x720 logical (10.83in x 7.5in, PowerPoint's \"A4 Paper\" slide size)."
+        },
+        "width": {
+          "type": "number",
+          "minimum": 96,
+          "maximum": 5376,
+          "description": "Slide width in logical units (96 = 1in; PowerPoint allows 1in to 56in), for a size aspectRatio doesn't offer. Needs `height`, and replaces `aspectRatio`."
+        },
+        "height": {
+          "type": "number",
+          "minimum": 96,
+          "maximum": 5376,
+          "description": "Slide height in logical units; see `width`."
         },
         "padding": {
           "type": "number",

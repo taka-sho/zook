@@ -5,10 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+LOGICAL_TO_EMU = 9525  # 1 logical unit == 1px @ 96dpi
+
 ASPECT_RATIOS = {
     # aspectRatio -> (logical width, logical height)
     "16:9": (1280, 720),
     "4:3": (960, 720),
+    "A4": (1040, 720),  # PowerPoint's "A4 Paper" slide size: 10.83in x 7.5in, not the sheet itself
 }
 
 
@@ -23,15 +26,19 @@ class Layout:
 
 @dataclass
 class Canvas:
-    aspect_ratio: str
+    aspect_ratio: Optional[str] = None  # None: `width`/`height` give the size
     padding: float = 40
     background: Optional[str] = None
     overlap_margin: float = 0
     layout: Optional[Layout] = None  # arrangement of the top-level elements (padding comes from `padding`)
     fit: str = "shrink"  # "shrink": scale a diagram that doesn't fit down onto the slide; "none": never
+    width: Optional[float] = None
+    height: Optional[float] = None
 
     @property
     def size(self) -> tuple[float, float]:
+        if self.aspect_ratio is None:
+            return self.width, self.height
         return ASPECT_RATIOS[self.aspect_ratio]
 
 
@@ -147,7 +154,9 @@ def parse_diagram(raw: dict) -> Diagram:
     """
     canvas_raw = raw["canvas"]
     canvas = Canvas(
-        aspect_ratio=canvas_raw["aspectRatio"],
+        aspect_ratio=canvas_raw.get("aspectRatio"),
+        width=canvas_raw.get("width"),
+        height=canvas_raw.get("height"),
         padding=canvas_raw.get("padding", 40),
         background=canvas_raw.get("background"),
         overlap_margin=canvas_raw.get("overlapMargin", 0),

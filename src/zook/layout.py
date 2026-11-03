@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .errors import Finding
-from .model import TOP_LEVEL_GAP_DEFAULT, Diagram, Element, Layout, Link
+from .model import ASPECT_RATIOS, TOP_LEVEL_GAP_DEFAULT, Diagram, Element, Layout, Link
 from .registry import MultiRegistry, icon_png
 from .text import line_height, longest_word_width, natural_width, text_block_height, wrap_lines
 
@@ -1935,7 +1935,7 @@ def canvas_warnings(diagram: Diagram, root_box: Box) -> list[str]:
                     f"{'that coordinate' if len(stray) == 1 else 'those coordinates'}"
                 )
             else:
-                wider = ", or aspectRatio 16:9" if diagram.canvas.aspect_ratio != "16:9" else ""
+                wider = ", or aspectRatio 16:9" if canvas_w < ASPECT_RATIOS["16:9"][0] else ""
                 hint = f"consider fewer elements per slide or a smaller layout gap/padding{wider}"
             return [Finding(
                 f"the diagram was scaled to {transform.scale:.0%} to fit the slide, so its text is that much "

@@ -215,15 +215,20 @@ def main() -> None:
 @main.command()
 @click.argument("input_path", type=_INPUT_PATH)
 @click.option("-o", "--output", "output_path", required=True, type=_OUTPUT_PATH, help="Output .pptx path.")
+@click.option("--template", "template_path", type=_INPUT_PATH, default=None,
+              help="Start from this .potx/.pptx: the slide gets its master, background and theme, none of its slides. "
+              "Its slide size must match the diagram's canvas.")
 @_registry_option
 @_strict_option
 @_format_option
 @_guard()
-def build(input_path: str, output_path: str, user_registry_path: tuple[str, ...], strict: bool, fmt: str) -> None:
+def build(input_path: str, output_path: str, template_path: str | None, user_registry_path: tuple[str, ...], strict: bool, fmt: str) -> None:
     """Generate a .pptx from INPUT_PATH."""
     _refuse_same_path(input_path, output_path)
+    if template_path is not None:
+        _refuse_same_path(template_path, output_path)
     diagram, root_box, registry, warnings = _load_and_check(input_path, user_registry_path)
-    presentation = render(diagram, root_box, registry)
+    presentation = render(diagram, root_box, registry, template_path)
     presentation.save(output_path)
 
     status = "warning" if warnings.messages else "ok"

@@ -17,12 +17,15 @@
 ## 2. Coordinate System & Units
 
 - Written in logical units; the tool converts to EMU internally.
-- The canvas's logical size is determined by the aspect ratio.
+- The canvas's logical size is determined by `aspectRatio`, or set directly with `width` and `height`.
 
 | aspectRatio | Logical size (W×H) | Physical size | EMU |
 |---|---|---|---|
 | `16:9` | 1280 × 720 | 13.333in × 7.5in | 12192000 × 6858000 |
 | `4:3` | 960 × 720 | 10in × 7.5in | 9144000 × 6858000 |
+| `A4` | 1040 × 720 | 10.83in × 7.5in | 9906000 × 6858000 |
+
+`A4` is PowerPoint's "A4 Paper" slide size, which leaves a print margin; it isn't the sheet itself (297 × 210mm would be `width: 1122.52, height: 793.7`).
 
 - Origin is top-left. +x is right, +y is down.
 - `x` / `y` / `width` / `height` / `gap` / `padding` are all logical units.
@@ -40,7 +43,8 @@ links: [...]          # optional. connectors. no links -> a lineless diagram
 
 | Field | Required | Type | Default | Description |
 |---|---|---|---|---|
-| `aspectRatio` | Yes | enum(`16:9`,`4:3`) | — | slide aspect ratio |
+| `aspectRatio` | Yes, unless `width`/`height` | enum(`16:9`,`4:3`,`A4`) | — | slide size (§2) |
+| `width`, `height` | Yes, instead of `aspectRatio` | number 96-5376 | — | any other slide size, in logical units (96 = 1in; PowerPoint allows 1in to 56in). Both are needed; giving `aspectRatio` as well is a schema violation |
 | `padding` | | number ≥ 0 | 40 | margin between the slide edge and top-level elements |
 | `background` | | `#RRGGBB` | — | background color. Text, frame and line colours that would be hard to read on it (contrast below 3:1) switch to white or near-black - node labels, container labels and frames against whatever fill lies behind them |
 | `overlapMargin` | | number ≥ 0 | 0 | buffer (logical units) added around each element for overlap detection (§9). `0` detects literal overlaps only; a larger value also flags elements/link paths that are merely close together |

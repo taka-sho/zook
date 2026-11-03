@@ -17,9 +17,22 @@ zook build <input.yaml> -o <output.pptx>
 
 - `input.yaml` — a diagram definition file following the [YAML Input Guide](yaml-guide.md)
 - `-o, --output` — the output `.pptx` path (required)
+- `--template` — start from your company's `.potx` or `.pptx` (below)
 - `--registry` — override the built-in registries with your own (see [Icon Registry](icons.md))
 - `--strict` — exit non-zero if there's even one Warning (default: non-zero only on Fatal)
 - `--format {text,json,github}` — output format (below)
+
+### Using a Template
+
+```bash
+zook build diagram.yaml -o diagram.pptx --template corp.potx
+```
+
+The diagram goes on one slide using the template's blank layout, so it gets the template's master: its background, the shapes drawn on the master and layout (a logo, a footer bar) and its theme fonts. The template's own slides are left out, and the template file isn't changed.
+
+The template's slide size has to match the diagram's `canvas`. If it doesn't, the build stops and says what to set: `template corp.potx has 1040x720 slides but the diagram's canvas is 1280x720 - set canvas to {aspectRatio: "A4"}`.
+
+Labels, frames and lines stay readable on the template's background. If they don't, or if `zook build` can't tell the colour of a picture background, set `canvas.background`, which replaces the template's background. See [Known Limitations](limitations.md#templates) for what a template doesn't do.
 
 ## validate — Check Without Rendering
 
@@ -248,6 +261,7 @@ $ zook validate broken.yaml --format json
 | `yaml-syntax` / `duplicate-key` / `not-utf8` / `not-a-diagram` | the file can't be read as a diagram |
 | `duplicate-id` / `duplicate-link-id` / `unknown-link-endpoint` / `link-side-axis-mismatch` / `invalid-number` | the diagram's ids, links or numbers don't hold together |
 | `invalid-registry` | a `--registry` file doesn't match its schema |
+| `template-unreadable` / `template-size-mismatch` | a `--template` file isn't a .pptx or .potx (or is macro-enabled) / its slide size isn't the diagram's `canvas` (`errorDetails`: both sizes) |
 | `io-error` / `internal-error` / `fatal` | a path can't be read or written / a zook bug / anything else |
 
 Every failure — a Fatal, an unreadable file, an unwritable output path — is reported this way, never as a Python traceback. An unexpected internal error is reported the same way with an `internal error: ...` message (set `ZOOK_DEBUG=1` to also print the traceback to stderr, and please report it).

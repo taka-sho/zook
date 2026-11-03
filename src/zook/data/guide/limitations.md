@@ -25,6 +25,16 @@ By default, auto-layout places children in the order they're written; `layout.or
 
 zook sizes every label from its text without a font file (the renderer is PowerPoint, not zook): full-width characters (Japanese, Chinese, Korean) count as 1 em, Latin letters as roughly half that, with wider/narrower classes for the letters that differ most. Symbols that Japanese fonts draw full width — arrows, circled numbers (①), dashes, ellipses — count as 1 em too. A word too long for the line starts a new line before it is broken, as PowerPoint does. The estimate errs slightly wide, so a label reserved one line fits on one line in the default fonts. A font much wider than Calibri/Meiryo, or unusual glyphs, can still wrap where zook didn't expect — the preview (`zook preview`) shows zook's own line breaks.
 
+## Templates Supply the Look, Not the Layout {: #templates }
+
+`zook build --template` only draws the diagram on the template's blank layout. Beyond that:
+
+- **zook doesn't know where a template's logo or decoration is.** The diagram is drawn over it and no Warning says so. Raise `canvas.padding` to keep clear of it, or place elements explicitly. `zook validate` and `zook preview` don't read the template at all.
+- **Footer and slide number placeholders don't appear** unless you add them in PowerPoint (Insert > Header & Footer). Text and shapes drawn directly on the master or layout do appear.
+- **The diagram keeps its own colours**, not the theme's. Only its fonts come from the theme, and labels are sized for Calibri/Meiryo (see the section above), so a much wider theme font can overflow or wrap differently.
+- **A gradient or theme picture background is judged by its base colour.** That tells light from dark on nearly every theme, but not on one that changes from dark to light across the slide. A picture of the template's own counts as white. Set `canvas.background` if the result is hard to read.
+- **A template with no slide size in common with `canvas` isn't resized**: the build stops instead, since a master is drawn for one size.
+
 ## Shrink-to-Fit Scales the Whole Slide
 
 With the default `canvas.fit: shrink`, a diagram that doesn't fit the slide is scaled down uniformly — icons, text and spacing alike — rather than re-laid out. Line widths and arrowheads keep their size, so a heavily shrunk diagram looks bolder. A milder shrink is silent, even when it was caused by an element explicitly positioned past the slide's edge. Below 70% this is reported as a Warning, naming any such element: reorganise (split the diagram, tighten `gap`/`padding`, fix the stray coordinate) rather than shipping unreadably small text. `fit: none` keeps the old behaviour (draw as laid out, warn about what falls outside).

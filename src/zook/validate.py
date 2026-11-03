@@ -57,6 +57,9 @@ def _message(err) -> str:
             instance_repr = ""
         if instance_repr and len(instance_repr) > _MAX_INSTANCE_REPR and message.startswith(instance_repr):
             message = instance_repr[: _MAX_INSTANCE_REPR - 3] + "..." + message[len(instance_repr):]
+    if err.schema is False:
+        # The schema's only `false`: aspectRatio next to width/height.
+        return "give the slide size as either aspectRatio or width/height, not both"
     if err.context:
         # Only reachable from a oneOf/anyOf; `element` itself selects its
         # branch by `kind` (if/then), so its errors already sit at the exact
